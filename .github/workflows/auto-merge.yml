@@ -90,18 +90,3 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ github.token }}
-
-  trigger-build:
-    runs-on: ubuntu-latest
-    if: |
-      github.event.pull_request.merged == true && (
-        startsWith(github.head_ref, 'claude/') ||
-        startsWith(github.head_ref, 'codex/') ||
-        contains(github.head_ref, 'alert-autofix') ||
-        contains(github.head_ref, 'copilot/')
-      )
-    steps:
-      - name: Dispatch build.yml on main to run Trivy scan
-        run: gh workflow run build.yml --repo ${{ github.repository }} --ref main
-        env:
-          GH_TOKEN: ${{ github.token }}
