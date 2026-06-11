@@ -123,7 +123,7 @@ def health():
 
 @app.get("/products")
 def get_products(
-    limit: int = Query(500, ge=1, le=1000),
+    limit: int = Query(500, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None),
     missing_description: bool = Query(False, description="Return only products without a generated description"),

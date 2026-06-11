@@ -194,8 +194,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Export functionality
 function exportData(format = 'csv') {
-    const includeDrops = document.getElementById('exportDrops')?.checked ? '1' : '0';
-    window.location.href = `/api/export/${format}?include_drops=${includeDrops}`;
+    window.location.href = `/api/export/${format}`;
 }
 
 // Refresh stats periodically

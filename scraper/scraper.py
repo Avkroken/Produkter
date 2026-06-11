@@ -244,7 +244,7 @@ def init_db():
         link_selector TEXT NOT NULL,
         pagination_type TEXT DEFAULT 'query',
         pagination_selector TEXT,
-        max_pages INTEGER DEFAULT 10,
+        max_pages INTEGER DEFAULT 50,
         enabled INTEGER DEFAULT 1,
         min_price INTEGER DEFAULT 0,
         max_price INTEGER DEFAULT 999999,
@@ -303,14 +303,14 @@ def init_db():
         (name, base_url, product_selector, title_selector, price_selector, link_selector, max_pages)
         VALUES 
         ('Komplett.se', 'https://www.komplett.se/category/10000/datorkomponenter',
-         'div.product', 'h2', 'span.product-price', 'a', 5)
+         'div.product', 'h2', 'span.product-price', 'a', 50)
         """)
         cur.execute("""
-        INSERT INTO scraper_config 
+        INSERT INTO scraper_config
         (name, base_url, product_selector, title_selector, price_selector, link_selector, max_pages)
-        VALUES 
+        VALUES
         ('Webhallen', 'https://www.webhallen.com/se/category/3-Datorkomponenter',
-         'div.product-item', 'h2.product-title', 'span.price', 'a.product-link', 5)
+         'div.product-item', 'h2.product-title', 'span.price', 'a.product-link', 50)
         """)
         cur.execute("""
         INSERT INTO scraper_config 
@@ -320,7 +320,14 @@ def init_db():
          'article.product_pod', 'h3 a', 'p.price_color', 'h3 a', 50)
         """)
         logger.info("Created default configs")
-    
+    else:
+        cur.execute("""
+            UPDATE scraper_config SET max_pages = 50
+            WHERE name IN ('Komplett.se', 'Webhallen') AND max_pages = 5
+        """)
+
+    cur.execute("ALTER TABLE scraper_config ALTER COLUMN max_pages SET DEFAULT 50")
+
     conn.commit()
     return_db(conn)
     logger.info("PostgreSQL database initialized")
@@ -472,7 +479,7 @@ async def scrape_site(context, config, page_sem=None):
         queue = list(start_urls)
         seen_product_urls = set()
         url_scope = (config.get('url_scope') or '').strip()
-        max_pages = config.get('max_pages', 10)
+        max_pages = config.get('max_pages', 50)
 
         while queue and not shutdown_event.is_set():
             base_url = queue.pop(0)
@@ -553,7 +560,7 @@ async def scrape_site(context, config, page_sem=None):
         page = None
 
         try:
-            max_pages = config.get('max_pages', 10)
+            max_pages = config.get('max_pages', 50)
 
             for base_url in start_urls:
                 if shutdown_event.is_set():
@@ -795,7 +802,7 @@ def create_config():
             data['price_selector'], data['link_selector'],
             data.get('pagination_type', 'query'),
             data.get('pagination_selector'),
-            data.get('max_pages', 10),
+            data.get('max_pages', 50),
             data.get('min_price', 0),
             data.get('max_price', 999999),
             json.dumps(data.get('categories', [])),
@@ -839,7 +846,7 @@ def update_config(config_id):
             data['price_selector'], data['link_selector'],
             data.get('pagination_type', 'query'),
             data.get('pagination_selector'),
-            data.get('max_pages', 10),
+            data.get('max_pages', 50),
             data.get('enabled', 1),
             data.get('min_price', 0),
             data.get('max_price', 999999),
@@ -1281,81 +1288,36 @@ def trigger_scrape_alias():
     return trigger_scrape()
 
 
-_EXPORT_QUERIES = {
-    (True, True): ("""
-        SELECT p.title, p.current_price, p.url, c.name AS site,
-            ph_old.price AS old_price,
-            CASE WHEN ph_old.price > 0 AND p.current_price < ph_old.price
-                 THEN ROUND((1 - p.current_price::numeric / ph_old.price) * 100)::int
-                 ELSE NULL END AS drop_pct
-        FROM products p
-        JOIN scraper_config c ON p.site_config_id = c.id
-        LEFT JOIN LATERAL (
-            SELECT price FROM price_history
-            WHERE product_id = p.id AND timestamp <= NOW() - INTERVAL '1 day'
-            ORDER BY timestamp DESC LIMIT 1
-        ) ph_old ON true
-        WHERE p.current_price > 0 AND c.name = %s
-        ORDER BY p.current_price ASC
-    """, True),
-    (True, False): ("""
-        SELECT p.title, p.current_price, p.url, c.name AS site,
-            ph_old.price AS old_price,
-            CASE WHEN ph_old.price > 0 AND p.current_price < ph_old.price
-                 THEN ROUND((1 - p.current_price::numeric / ph_old.price) * 100)::int
-                 ELSE NULL END AS drop_pct
-        FROM products p
-        JOIN scraper_config c ON p.site_config_id = c.id
-        LEFT JOIN LATERAL (
-            SELECT price FROM price_history
-            WHERE product_id = p.id AND timestamp <= NOW() - INTERVAL '1 day'
-            ORDER BY timestamp DESC LIMIT 1
-        ) ph_old ON true
-        WHERE p.current_price > 0
-        ORDER BY c.name, p.current_price ASC
-    """, False),
-    (False, True): ("""
-        SELECT p.title, p.current_price, p.url, c.name AS site,
-            NULL AS old_price, NULL AS drop_pct
-        FROM products p
-        JOIN scraper_config c ON p.site_config_id = c.id
-        WHERE p.current_price > 0 AND c.name = %s
-        ORDER BY p.current_price ASC
-    """, True),
-    (False, False): ("""
-        SELECT p.title, p.current_price, p.url, c.name AS site,
-            NULL AS old_price, NULL AS drop_pct
-        FROM products p
-        JOIN scraper_config c ON p.site_config_id = c.id
-        WHERE p.current_price > 0
-        ORDER BY c.name, p.current_price ASC
-    """, False),
-}
+_EXPORT_QUERY_SITE = """
+    SELECT p.title, p.current_price, p.url
+    FROM products p
+    JOIN scraper_config c ON p.site_config_id = c.id
+    WHERE p.current_price > 0 AND c.name = %s
+    ORDER BY p.current_price ASC
+"""
+
+_EXPORT_QUERY_ALL = """
+    SELECT p.title, p.current_price, p.url
+    FROM products p
+    WHERE p.current_price > 0
+    ORDER BY p.current_price ASC
+"""
 
 
 
 @app.route('/export/<site_name>')
 def export_site_csv(site_name):
-    include_drops = request.args.get('include_drops', '0') == '1'
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    # Always use the site-specific query variant; site_name never influences query selection
-    query, _ = _EXPORT_QUERIES[(include_drops, True)]
-    cur.execute(query, (site_name,))
+    cur.execute(_EXPORT_QUERY_SITE, (site_name,))
     products = cur.fetchall()
     return_db(conn)
 
     output = StringIO()
     writer = csv.writer(output)
-    if include_drops:
-        writer.writerow(['Product', 'Price (SEK)', 'Was (SEK)', 'Drop %', 'Link'])
-        for p in products:
-            writer.writerow([p['title'], p['current_price'],
-                             p['old_price'] or '', p['drop_pct'] or '', p['url']])
-    else:
-        writer.writerow(['Product', 'Price (SEK)', 'Link'])
-        for p in products:
-            writer.writerow([p['title'], p['current_price'], p['url']])
+    writer.writerow(['Product', 'Price (SEK)', 'Link'])
+    for p in products:
+        writer.writerow([p['title'], p['current_price'], p['url']])
 
     output.seek(0)
     return Response(
@@ -1367,25 +1329,17 @@ def export_site_csv(site_name):
 
 @app.route('/export')
 def export_all_csv():
-    include_drops = request.args.get('include_drops', '0') == '1'
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    query, _ = _EXPORT_QUERIES[(include_drops, False)]
-    cur.execute(query, ())
+    cur.execute(_EXPORT_QUERY_ALL)
     products = cur.fetchall()
     return_db(conn)
 
     output = StringIO()
     writer = csv.writer(output)
-    if include_drops:
-        writer.writerow(['Site', 'Product', 'Price (SEK)', 'Was (SEK)', 'Drop %', 'Link'])
-        for p in products:
-            writer.writerow([p['site'], p['title'], p['current_price'],
-                             p['old_price'] or '', p['drop_pct'] or '', p['url']])
-    else:
-        writer.writerow(['Site', 'Product', 'Price (SEK)', 'Link'])
-        for p in products:
-            writer.writerow([p['site'], p['title'], p['current_price'], p['url']])
+    writer.writerow(['Product', 'Price (SEK)', 'Link'])
+    for p in products:
+        writer.writerow([p['title'], p['current_price'], p['url']])
 
     output.seek(0)
     filename = f"products_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
