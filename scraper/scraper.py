@@ -15,8 +15,10 @@ import logging
 import sys
 import random
 import signal
+import ipaddress
+import socket
 from io import StringIO
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright, Error as PlaywrightError
 from playwright_stealth import Stealth
 from flask import Flask, Response, request, jsonify
@@ -92,9 +94,40 @@ BROWSER_ARGS = [
     '--disable-http2',
     '--ignore-certificate-errors',
     '--disable-blink-features=AutomationControlled',
-    '--disable-web-security',
     '--disable-zygote',
 ]
+
+_PRIVATE_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+]
+
+def _validate_scrape_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Only http/https URLs are allowed, got: {parsed.scheme!r}")
+    host = parsed.hostname or ""
+    if not host:
+        raise ValueError("URL must have a hostname")
+    try:
+        addr = ipaddress.ip_address(host)
+        if any(addr in net for net in _PRIVATE_NETS):
+            raise ValueError(f"Requests to private/internal addresses are not allowed: {host}")
+    except ValueError as exc:
+        if "not allowed" in str(exc):
+            raise
+        try:
+            resolved = ipaddress.ip_address(socket.gethostbyname(host))
+            if any(resolved in net for net in _PRIVATE_NETS):
+                raise ValueError(f"Hostname resolves to a private address: {host}")
+        except socket.gaierror:
+            pass
+
 
 stats = {"products": 0, "updated": 0, "skipped": 0, "errors": 0, "retries": 0}
 shutdown_event = asyncio.Event()
@@ -888,7 +921,11 @@ def delete_config(config_id):
 def test_scrape_sync():
     """Test scraping - sync wrapper for async"""
     config = request.json
-    
+    try:
+        _validate_scrape_url(config.get('base_url', ''))
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
     async def _test():
         browser = None
         try:
@@ -932,6 +969,10 @@ def detect_selectors():
         return jsonify({'status': 'error', 'message': 'Invalid URL'}), 400
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
+    try:
+        _validate_scrape_url(url)
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
     detect_js = """() => {
         const PRICE_RE = /\\d[\\d\\s]*\\s*(kr|SEK|:-|,\\d{2})/i;
@@ -1288,6 +1329,14 @@ def trigger_scrape_alias():
     return trigger_scrape()
 
 
+def _csv_safe(value):
+    """Prevent CSV formula injection by prefixing dangerous leading characters."""
+    s = str(value) if value is not None else ''
+    if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + s
+    return s
+
+
 _EXPORT_QUERY_SITE = """
     SELECT p.title, p.current_price, p.url
     FROM products p
@@ -1317,7 +1366,7 @@ def export_site_csv(site_name):
     writer = csv.writer(output)
     writer.writerow(['Product', 'Price (SEK)', 'Link'])
     for p in products:
-        writer.writerow([p['title'], p['current_price'], p['url']])
+        writer.writerow([_csv_safe(p['title']), p['current_price'], _csv_safe(p['url'])])
 
     output.seek(0)
     return Response(
@@ -1339,7 +1388,7 @@ def export_all_csv():
     writer = csv.writer(output)
     writer.writerow(['Product', 'Price (SEK)', 'Link'])
     for p in products:
-        writer.writerow([p['title'], p['current_price'], p['url']])
+        writer.writerow([_csv_safe(p['title']), p['current_price'], _csv_safe(p['url'])])
 
     output.seek(0)
     filename = f"products_{datetime.datetime.now().strftime('%Y%m%d')}.csv"

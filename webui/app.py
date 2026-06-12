@@ -58,6 +58,23 @@ def api_request(method, path, **kwargs):
     headers['X-API-Key'] = get_api_key()
     return requests.request(method, url, headers=headers, **kwargs)
 
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if response.content_type and 'text/html' in response.content_type:
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src https://cdn.jsdelivr.net; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+    return response
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
