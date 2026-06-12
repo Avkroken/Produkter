@@ -7,7 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/style.css">
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             const saved = localStorage.getItem('theme');
             const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -24,7 +24,7 @@
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <a class="nav-link" href="/">Dashboard</a>
                 <a class="nav-link" href="/config">Configuration</a>
-                <button class="theme-toggle ms-1" onclick="toggleTheme()" title="Toggle theme">
+                <button class="theme-toggle ms-1" id="themeToggle" title="Toggle theme">
                     <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
                 </button>
             </div>
@@ -35,7 +35,7 @@
 
         <div class="page-header d-flex justify-content-between align-items-center">
             <h1>Configuration</h1>
-            <button class="btn btn-primary" onclick="toggleAddForm()">
+            <button class="btn btn-primary" id="addSiteBtn">
                 <i class="bi bi-plus-lg me-1"></i> Add site
             </button>
         </div>
@@ -44,12 +44,12 @@
         <div id="addForm" class="card mb-4" style="display: none;">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>New scraper configuration</span>
-                <button class="btn btn-sm btn-outline-secondary" onclick="toggleAddForm()">
+                <button class="btn btn-sm btn-outline-secondary" id="addFormCloseBtn">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div class="card-body">
-                <form onsubmit="addConfig(event)">
+                <form id="addConfigForm">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Name</label>
@@ -59,7 +59,7 @@
                             <label class="form-label">Start URL</label>
                             <div class="d-flex gap-2">
                                 <input type="text" class="form-control" id="cfgUrl" required placeholder="https://www.example.com/products">
-                                <button type="button" class="btn btn-outline-secondary text-nowrap" id="detectBtn" onclick="autoDetect()" title="Auto-detect selectors">
+                                <button type="button" class="btn btn-outline-secondary text-nowrap" id="detectBtn" title="Auto-detect selectors">
                                     <i class="bi bi-magic" id="detectIcon"></i> Detect
                                 </button>
                             </div>
@@ -67,7 +67,7 @@
                         <div class="col-md-6 d-flex align-items-end">
                             <div class="d-flex flex-column gap-1 mb-1">
                                 <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="cfgSubcategory" onchange="togglePaginationSelector()">
+                                    <input class="form-check-input" type="checkbox" id="cfgSubcategory">
                                     <label class="form-check-label" for="cfgSubcategory">
                                         Auto-discover subcategories <small class="text-muted">(följ kategorilänkar)</small>
                                     </label>
@@ -114,7 +114,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-check-lg me-1"></i> Save
                             </button>
-                            <button type="button" class="btn btn-outline-secondary" onclick="toggleAddForm()">Cancel</button>
+                            <button type="button" class="btn btn-outline-secondary" id="addFormCancelBtn">Cancel</button>
                         </div>
                     </div>
                 </form>
@@ -124,14 +124,14 @@
         <!-- Templates -->
         <div class="card mb-4">
             <div class="card-header">Quick templates</div>
-            <div class="card-body d-flex flex-wrap gap-2">
-                <button class="btn btn-outline-secondary btn-sm" onclick="loadTemplate('inet')">
+            <div class="card-body d-flex flex-wrap gap-2" id="templatesContainer">
+                <button class="btn btn-outline-secondary btn-sm" data-template="inet">
                     <i class="bi bi-lightning me-1"></i> Inet.se
                 </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="loadTemplate('komplett')">
+                <button class="btn btn-outline-secondary btn-sm" data-template="komplett">
                     <i class="bi bi-lightning me-1"></i> Komplett.se
                 </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="loadTemplate('webhallen')">
+                <button class="btn btn-outline-secondary btn-sm" data-template="webhallen">
                     <i class="bi bi-lightning me-1"></i> Webhallen.com
                 </button>
             </div>
@@ -157,7 +157,7 @@
                             <label class="form-label">New username</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control" id="credUsername" placeholder="scraper">
-                                <button class="btn btn-outline-secondary" onclick="saveCredential('username')">Save</button>
+                                <button class="btn btn-outline-secondary" id="saveUsernameBtn">Save</button>
                             </div>
                             <div class="form-text">Renames the PostgreSQL user. Takes effect immediately.</div>
                         </div>
@@ -165,7 +165,7 @@
                             <label class="form-label">New password</label>
                             <div class="input-group input-group-sm">
                                 <input type="password" class="form-control" id="credPassword" placeholder="min 8 characters">
-                                <button class="btn btn-outline-secondary" onclick="saveCredential('password')">Save</button>
+                                <button class="btn btn-outline-secondary" id="savePasswordBtn">Save</button>
                             </div>
                             <div class="form-text">Updates the PostgreSQL password immediately.</div>
                         </div>
@@ -187,7 +187,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/script.js"></script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         const templates = {
             inet: {
                 name: "Inet.se",
@@ -303,7 +303,7 @@
                         document.getElementById('cfgStealth').checked = true;
                     const found = [res.product_selector, res.title_selector, res.price_selector, res.link_selector].filter(Boolean).length;
                     const botMsg = res.bot_protection && res.bot_protection !== 'none'
-                        ? ` — ${res.bot_protection} detected, stealth enabled` : '';
+                        ? ` — ${escapeHtml(res.bot_protection)} detected, stealth enabled` : '';
                     showToast(`Detected ${found}/4 selectors${botMsg}`, found >= 3 ? 'success' : 'warning');
                 } else {
                     showToast('Detection failed: ' + (res.message || 'Unknown error'), 'danger');
@@ -399,7 +399,7 @@
                                     ${c.use_stealth ? ' <span class="badge bg-warning text-dark" title="Stealth mode active"><i class="bi bi-shield-shaded"></i></span>' : ''}
                                 </td>
                                 <td class="text-end align-middle">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteConfig(${c.id})">
+                                    <button class="btn btn-sm btn-outline-danger js-delete-config" data-config-id="${c.id}">
                                         <i class="bi bi-trash3"></i>
                                     </button>
                                 </td>
@@ -441,7 +441,7 @@
                     input = `<div class="form-check form-switch mt-1">
                         <input class="form-check-input" type="checkbox" id="${inputId}"
                             ${s.value === 'true' || s.value === true ? 'checked' : ''}
-                            onchange="saveSetting('${key}', this.checked.toString())">
+                            data-setting-key="${escapeHtml(key)}">
                     </div>`;
                 } else {
                     const unit = s.unit ? `<span class="input-group-text">${escapeHtml(s.unit)}</span>` : '';
@@ -452,7 +452,7 @@
                             class="form-control" id="${inputId}"
                             value="${escapeHtml(String(s.value))}"
                             ${min} ${placeholder}
-                            onchange="saveSetting('${key}', this.value)">
+                            data-setting-key="${escapeHtml(key)}">
                         ${unit}
                     </div>`;
                 }
@@ -501,6 +501,37 @@
             })
             .catch(() => showToast('Save failed', 'danger'));
         }
+
+        // === Event listeners ===
+        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+        document.getElementById('addSiteBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addFormCloseBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addFormCancelBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addConfigForm').addEventListener('submit', addConfig);
+        document.getElementById('detectBtn').addEventListener('click', autoDetect);
+        document.getElementById('cfgSubcategory').addEventListener('change', togglePaginationSelector);
+        document.getElementById('saveUsernameBtn').addEventListener('click', () => saveCredential('username'));
+        document.getElementById('savePasswordBtn').addEventListener('click', () => saveCredential('password'));
+
+        // Event delegation — template buttons
+        document.getElementById('templatesContainer').addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-template]');
+            if (btn) loadTemplate(btn.dataset.template);
+        });
+
+        // Event delegation — delete config buttons (dynamically rendered)
+        document.getElementById('configsList').addEventListener('click', function(e) {
+            const btn = e.target.closest('.js-delete-config');
+            if (btn) deleteConfig(parseInt(btn.dataset.configId, 10));
+        });
+
+        // Event delegation — settings inputs (dynamically rendered)
+        document.getElementById('settingsGrid').addEventListener('change', function(e) {
+            const key = e.target.dataset.settingKey;
+            if (!key) return;
+            const value = e.target.type === 'checkbox' ? e.target.checked.toString() : e.target.value;
+            saveSetting(key, value);
+        });
     </script>
 </body>
 </html>

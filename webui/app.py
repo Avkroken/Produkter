@@ -4,12 +4,14 @@
 WebUI Control Plane - Proxyrar anrop till API och Scraper Engine
 """
 
+import hmac
 import os
 import logging
 import re
 import requests
+import secrets as _secrets
 from datetime import datetime, timezone
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, g, Response
 from flask_cors import CORS
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8000')
@@ -17,7 +19,9 @@ SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
 PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/%-]*$")
 
 app = Flask(__name__)
-CORS(app)
+_cors_origins = [o.strip() for o in os.getenv('WEBUI_CORS_ORIGINS', '').split(',') if o.strip()]
+if _cors_origins:
+    CORS(app, origins=_cors_origins)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,21 @@ def get_api_key():
         API_KEY = read_secret("API_KEY") or _read_credential("api_key")
     return API_KEY
 
+_ENGINE_KEY = None
+def _get_engine_key():
+    global _ENGINE_KEY
+    if _ENGINE_KEY is None:
+        _ENGINE_KEY = _read_credential('engine_key') or read_secret('ENGINE_KEY')
+    return _ENGINE_KEY
+
+WEBUI_USERNAME = os.getenv('WEBUI_USERNAME', 'admin')
+_WEBUI_PASSWORD = None
+def _get_webui_password():
+    global _WEBUI_PASSWORD
+    if _WEBUI_PASSWORD is None:
+        _WEBUI_PASSWORD = read_secret('WEBUI_PASSWORD') or _read_credential('webui_password')
+    return _WEBUI_PASSWORD
+
 def _validate_path(path):
     if not isinstance(path, str) or not PATH_RE.fullmatch(path):
         raise ValueError("Invalid request path")
@@ -49,24 +68,51 @@ def _validate_path(path):
 def engine_request(method, path, **kwargs):
     _validate_path(path)
     url = f"{SCRAPER_ENGINE}{path}"
-    return requests.request(method, url, **kwargs)
+    headers = kwargs.pop('headers', {})
+    key = _get_engine_key()
+    if key:
+        headers['X-Engine-Key'] = key
+    timeout = kwargs.pop('timeout', 30)
+    return requests.request(method, url, headers=headers, timeout=timeout, **kwargs)
+
+@app.before_request
+def before_each_request():
+    g.csp_nonce = _secrets.token_hex(16)
+    if request.path == '/health':
+        return None
+    pw = _get_webui_password()
+    if not pw:
+        return None
+    auth = request.authorization
+    if not auth or auth.username != WEBUI_USERNAME or not hmac.compare_digest(auth.password or '', pw):
+        return Response(
+            'Authentication required',
+            401,
+            {'WWW-Authenticate': 'Basic realm="Web Scraper"', 'Cache-Control': 'no-store'}
+        )
+
+@app.context_processor
+def inject_csp_nonce():
+    return {'csp_nonce': g.get('csp_nonce', '')}
 
 def api_request(method, path, **kwargs):
     _validate_path(path)
     url = f"{SCRAPER_API}{path}"
     headers = kwargs.pop('headers', {})
     headers['X-API-Key'] = get_api_key()
-    return requests.request(method, url, headers=headers, **kwargs)
+    timeout = kwargs.pop('timeout', 30)
+    return requests.request(method, url, headers=headers, timeout=timeout, **kwargs)
 
 @app.after_request
 def set_security_headers(response):
+    nonce = g.get('csp_nonce', '')
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     if response.content_type and 'text/html' in response.content_type:
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "font-src https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "

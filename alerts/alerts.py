@@ -165,7 +165,7 @@ async def check_drops():
                 VALUES (%s, NOW())
                 ON CONFLICT (product_id) DO UPDATE SET
                     last_alert = NOW()
-                WHERE alert_cooldown.last_alert < NOW() - INTERVAL '%s hours'
+                WHERE alert_cooldown.last_alert < NOW() - (%s * INTERVAL '1 hour')
                 RETURNING product_id
             """, (row['id'], cooldown_hours))
 

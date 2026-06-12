@@ -52,10 +52,11 @@ function showToast(message, type = 'info') {
     toast.setAttribute('aria-live', 'assertive');
     toast.setAttribute('aria-atomic', 'true');
     
+    const safeMsg = escapeHtml(message);
     toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">
-                ${message}
+                ${safeMsg}
             </div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>

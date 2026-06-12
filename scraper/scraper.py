@@ -9,6 +9,7 @@ import asyncio
 import csv
 import json
 import datetime
+import hmac
 import os
 import re
 import logging
@@ -92,7 +93,6 @@ BROWSER_ARGS = [
     '--no-sandbox',
     '--disable-dev-shm-usage',
     '--disable-http2',
-    '--ignore-certificate-errors',
     '--disable-blink-features=AutomationControlled',
     '--disable-zygote',
 ]
@@ -175,6 +175,9 @@ def init_credentials():
         logger.info("  GENERATED API KEY: %s", key)
         logger.info("  Save this — it is required to access the API")
         logger.info("=" * 50)
+    engine_key_path = os.path.join(CREDENTIALS_DIR, 'engine_key')
+    if not os.path.exists(engine_key_path):
+        write_credential('engine_key', _secrets.token_urlsafe(32))
 
 
 db_pool = None
@@ -505,6 +508,12 @@ async def scrape_site(context, config, page_sem=None):
             prev = count
 
     start_urls = [u.strip().rstrip('/') for u in config['base_url'].splitlines() if u.strip()]
+    for _url in start_urls:
+        try:
+            _validate_scrape_url(_url)
+        except ValueError as e:
+            logger.error(f"Config '{config['name']}' blocked (SSRF protection): {e}")
+            return
 
     if config.get('pagination_type') == 'subcategory':
         visited = set()
@@ -549,6 +558,11 @@ async def scrape_site(context, config, page_sem=None):
                                 )
                                 for link in links:
                                     link = link.rstrip('/')
+                                    try:
+                                        _validate_scrape_url(link)
+                                    except ValueError as e:
+                                        logger.warning("Skipped blocked pagination URL for '%s': %s", config['name'], e)
+                                        continue
                                     if url_scope and url_scope not in link:
                                         continue
                                     if link not in visited and link not in queued:
@@ -800,6 +814,29 @@ async def scraper_loop():
 
 
 # === Flask API ===
+_engine_key_cache = None
+
+def _get_engine_key():
+    global _engine_key_cache
+    if _engine_key_cache:
+        return _engine_key_cache
+    key = read_credential('engine_key') or read_secret('ENGINE_KEY')
+    if key:
+        _engine_key_cache = key
+    return key
+
+@app.before_request
+def check_engine_key():
+    if request.path == '/health':
+        return None
+    key = _get_engine_key()
+    if not key:
+        logger.critical("Engine key missing; refusing non-health requests")
+        return jsonify({'error': 'Engine key not configured'}), 503
+    provided = request.headers.get('X-Engine-Key', '')
+    if not hmac.compare_digest(provided, key):
+        return jsonify({'error': 'Unauthorized'}), 401
+
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy' if db_pool else 'degraded', 'active': scraping_active, 'stats': stats})
