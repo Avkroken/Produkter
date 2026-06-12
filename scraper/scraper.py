@@ -924,7 +924,8 @@ def test_scrape_sync():
     try:
         _validate_scrape_url(config.get('base_url', ''))
     except ValueError as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+        logger.warning("URL validation failed for /test: %s", e)
+        return jsonify({'status': 'error', 'message': 'Invalid URL: only public http/https URLs are allowed'}), 400
 
     async def _test():
         browser = None
@@ -972,7 +973,8 @@ def detect_selectors():
     try:
         _validate_scrape_url(url)
     except ValueError as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+        logger.warning("URL validation failed for /detect: %s", e)
+        return jsonify({'status': 'error', 'message': 'Invalid URL: only public http/https URLs are allowed'}), 400
 
     detect_js = """() => {
         const PRICE_RE = /\\d[\\d\\s]*\\s*(kr|SEK|:-|,\\d{2})/i;
@@ -1330,7 +1332,6 @@ def trigger_scrape_alias():
 
 
 def _csv_safe(value):
-    """Prevent CSV formula injection by prefixing dangerous leading characters."""
     s = str(value) if value is not None else ''
     if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
         return "'" + s
