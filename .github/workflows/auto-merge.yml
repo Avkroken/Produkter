@@ -2,7 +2,7 @@ name: Bot Auto-Merge
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
@@ -61,6 +61,7 @@ jobs:
     steps:
       - name: Auto-merge Claude AI PRs once checks pass
         run: |
+          gh pr ready "$PR_URL" || true
           gh pr merge --auto --squash --delete-branch "$PR_URL"
           gh pr edit "$PR_URL" --add-label "auto-merge"
         env:
@@ -73,6 +74,7 @@ jobs:
     steps:
       - name: Auto-merge Codex AI PRs once checks pass
         run: |
+          gh pr ready "$PR_URL" || true
           gh pr merge --auto --squash --delete-branch "$PR_URL"
           gh pr edit "$PR_URL" --add-label "auto-merge"
         env:
@@ -85,6 +87,7 @@ jobs:
     steps:
       - name: Auto-merge Copilot PRs once checks pass
         run: |
+          gh pr ready "$PR_URL" || true
           gh pr merge --auto --squash --delete-branch "$PR_URL"
           gh pr edit "$PR_URL" --add-label "auto-merge"
         env:
