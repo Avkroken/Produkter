@@ -16,7 +16,7 @@ pip install -r requirements.txt
 playwright install chromium
 
 # Start API server
-uvicorn api.main:app --reload
+uvicorn api.api:app --reload
 
 # Start web UI
 flask --app webui.app run
