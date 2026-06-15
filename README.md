@@ -1,14 +1,12 @@
 # Web Scraper Platform
 
-[![Build](https://github.com/blixten85/scraper/actions/workflows/build.yml/badge.svg)](https://github.com/blixten85/scraper/actions/workflows/build.yml)
-[![CodeQL](https://github.com/blixten85/scraper/actions/workflows/dynamic%2Fgithub-code-scanning%2Fcodeql/badge.svg)](https://github.com/blixten85/scraper/security/code-scanning)
+[![CI](https://github.com/blixten85/scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/scraper/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/blixten85/scraper)](https://github.com/blixten85/scraper/releases)
-[![Image](https://ghcr-badge.egpl.dev/blixten85/scraper-engine/size?color=blue&label=image)](https://github.com/blixten85/scraper/pkgs/container/scraper-engine)
+[![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/blixten85/scraper/pkgs/container/scraper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.14-blue)](https://www.python.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-316192)](https://www.postgresql.org/)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-316192)](https://www.postgresql.org/)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/blixten85/scraper)](https://coderabbit.ai)
-![Downloads](https://img.shields.io/github/downloads/blixten85/scraper/total)
 
 **Production-ready web scraping platform with PostgreSQL, WebUI, REST API, and price monitoring.**
 
