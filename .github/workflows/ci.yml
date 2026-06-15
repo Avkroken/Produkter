@@ -35,13 +35,13 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     needs: python
     permissions:
       packages: write
     steps:
       - uses: actions/checkout@v6
       - uses: docker/login-action@v3
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -52,8 +52,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' }}
           tags: |
             ghcr.io/blixten85/scraper:latest
             ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
-
