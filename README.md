@@ -5,7 +5,7 @@
 [![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/blixten85/scraper/pkgs/container/scraper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-316192)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-316192)](https://www.postgresql.org/)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/blixten85/scraper)](https://coderabbit.ai)
 
 **Production-ready web scraping platform with PostgreSQL, WebUI, REST API, and price monitoring.**
