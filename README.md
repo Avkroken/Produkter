@@ -5,7 +5,7 @@
 [![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/blixten85/scraper/pkgs/container/scraper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-316192)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-latest-316192)](https://www.postgresql.org/)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/blixten85/scraper)](https://coderabbit.ai)
 
 **Production-ready web scraping platform with PostgreSQL, WebUI, REST API, and price monitoring.**
@@ -63,7 +63,8 @@ docker compose logs scraper    # → API key
 | Container | Port | Description |
 |-----------|------|-------------|
 | `postgres` | 5432 (internal) | PostgreSQL database |
-| `scraper` | 3000 | Web UI, API, scraper engine, alerts |
+| `scraper` | 3000 | Web UI |
+| `scraper` | 8000 | REST API |
 
 ---
 
@@ -88,23 +89,23 @@ cat /path/to/docker/data/scraper/credentials/api_key
 
 ## API Examples
 
-*All endpoints except `/health` and `/docs` require an `X-API-Key` header.*
+*All endpoints except `/health` require an `X-API-Key` header.*
 
 ```bash
 # Get all products
-curl -H "X-API-Key: ${API_KEY}" http://localhost:3000/products
+curl -H "X-API-Key: ${API_KEY}" http://localhost:8000/products
 
 # Search products
-curl -H "X-API-Key: ${API_KEY}" "http://localhost:3000/products?search=RTX"
+curl -H "X-API-Key: ${API_KEY}" "http://localhost:8000/products?search=RTX"
 
 # Get price drops
-curl -H "X-API-Key: ${API_KEY}" "http://localhost:3000/deals?min_drop_percent=10"
+curl -H "X-API-Key: ${API_KEY}" "http://localhost:8000/deals?min_drop_percent=10"
 
-# Export to CSV
-curl -H "X-API-Key: ${API_KEY}" http://localhost:3000/export/csv > products.csv
+# Export to CSV (via WebUI)
+curl http://localhost:3000/api/export/csv > products.csv
 ```
 
-API Documentation: http://localhost:3000/docs
+API Documentation: http://localhost:8000/docs
 
 ---
 
@@ -128,7 +129,7 @@ Add this service to your `docker-compose.yml` for automatic daily `pg_dump` back
 
 ```yaml
   pgdump:
-    image: postgres:16-alpine
+    image: postgres:latest
     container_name: scraper_pgdump
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
@@ -169,7 +170,7 @@ sudo chown -R 999:999 ${DOCKER}/scraper/postgres
 ### API returns 401 Unauthorized
 
 ```bash
-curl -H "X-API-Key: ${API_KEY}" http://localhost:3000/products
+curl -H "X-API-Key: ${API_KEY}" http://localhost:8000/products
 ```
 
 ### No products are scraped
@@ -189,31 +190,54 @@ products (
   url TEXT UNIQUE,
   title TEXT,
   current_price INTEGER,
-  first_seen TIMESTAMP,
-  last_updated TIMESTAMP,
-  site_config_id INTEGER
+  first_seen TIMESTAMP DEFAULT NOW(),
+  last_updated TIMESTAMP DEFAULT NOW(),
+  site_config_id INTEGER,
+  description TEXT,
+  description_why TEXT,
+  description_updated_at TIMESTAMP
 )
 
 price_history (
   id SERIAL PRIMARY KEY,
-  product_id INTEGER REFERENCES products(id),
+  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
   price INTEGER,
-  timestamp TIMESTAMP
+  timestamp TIMESTAMP DEFAULT NOW()
 )
 
 scraper_config (
   id SERIAL PRIMARY KEY,
-  name TEXT UNIQUE,
-  base_url TEXT,
-  product_selector TEXT,
-  title_selector TEXT,
-  price_selector TEXT,
-  link_selector TEXT,
+  name TEXT UNIQUE NOT NULL,
+  base_url TEXT NOT NULL,
+  product_selector TEXT NOT NULL,
+  title_selector TEXT NOT NULL,
+  price_selector TEXT NOT NULL,
+  link_selector TEXT NOT NULL,
+  pagination_type TEXT DEFAULT 'query',
+  pagination_selector TEXT,
+  max_pages INTEGER DEFAULT 50,
   enabled INTEGER DEFAULT 1,
-  use_stealth INTEGER DEFAULT 0,
-  max_pages INTEGER DEFAULT 10,
   min_price INTEGER DEFAULT 0,
-  max_price INTEGER DEFAULT 999999
+  max_price INTEGER DEFAULT 999999,
+  categories TEXT DEFAULT '[]',
+  use_stealth INTEGER DEFAULT 0,
+  proxy_url TEXT DEFAULT '',
+  exclude_link_pattern TEXT DEFAULT '',
+  url_scope TEXT DEFAULT '',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+)
+
+alert_cooldown (
+  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+  last_alert TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (product_id)
+)
+
+settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 )
 ```
 
