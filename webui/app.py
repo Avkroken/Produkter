@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, g, Response
 from flask_cors import CORS
 
-SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8000')
+SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
 PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/%-]*$")
 
@@ -266,5 +266,3 @@ def update_credential(subpath):
     except (requests.exceptions.RequestException, ValueError) as e:
         logger.error(f"Credentials update error: {e}")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
-
-

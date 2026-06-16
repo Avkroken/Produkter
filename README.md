@@ -93,19 +93,19 @@ cat /path/to/docker/data/scraper/credentials/api_key
 
 ```bash
 # Get all products
-curl -H "X-API-Key: ${API_KEY}" http://localhost:8000/products
+curl -H "X-API-Key: ${API_KEY}" http://localhost:8765/products
 
 # Search products
-curl -H "X-API-Key: ${API_KEY}" "http://localhost:8000/products?search=RTX"
+curl -H "X-API-Key: ${API_KEY}" "http://localhost:8765/products?search=RTX"
 
 # Get price drops
-curl -H "X-API-Key: ${API_KEY}" "http://localhost:8000/deals?min_drop_percent=10"
+curl -H "X-API-Key: ${API_KEY}" "http://localhost:8765/deals?min_drop_percent=10"
 
 # Export to CSV (via WebUI)
 curl http://localhost:3000/api/export/csv > products.csv
 ```
 
-API Documentation: http://localhost:8000/docs
+API Documentation: http://localhost:8765/docs
 
 ---
 
@@ -170,7 +170,7 @@ sudo chown -R 999:999 ${DOCKER}/scraper/postgres
 ### API returns 401 Unauthorized
 
 ```bash
-curl -H "X-API-Key: ${API_KEY}" http://localhost:8000/products
+curl -H "X-API-Key: ${API_KEY}" http://localhost:8765/products
 ```
 
 ### No products are scraped
