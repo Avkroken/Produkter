@@ -215,7 +215,6 @@ function updateStatsDisplay(stats) {
     const elements = {
         'total-products': stats.total_products,
         'updated-24h': stats.updated_24h,
-        'products-with-drops': stats.products_with_drops,
         'last-run': formatDate(stats.last_run)
     };
     
