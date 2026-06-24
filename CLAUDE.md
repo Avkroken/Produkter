@@ -45,3 +45,9 @@ supervisord.conf
 - All secrets (DB credentials, API keys) via environment variables
 - Never store credentials in the image or commit them
 - `set -euo pipefail` at the top of all shell scripts
+- Unexpected exceptions in api/webui/scraper/alerts call
+  `report_error_to_github()` (`github_report.py`, copied into each
+  process's own working directory since supervisord runs each from a
+  different one) — best-effort, opens a `@claude`-tagged GitHub issue with
+  secrets/emails/paths redacted if `GITHUB_ERROR_REPORT_TOKEN` is set,
+  no-ops otherwise

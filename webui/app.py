@@ -13,6 +13,9 @@ import secrets as _secrets
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, g, Response
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
+
+from github_report import report_error_to_github
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
@@ -24,6 +27,20 @@ if _cors_origins:
     CORS(app, origins=_cors_origins)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.exception("Unhandled error handling %s %s", request.method, request.path)
+    report_error_to_github(
+        "blixten85/scraper",
+        f"Oväntat fel: {request.method} {request.path}",
+        exc,
+        context={"method": request.method, "path": request.path},
+    )
+    return jsonify({"error": "Internal server error"}), 500
 
 def read_secret(env_var, default=""):
     path = os.getenv(f"{env_var}_FILE")

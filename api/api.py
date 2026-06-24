@@ -11,10 +11,13 @@ from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
+
+from github_report import report_error_to_github
 
 DB_HOST = os.getenv('DB_HOST', 'postgres')
 DB_NAME = os.getenv('DB_NAME', 'scraper')
@@ -76,6 +79,19 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, exc: Exception):
+    logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
+    report_error_to_github(
+        "blixten85/scraper",
+        f"Oväntat fel: {request.method} {request.url.path}",
+        exc,
+        context={"method": request.method, "path": request.url.path},
+    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
 
 API_KEY = None
 def get_api_key():

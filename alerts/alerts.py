@@ -14,6 +14,8 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
+from github_report import report_error_to_github
+
 # === Configuration ===
 LOG_DIR = "/logs"
 DB_HOST = os.getenv('DB_HOST', 'postgres')
@@ -190,6 +192,7 @@ async def alerts_loop():
                 logger.info(f"Sent {sent} alerts")
         except (psycopg2.Error, requests.exceptions.RequestException, OSError) as e:
             logger.error(f"Error: {e}")
+            report_error_to_github("blixten85/scraper", "Alerts check failed", e)
 
         check_interval = get_setting('check_interval')
         logger.info(f"Next check in {check_interval}s")

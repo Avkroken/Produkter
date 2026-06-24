@@ -28,7 +28,25 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
+from github_report import report_error_to_github
+
 app = Flask(__name__)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    from werkzeug.exceptions import HTTPException
+
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.exception("Unhandled error handling %s %s", request.method, request.path)
+    report_error_to_github(
+        "blixten85/scraper",
+        f"Oväntat fel: {request.method} {request.path}",
+        exc,
+        context={"method": request.method, "path": request.path},
+    )
+    return jsonify({"error": "Internal server error"}), 500
 
 # === Configuration ===
 LOG_DIR = "/logs"
@@ -803,6 +821,7 @@ async def scraper_loop():
             await run_scraper()
         except (PlaywrightError, psycopg2.Error, OSError) as e:
             logger.error(f"Scraping failed: {e}")
+            report_error_to_github("blixten85/scraper", "Scraping failed", e)
         finally:
             scraping_active = False
         
