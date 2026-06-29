@@ -332,6 +332,7 @@ def init_db():
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT")
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description_why TEXT")
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description_updated_at TIMESTAMP")
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_missing_description ON products(id) WHERE description IS NULL")
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_url ON products(url)")
@@ -424,6 +425,35 @@ async def accept_cookies(page):
     return False
 
 
+_CATEGORY_SKIP = {
+    "se", "sv", "en", "cat", "c", "category", "categories", "kategori",
+    "kategorier", "produkt", "produkter", "product", "products", "p",
+    "shop", "store", "butik", "www", "varor",
+}
+
+
+def derive_category(page_url):
+    """Best-effort readable category from the listing page URL path.
+
+    The scraper crawls category pages, so the last meaningful path segment of
+    the listing URL is the category the product was found under. Gives the
+    describer enough context to know *what kind* of product it is, instead of
+    guessing from an opaque product name."""
+    try:
+        path = urlparse(page_url).path
+    except (ValueError, AttributeError):
+        return None
+    for seg in reversed([s for s in path.split("/") if s]):
+        if seg.lower() in _CATEGORY_SKIP:
+            continue
+        # strip a trailing numeric id, e.g. "taklampor-18742" -> "taklampor"
+        cleaned = re.sub(r"[-_]?\d+$", "", seg).replace("-", " ").replace("_", " ").strip()
+        if not cleaned or cleaned.isdigit():
+            continue
+        return cleaned[:100]
+    return None
+
+
 async def extract_product(page, element, config):
     try:
         title_el = await element.query_selector(config['title_selector']) if config['title_selector'] else None
@@ -459,7 +489,7 @@ async def extract_product(page, element, config):
         if exclude and exclude in url:
             return None
 
-        return {'url': url, 'title': title[:200], 'price': price, 'site_config_id': config['id']}
+        return {'url': url, 'title': title[:200], 'price': price, 'site_config_id': config['id'], 'category': derive_category(page.url)}
     except PlaywrightError as e:
         logger.debug(f"Extraction error: {e}")
         return None
@@ -716,14 +746,15 @@ async def flush_buffer():
                 continue
             
             cur.execute("""
-                INSERT INTO products (url, title, current_price, site_config_id, last_updated)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO products (url, title, current_price, site_config_id, category, last_updated)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (url) DO UPDATE SET
                     current_price = EXCLUDED.current_price,
                     title = EXCLUDED.title,
+                    category = COALESCE(EXCLUDED.category, products.category),
                     last_updated = EXCLUDED.last_updated
                 RETURNING id
-            """, (product['url'], product['title'], product['price'], product['site_config_id'], now))
+            """, (product['url'], product['title'], product['price'], product['site_config_id'], product.get('category'), now))
             
             product_id = cur.fetchone()[0]
             
