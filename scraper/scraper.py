@@ -333,7 +333,10 @@ def init_db():
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description_why TEXT")
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description_updated_at TIMESTAMP")
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT")
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_text TEXT")
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_text_updated_at TIMESTAMP")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_missing_description ON products(id) WHERE description IS NULL")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_products_missing_source ON products(id) WHERE source_text IS NULL")
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_url ON products(url)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_last_updated ON products(last_updated)")

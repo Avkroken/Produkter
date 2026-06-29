@@ -149,7 +149,7 @@ def get_products(
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         base_columns = (
             "SELECT id, title, url, current_price, first_seen, last_updated, "
-            "category, description, description_why, description_updated_at FROM products"
+            "category, source_text, description, description_why, description_updated_at FROM products"
         )
         clauses = []
         params: list = []
