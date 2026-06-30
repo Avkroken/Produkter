@@ -56,10 +56,44 @@ logger = logging.getLogger("enrich")
 
 MAX_SOURCE_LEN = 1200
 
-# Runs in the page; returns the best available product description text.
-_EXTRACT_JS = """
+# How long to wait for client-side content (SPA JSON-LD / detail element) to
+# render before extracting. Many shops (e.g. Webhallen) inject the real
+# Product JSON-LD after load; without this we'd capture the static
+# og:description boilerplate instead of the actual description.
+RENDER_WAIT_MS = 12000
+
+# Resolves once a JSON-LD Product node with a description is present in the DOM.
+# Used as a wait condition for sites that render structured data client-side.
+_JSONLD_READY_JS = """
 () => {
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    let data;
+    try { data = JSON.parse(s.textContent); } catch (e) { continue; }
+    const nodes = Array.isArray(data) ? data : (data['@graph'] || [data]);
+    for (const node of nodes) {
+      if (!node) continue;
+      const t = node['@type'];
+      const isProduct = t === 'Product' || (Array.isArray(t) && t.includes('Product'));
+      if (isProduct && node.description) return true;
+    }
+  }
+  return false;
+}
+"""
+
+# Runs in the page; returns the best available product description text.
+# Takes an optional per-site CSS selector (scraper_config.detail_selector):
+# when set and it matches, that element's text wins over the generic heuristics.
+_EXTRACT_JS = """
+(detailSelector) => {
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
+  // 0. Per-site detail selector (most explicit; for shops without usable JSON-LD)
+  if (detailSelector) {
+    try {
+      const el = document.querySelector(detailSelector);
+      if (el) { const t = clean(el.innerText || el.textContent); if (t) return t; }
+    } catch (e) { /* invalid selector -> fall through */ }
+  }
   // 1. JSON-LD Product description (most reliable for e-commerce)
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
     let data;
@@ -102,7 +136,7 @@ def fetch_backlog(limit, site, refresh):
             params.append(site)
         where = " AND ".join(clauses)
         query = (
-            "SELECT p.id, p.url, COALESCE(c.use_stealth, 0) "
+            "SELECT p.id, p.url, COALESCE(c.use_stealth, 0), COALESCE(c.detail_selector, '') "
             "FROM products p LEFT JOIN scraper_config c ON c.id = p.site_config_id "
             f"WHERE {where} ORDER BY p.id"
         )
@@ -128,14 +162,25 @@ def store_source_text(product_id, text):
         return_db(conn)
 
 
-async def enrich_one(context, product_id, url, use_stealth):
+async def enrich_one(context, product_id, url, use_stealth, detail_selector=""):
     page = await scrape_page_with_retry(context, url, use_stealth=bool(use_stealth))
     if not page:
         logger.warning("Kunde inte ladda %s (id %s)", url, product_id)
         return False
     try:
         await accept_cookies(page)
-        raw = await page.evaluate(_EXTRACT_JS)
+        # Wait for client-side content to render. Sites with a configured
+        # detail_selector wait for that element; otherwise wait for the real
+        # Product JSON-LD (avoids capturing static og:description boilerplate).
+        # Best-effort: a timeout just means we extract whatever is there.
+        try:
+            if detail_selector:
+                await page.wait_for_selector(detail_selector, timeout=RENDER_WAIT_MS)
+            else:
+                await page.wait_for_function(_JSONLD_READY_JS, timeout=RENDER_WAIT_MS)
+        except PlaywrightError:
+            pass
+        raw = await page.evaluate(_EXTRACT_JS, detail_selector)
     except PlaywrightError as e:
         logger.warning("Extraktion misslyckades för id %s: %s", product_id, e)
         return False
@@ -178,10 +223,10 @@ async def run(args):
             )
 
             async def worker(row):
-                product_id, url, use_stealth = row
+                product_id, url, use_stealth, detail_selector = row
                 async with sem:
                     try:
-                        ok = await enrich_one(context, product_id, url, use_stealth)
+                        ok = await enrich_one(context, product_id, url, use_stealth, detail_selector)
                         done["ok" if ok else "empty"] += 1
                     except PlaywrightError as e:
                         logger.warning("Hoppar över id %s: %s", product_id, e)

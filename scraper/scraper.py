@@ -328,6 +328,7 @@ def init_db():
     cur.execute("ALTER TABLE scraper_config ADD COLUMN IF NOT EXISTS proxy_url TEXT DEFAULT ''")
     cur.execute("ALTER TABLE scraper_config ADD COLUMN IF NOT EXISTS exclude_link_pattern TEXT DEFAULT ''")
     cur.execute("ALTER TABLE scraper_config ADD COLUMN IF NOT EXISTS url_scope TEXT DEFAULT ''")
+    cur.execute("ALTER TABLE scraper_config ADD COLUMN IF NOT EXISTS detail_selector TEXT DEFAULT ''")
 
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT")
     cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description_why TEXT")
