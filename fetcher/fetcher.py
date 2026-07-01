@@ -117,6 +117,22 @@ _EXTRACT_JS = """
       if (el) { const t = clean(el.innerText || el.textContent); if (t) out.source_text = t; } } catch (e) {}
   }
   if (!out.category && product && typeof product.category === 'string') out.category = clean(product.category);
+  // DOM-breadcrumb-fallback (t.ex. Webhallen saknar JSON-LD-breadcrumb): ta
+  // sista länken i breadcrumben (leaf-kategorin), hoppa produkttiteln.
+  if (!out.category) {
+    const bc = document.querySelector('nav[aria-label*="readcrumb"], ol[class*="readcrumb"], ul[class*="readcrumb"], [class*="readcrumb"]');
+    if (bc) {
+      let els = bc.querySelectorAll('a');
+      if (!els.length) els = bc.querySelectorAll('li');
+      let items = Array.from(els).map((e) => clean(e.innerText || e.textContent)).filter(Boolean);
+      items = items.filter((v, i, a) => a.indexOf(v) === i);
+      if (items.length) {
+        let last = items[items.length - 1];
+        if (out.title && last === clean(out.title) && items.length >= 2) last = items[items.length - 2];
+        if (last && last.length <= 60) out.category = last;
+      }
+    }
+  }
   if (!out.source_text && product && product.description) out.source_text = clean(product.description);
   if (!out.source_text) {
     const og = document.querySelector('meta[property="og:description"]');
