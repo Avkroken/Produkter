@@ -11,8 +11,9 @@ Den gör bara utgående HTTPS mot `engine`-Workern på Cloudflare:
 Dör servern förlorar man bara den här loopen; den redeployas var som helst med
 ENGINE_URL + INGEST_API_KEY. All durabel data ligger i D1.
 
-Fas 2: hanterar `detail`-jobb (produktsidor). `list`-jobb (discovery) tillkommer
-senare — då behöver lease-svaret även list-selektorerna.
+Hanterar `detail`-jobb (produktsidor) och `list`-jobb (crawl av listningssida →
+upptäckta produkter med titel/pris). Lease-svaret bär list-selektorerna för
+list-jobb.
 
 Miljövariabler:
     ENGINE_URL           t.ex. https://product-describer-engine.<subdomän>.workers.dev
@@ -113,6 +114,54 @@ _EXTRACT_JS = """
 """
 
 
+# Extraherar list-items {url, title, price} ur en listningssida. Speglar
+# scraper.py:s extract_product: title_selector/price_selector/link_selector per
+# produkt-element; price_selector 'text=/.../' (Playwright-textmotor, ej giltig
+# CSS) -> regex på elementets text; länk via link_selector, annars elementets
+# egen href, annars nästlad <a>. urljoin mot sidans URL.
+_LIST_EXTRACT_JS = """
+(cfg) => {
+  const { productSel, titleSel, priceSel, linkSel, excludePattern, urlScope } = cfg;
+  const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
+  const toInt = (s) => { const d = (s || '').replace(/[^\\d]/g, ''); if (!d) return null; const n = parseInt(d, 10); return isNaN(n) ? null : n; };
+  // scoped=true: texten ÄR priset (pris-element) -> ta första sifferrunan.
+  // scoped=false: hela kortets text -> kräv kr/:- efter siffran så vi inte
+  // plockar modellnummer (t.ex. "RTX 4080") i stället för priset.
+  const parsePrice = (text, scoped) => {
+    const t = clean(text);
+    if (scoped) return toInt((t.match(/\\d[\\d\\s]*/) || [])[0]);
+    const m = t.match(/(\\d[\\d\\s]*?)\\s*(?:kr|:-)/);
+    return m ? toInt(m[1]) : null;
+  };
+  const out = [];
+  const els = document.querySelectorAll(productSel);
+  for (const el of els) {
+    // Titel
+    let title = null;
+    if (titleSel) { const t = el.querySelector(titleSel); if (t) title = clean(t.innerText || t.textContent); }
+    if (!title) title = clean(el.innerText).slice(0, 200) || null;
+    // Pris
+    let price = null;
+    if (priceSel && !priceSel.startsWith('text=')) {
+      const p = el.querySelector(priceSel); if (p) price = parsePrice(p.innerText || p.textContent, true);
+    }
+    if (price == null) price = parsePrice(el.innerText, false);
+    // Länk
+    let href = null;
+    if (linkSel) { const a = el.querySelector(linkSel); if (a) href = a.getAttribute('href'); }
+    if (!href && el.tagName === 'A') href = el.getAttribute('href');
+    if (!href) { const a = el.querySelector('a'); if (a) href = a.getAttribute('href'); }
+    if (!href) continue;
+    let url; try { url = new URL(href, location.href).href; } catch (e) { continue; }
+    if (excludePattern && url.includes(excludePattern)) continue;
+    if (urlScope && !url.includes(urlScope)) continue;
+    out.push({ url, title, price });
+  }
+  return out;
+}
+"""
+
+
 def _headers():
     return {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 
@@ -166,16 +215,80 @@ async def render_detail(context, job):
         await page.close()
 
 
+MAX_LIST_PAGES = int(os.environ.get("MAX_LIST_PAGES", "60"))  # hårt tak oavsett sajtens max_pages
+
+
+async def _infinite_scroll(page, rounds=15):
+    # Lazy-laddade grids (t.ex. Webhallen) fyller på vid scroll.
+    for _ in range(rounds):
+        try:
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(600)
+        except PlaywrightError:
+            break
+
+
+async def render_list(context, job):
+    """Crawla en listningssida (ev. paginerad) -> [{url,title,price}]. Query-
+    paginering (?page=N) stöds fullt; andra typer -> enkelsida (MVP)."""
+    base_url = job.get("base_url") or job["url"]
+    max_pages = min(int(job.get("max_pages") or 1), MAX_LIST_PAGES)
+    query_pagination = job.get("pagination_type") == "query"
+    cfg = {
+        "productSel": job.get("product_selector") or "",
+        "titleSel": job.get("title_selector") or "",
+        "priceSel": job.get("price_selector") or "",
+        "linkSel": job.get("link_selector") or "",
+        "excludePattern": job.get("exclude_link_pattern") or "",
+        "urlScope": job.get("url_scope") or "",
+    }
+    if not cfg["productSel"]:
+        return {"items": []}
+
+    seen = {}
+    pages = max_pages if query_pagination else 1
+    for page_num in range(1, pages + 1):
+        if page_num == 1:
+            url = base_url
+        else:
+            sep = "&" if "?" in base_url else "?"
+            url = f"{base_url}{sep}page={page_num}"
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            await accept_cookies(page)
+            await _infinite_scroll(page)
+            items = await page.evaluate(_LIST_EXTRACT_JS, cfg)
+        except PlaywrightError as e:
+            logger.warning("list-jobb %s sida %s: %s", job["id"], page_num, e)
+            items = []
+        finally:
+            await page.close()
+        if not items:
+            break  # tom sida -> slut på resultat
+        for it in items:
+            if it.get("url"):
+                seen[it["url"]] = it
+        await asyncio.sleep(random.uniform(2, 4))  # artighet
+    return {"items": list(seen.values())}
+
+
 async def process(context, sem, job):
     async with sem:
         try:
-            if job.get("type") != "detail":
-                logger.info("hoppar över jobb %s (typ %s ej implementerad)", job["id"], job.get("type"))
-                await asyncio.to_thread(post_result, job["id"], {"error": f"typ {job.get('type')} ej implementerad i fetchern"})
+            jtype = job.get("type")
+            if jtype == "detail":
+                result = await render_detail(context, job)
+                await asyncio.to_thread(post_result, job["id"], result)
+                logger.info("jobb %s (detail): %s tecken source_text", job["id"], len(result["source_text"]))
+            elif jtype == "list":
+                result = await render_list(context, job)
+                await asyncio.to_thread(post_result, job["id"], result)
+                logger.info("jobb %s (list): %s produkter upptäckta", job["id"], len(result["items"]))
+            else:
+                logger.info("hoppar över jobb %s (typ %s ej implementerad)", job["id"], jtype)
+                await asyncio.to_thread(post_result, job["id"], {"error": f"typ {jtype} ej implementerad i fetchern"})
                 return
-            result = await render_detail(context, job)
-            await asyncio.to_thread(post_result, job["id"], result)
-            logger.info("jobb %s: %s tecken source_text", job["id"], len(result["source_text"]))
         except Exception as e:  # noqa: BLE001 — rapportera tillbaka, låt engine retry:a
             logger.warning("jobb %s misslyckades: %s", job["id"], e)
             try:
