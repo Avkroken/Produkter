@@ -71,7 +71,23 @@ _JSONLD_READY_JS = """
 _EXTRACT_JS = """
 (detailSelector) => {
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
-  const out = { title: null, price: null, source_text: '' };
+  const out = { title: null, price: null, source_text: '', category: null };
+
+  // Kategori ur JSON-LD BreadcrumbList: näst sista objektet (sista = produkten).
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    let d; try { d = JSON.parse(s.textContent); } catch (e) { continue; }
+    const ns = Array.isArray(d) ? d : (d['@graph'] || [d]);
+    for (const n of ns) {
+      if (n && n['@type'] === 'BreadcrumbList' && Array.isArray(n.itemListElement)) {
+        const names = n.itemListElement
+          .map((e) => clean((e && e.item && e.item.name) || (e && e.name)))
+          .filter(Boolean);
+        if (names.length >= 2) out.category = names[names.length - 2];
+        else if (names.length === 1) out.category = names[0];
+      }
+    }
+    if (out.category) break;
+  }
 
   // Plocka Product-noden ur JSON-LD (titel/pris/beskrivning).
   let product = null;
@@ -100,6 +116,7 @@ _EXTRACT_JS = """
     try { const el = document.querySelector(detailSelector);
       if (el) { const t = clean(el.innerText || el.textContent); if (t) out.source_text = t; } } catch (e) {}
   }
+  if (!out.category && product && typeof product.category === 'string') out.category = clean(product.category);
   if (!out.source_text && product && product.description) out.source_text = clean(product.description);
   if (!out.source_text) {
     const og = document.querySelector('meta[property="og:description"]');
@@ -210,7 +227,7 @@ async def render_detail(context, job):
             pass  # best-effort: extrahera ändå det som finns
         data = await page.evaluate(_EXTRACT_JS, detail_selector)
         st = (data.get("source_text") or "")[:MAX_SOURCE_LEN]
-        return {"title": data.get("title"), "price": data.get("price"), "source_text": st}
+        return {"title": data.get("title"), "price": data.get("price"), "source_text": st, "category": data.get("category")}
     finally:
         await page.close()
 
