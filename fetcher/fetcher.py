@@ -78,7 +78,9 @@ _EXTRACT_JS = """
     let d; try { d = JSON.parse(s.textContent); } catch (e) { continue; }
     const ns = Array.isArray(d) ? d : (d['@graph'] || [d]);
     for (const n of ns) {
-      if (n && n['@type'] === 'BreadcrumbList' && Array.isArray(n.itemListElement)) {
+      const t = n && n['@type'];
+      const isBreadcrumb = t === 'BreadcrumbList' || (Array.isArray(t) && t.includes('BreadcrumbList'));
+      if (n && isBreadcrumb && Array.isArray(n.itemListElement)) {
         const names = n.itemListElement
           .map((e) => clean((e && e.item && e.item.name) || (e && e.name)))
           .filter(Boolean);
