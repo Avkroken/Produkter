@@ -21,10 +21,9 @@ jobs:
 
       - name: Auto-merge github_actions updates
         if: |
-          steps.metadata.outputs.package-ecosystem == 'github_actions' && (
+          steps.metadata.outputs.package-ecosystem == 'github-actions' && (
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-major')
+          steps.metadata.outputs.update-type == 'version-update:semver-minor')
         run: |
           for i in 1 2 3 4 5; do
             gh pr merge --auto --delete-branch --squash "$PR_URL" && break
@@ -37,7 +36,7 @@ jobs:
 
       - name: Auto-merge patch and minor updates (other ecosystems)
         if: |
-          steps.metadata.outputs.package-ecosystem != 'github_actions' && (
+          steps.metadata.outputs.package-ecosystem != 'github-actions' && (
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           steps.metadata.outputs.update-type == 'version-update:semver-minor')
         run: |
