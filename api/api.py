@@ -9,6 +9,9 @@ import logging
 import sys
 from datetime import datetime
 from typing import Optional
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,6 +21,14 @@ import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
 from github_report import report_error_to_github
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    integrations=[FastApiIntegration(), StarletteIntegration()],
+    traces_sample_rate=1.0,
+    send_default_pii=False,
+    max_request_body_size="never",
+)
 
 DB_HOST = os.getenv('DB_HOST', 'postgres')
 DB_NAME = os.getenv('DB_NAME', 'scraper')
@@ -84,6 +95,7 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credenti
 @app.exception_handler(Exception)
 async def handle_unexpected_error(request: Request, exc: Exception):
     logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
+    sentry_sdk.capture_exception(exc)
     report_error_to_github(
         "blixten85/scraper",
         f"Oväntat fel: {request.method} {request.url.path}",
