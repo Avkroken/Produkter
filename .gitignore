@@ -75,3 +75,8 @@ products.txt
 *.txt
 !requirements.txt
 *.orig
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
