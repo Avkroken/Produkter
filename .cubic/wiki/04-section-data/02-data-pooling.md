@@ -1,5 +1,5 @@
 ---
-title: "PostgreSQL & Connection Pooling"
+title: "PostgreSQL Connection Pooling"
 wiki_page_id: "data-pooling"
 ---
 
@@ -13,149 +13,127 @@ The following files were used as context for generating this wiki page:
 - [scraper/enrich.py](scraper/enrich.py)
 - [README.md](README.md)
 - [CLAUDE.md](CLAUDE.md)
+- [webui/templates/config.html](webui/templates/config.html)
 </details>
 
-# PostgreSQL & Connection Pooling
+# PostgreSQL Connection Pooling
 
-The Web Scraper platform utilizes PostgreSQL as its primary production-grade database to store product data, price history, scraper configurations, and system settings. To handle concurrent access from multiple services—including the REST API, the scraper engine, and the enrichment module—the project implements a robust connection pooling mechanism using `psycopg2.pool.ThreadedConnectionPool`.
+The Web Scraper Platform utilizes a production-grade PostgreSQL connection pooling mechanism based on the `psycopg2.pool.ThreadedConnectionPool` class. This system is designed to manage database connections efficiently across multiple concurrent processes, including the REST API, the main scraper engine, and the background enrichment module. By maintaining a pool of ready-to-use connections, the project reduces the overhead of establishing a new connection for every database query, which is critical for the platform's high-concurrency scraping and real-time API response requirements.
 
-This architecture ensures efficient resource management by maintaining a pool of reusable database connections, reducing the overhead of establishing new connections for every transaction. This is particularly critical for the scraper and API components, which may handle high volumes of concurrent read and write operations.
+The connection pooling logic is implemented consistently across the `api/api.py` and `scraper/scraper.py` modules, ensuring that both the web-facing services and the heavy-duty background tasks share the same robust connection management strategy.
 
-Sources: [README.md:16](README.md#L16), [CLAUDE.md:8](CLAUDE.md#L8), [api/api.py:53-61](api/api.py#L53-L61), [scraper/scraper.py:165-175](scraper/scraper.py#L165-L175)
+Sources: [README.md:15](README.md#L15), [CLAUDE.md:10](CLAUDE.md#L10), [api/api.py:5-10](api/api.py#L5-L10)
 
-## Database Schema & Models
+## Architecture and Configuration
 
-The system maintains five primary tables to manage the scraping lifecycle and data persistence. The schema is initialized automatically upon the first run of the scraper service.
+The connection pool is globally initialized within each service. It uses environment variables and secure credentials files to configure the connection parameters.
 
-### Entity Relationship Diagram
-The following diagram illustrates the relationships between the core database tables, including foreign key constraints for price history and alert tracking.
+### Pool Parameters
+The pool is configured with specific limits to balance performance and resource usage:
+
+| Parameter | Value / Source | Description |
+|-----------|----------------|-------------|
+| `minconn` | 1 | The minimum number of connections the pool will maintain. |
+| `maxconn` | 10 | The maximum number of concurrent connections allowed in the pool. |
+| `host` | `DB_HOST` (default: 'postgres') | The hostname of the PostgreSQL server. |
+| `database` | `DB_NAME` (default: 'scraper') | The name of the database. |
+| `user` | `DB_USER` (default: 'scraper') | The database user credential. |
+| `connect_timeout`| 10 seconds | Maximum time to wait for a connection to be established. |
+
+Sources: [api/api.py:34-36](api/api.py#L34-L36), [api/api.py:53-57](api/api.py#L53-L57), [scraper/scraper.py:165-174](scraper/scraper.py#L165-L174)
+
+### Initialization Flow
+The initialization process involves reading secrets (either from environment variables or dedicated credential files) before instantiating the `ThreadedConnectionPool`.
 
 ```mermaid
-erDiagram
-    scraper_config ||--o{ products : "defines"
-    products ||--o{ price_history : "has"
-    products ||--o| alert_cooldown : "tracks"
-    settings {
-        text key PK
-        text value
-        timestamptz updated_at
-    }
-    scraper_config {
-        serial id PK
-        text name
-        text base_url
-        integer enabled
-    }
-    products {
-        serial id PK
-        text url UK
-        text title
-        integer current_price
-        integer site_config_id FK
-    }
-    price_history {
-        serial id PK
-        integer product_id FK
-        integer price
-        timestamp timestamp
-    }
+graph TD
+    Start[Service Startup] --> ReadSecrets[Read DB_PASSWORD from Secret File]
+    ReadSecrets --> GetEnv[Load DB_HOST/DB_NAME/DB_USER]
+    GetEnv --> CreatePool[Instantiate ThreadedConnectionPool]
+    CreatePool --> LogPool[Log: 'Database connection pool initialized']
+    LogPool --> End[System Ready]
 ```
 
-Sources: [README.md:148-198](README.md#L148-L198), [scraper/scraper.py:192-237](scraper/scraper.py#L192-L237)
+The diagram shows the sequence of steps taken during the initialization of the database pool in both the API and Scraper modules.
+Sources: [api/api.py:46-60](api/api.py#L46-L60), [scraper/scraper.py:165-175](scraper/scraper.py#L165-L175)
 
-### Core Tables Summary
+## Connection Lifecycle Management
 
-| Table | Description | Key Fields |
-|-------|-------------|------------|
-| `products` | Stores current product state and metadata. | `url` (Unique), `current_price`, `last_updated` |
-| `price_history` | Records every price change for historical analysis. | `product_id`, `price`, `timestamp` |
-| `scraper_config` | Stores site-specific CSS selectors and crawl settings. | `product_selector`, `title_selector`, `use_stealth` |
-| `settings` | Global system configurations (e.g., scrape interval). | `key` (Primary), `value` |
-| `alert_cooldown`| Tracks last notification time to prevent spam. | `product_id`, `last_alert` |
+The platform uses a "borrow and return" pattern to manage connections. This ensures that connections are not leaked and are always returned to the pool for reuse, even when errors occur.
 
-Sources: [scraper/scraper.py:192-237](scraper/scraper.py#L192-L237), [README.md:148-198](README.md#L148-L198)
+### Acquisition and Verification
+When a database connection is requested via `get_db()`, the system performs a health check. In the API module, the system executes a `SELECT 1` query to verify that the connection is still alive. If the connection is found to be stale (e.g., timed out by the server), it is discarded and a fresh connection is pulled from the pool.
 
-## Connection Pooling Implementation
+```mermaid
+flowchart TD
+    Req[Request Connection] --> Borrow[Pool.getconn]
+    Borrow --> Check[Verify: SELECT 1]
+    Check -- Success --> Return[Return Active Connection]
+    Check -- Failure --> Discard[Pool.putconn close=True]
+    Discard --> Retry[Pool.getconn retry]
+    Retry --> Return
+```
 
-The project uses `psycopg2.pool.ThreadedConnectionPool` to manage database sessions across threaded environments like the FastAPI/Uvicorn API and the Waitress-backed Scraper WebUI.
+The flow diagram illustrates the resilient connection acquisition logic used in the API to prevent using dead or stale database connections.
+Sources: [api/api.py:62-72](api/api.py#L62-L72), [scraper/scraper.py:217-219](scraper/scraper.py#L217-L219)
 
-### Pool Lifecycle
-The pool is initialized during the service startup sequence and closed during shutdown. In the API, this is managed via FastAPI event handlers.
+### Release and Cleanup
+Connections must be returned to the pool using the `return_db(conn)` function. This function ensures that any pending transactions are rolled back before the connection is made available to other threads. If a rollback fails due to a database error, the connection is closed and discarded from the pool entirely to maintain pool health.
 
 ```mermaid
 sequenceDiagram
-    participant App as "Service (API/Scraper)"
-    participant Pool as "ThreadedConnectionPool"
-    participant DB as "PostgreSQL"
-
-    App->>Pool: init_db_pool()
-    Pool->>DB: Establish minconn (1) to maxconn (10)
-    
-    Note over App, DB: During Request/Operation
-    App->>Pool: get_db()
-    Pool-->>App: Return Connection
-    App->>DB: Execute Query/Transaction
-    DB-->>App: Results
-    App->>Pool: return_db(conn)
-    
-    App->>Pool: shutdown / closeall()
-    Pool->>DB: Terminate all connections
+    participant App as Service Logic
+    participant Helper as return_db()
+    participant Pool as Connection Pool
+    App->>Helper: return_db(conn)
+    alt Successful Rollback
+        Helper->>Helper: conn.rollback()
+        Helper->>Pool: Pool.putconn(conn)
+    else Rollback Fails
+        Note right of Helper: psycopg2.Error encountered
+        Helper->>Pool: Pool.putconn(conn, close=True)
+    end
 ```
 
-Sources: [api/api.py:53-61](api/api.py#L53-L61), [api/api.py:100-108](api/api.py#L100-L108), [scraper/scraper.py:165-175](scraper/scraper.py#L165-L175)
+The sequence diagram details the safety measures taken when returning a connection to the pool, including transaction rollback and error handling.
+Sources: [api/api.py:74-80](api/api.py#L74-L80), [scraper/scraper.py:221-223](scraper/scraper.py#L221-L223)
 
-### Connection Management Logic
-To ensure reliability, the system implements checks for "stale" connections. When a connection is retrieved, the `get_db` function performs a "health check" (e.g., `SELECT 1`) to verify the connection is still alive before providing it to the caller.
+## Dynamic Re-initialization
+The system supports dynamic re-initialization of the connection pool. This is particularly relevant when database credentials are changed via the WebUI. The `scraper/scraper.py` module includes a `reinit_db_pool()` function that safely closes all existing connections in the old pool before creating a new one with updated credentials.
+
+### Configuration Update Workflow
+1. User updates credentials in `webui/templates/config.html`.
+2. API/Scraper receives a `PUT` request to `/credentials/password` or `/credentials/username`.
+3. The application writes the new credentials to the filesystem.
+4. `reinit_db_pool()` is called to cycle the connection pool.
+
+Sources: [scraper/scraper.py:178-188](scraper/scraper.py#L178-L188), [scraper/scraper.py:1022-1055](scraper/scraper.py#L1022-L1055), [webui/templates/config.html:125-145](webui/templates/config.html#L125-L145)
+
+## Usage in Background Tasks
+
+Modules like `scraper/enrich.py` do not manage their own pools but rather import and utilize the initialized pool and helper functions from the main scraper module. This centralized management prevents connection exhaustion by ensuring all background enrichment tasks respect the global `maxconn` limits.
 
 ```python
-def get_db():
-    conn = db_pool.getconn()
+# scraper/enrich.py:44-54
+from scraper.scraper import (
+    get_db,
+    init_db_pool,
+    return_db,
+    # ... other imports
+)
+
+def fetch_backlog(limit, site, refresh):
+    conn = get_db()
     try:
-        conn.cursor().execute("SELECT 1")
-    except psycopg2.Error:
-        try:
-            db_pool.putconn(conn, close=True) # Discard stale
-        except psycopg2.Error:
-            pass
-        conn = db_pool.getconn() # Get fresh
-    return conn
+        cur = conn.cursor()
+        # ... query logic
+    finally:
+        return_db(conn)
 ```
 
-Sources: [api/api.py:63-75](api/api.py#L63-L75), [scraper/scraper.py:184-190](scraper/scraper.py#L184-L190)
+Sources: [scraper/enrich.py:44-54](scraper/enrich.py#L44-L54), [scraper/enrich.py:100-120](scraper/enrich.py#L100-L120)
 
-## Configuration & Security
+## Conclusion
+PostgreSQL Connection Pooling in this project provides a robust foundation for both the synchronous REST API and the asynchronous scraper. By leveraging `ThreadedConnectionPool` with custom health checks and strict lifecycle management, the platform maintains high availability and performance while preventing common database connection issues such as leaks and stale handles. This architecture is vital for the platform's ability to handle multi-site scraping and price monitoring at scale.
 
-Database credentials and connection parameters are managed through environment variables and secret files.
-
-| Parameter | Env Variable | Default | Description |
-|-----------|--------------|---------|-------------|
-| Host | `DB_HOST` | `postgres` | Hostname of the database container |
-| Name | `DB_NAME` | `scraper` | Name of the database |
-| User | `DB_USER` | `scraper` | Database user |
-| Password | `DB_PASSWORD` | N/A | Read from `.env` or `db_password` file |
-| Min Conns | `minconn` | 1 | Minimum connections in the pool |
-| Max Conns | `maxconn` | 10 | Maximum connections in the pool |
-
-Sources: [api/api.py:34-36](api/api.py#L34-L36), [api/api.py:56-60](api/api.py#L56-L60), [scraper/scraper.py:168-174](scraper/scraper.py#L168-L174)
-
-### Credential Handling
-The system prioritizes reading secrets from files (e.g., `/run/secrets/` or defined by `_FILE` suffixes) before falling back to environment variables. On first startup, the scraper service automatically generates database credentials if they are missing.
-Sources: [api/api.py:43-51](api/api.py#L43-L51), [scraper/scraper.py:151-163](scraper/scraper.py#L151-L163)
-
-## Usage in Services
-
-### REST API (FastAPI)
-The API uses the connection pool to serve product data and update descriptions. Each request fetches a connection from the pool and returns it in a `finally` block to prevent leaks.
-Sources: [api/api.py:126-155](api/api.py#L126-L155)
-
-### Scraper Engine
-The scraper uses the pool to fetch active site configurations (`load_configs`) and flush scraped results to the database in batches (`flush_buffer`).
-Sources: [scraper/scraper.py:302-308](scraper/scraper.py#L302-L308), [scraper/scraper.py:557-610](scraper/scraper.py#L557-L610)
-
-### Enrichment Module
-The enrichment script uses the pool to identify a "backlog" of products missing source text and updates them individually after successful extraction.
-Sources: [scraper/enrich.py:112-146](scraper/enrich.py#L112-L146)
-
-## Summary
-PostgreSQL provides the persistent backbone of the Web Scraper platform. By implementing `ThreadedConnectionPool`, the system achieves high availability and performance across its distributed services while maintaining data integrity through relational constraints and historical price tracking.
-Sources: [README.md:16](README.md#L16), [scraper/scraper.py:192-237](scraper/scraper.py#L192-L237)
+Sources: [api/api.py:118-125](api/api.py#L118-L125), [scraper/scraper.py:750-760](scraper/scraper.py#L750-L760)

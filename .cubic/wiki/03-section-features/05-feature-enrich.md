@@ -13,118 +13,121 @@ The following files were used as context for generating this wiki page:
 - [api/api.py](api/api.py)
 - [fetcher/fetcher.py](fetcher/fetcher.py)
 - [README.md](README.md)
+- [CHANGELOG.md](CHANGELOG.md)
 </details>
 
 # Product Description Enrichment
 
-Product Description Enrichment is a specialized subsystem within the Web Scraper Platform designed to augment basic product listings with detailed descriptive text and metadata. While the primary periodic scraper focuses on category listing pages—capturing only titles, prices, and URLs—the enrichment process performs "deep" scraping by visiting individual product pages. This ensures that downstream services, such as automated describers, have access to factual source text rather than relying on potentially hallucinated data from product names.
+Product Description Enrichment is a system within the Web Scraper Platform designed to bridge the gap between high-level category listing data and detailed product specifications. While the primary scraper collects basic metadata (title, price, URL) from category pages, the enrichment process visits individual product pages to extract "source text"—the raw description found on the merchant's site. This grounded data prevents "hallucinations" by downstream consumer services, such as product describers, by providing factual context instead of relying solely on often-opaque product names.
 
-Sources: [scraper/enrich.py:1-12](scraper/enrich.py#L1-L12), [scraper/scraper.py:270-280](scraper/scraper.py#L270-L280)
+Sources: [scraper/enrich.py:5-13](scraper/enrich.py#L5-L13), [fetcher/fetcher.py:1-15](fetcher/fetcher.py#L1-L15)
 
 ## Architecture and Data Flow
 
-The enrichment system operates as a resumable, one-shot job that identifies products in the database lacking descriptive text. It utilizes a headless browser (Playwright) to navigate to the specific URL of each product, wait for client-side rendering, and execute heuristic extraction logic to find the best possible description.
+The enrichment system operates as a resumable, one-shot job or a stateless fetcher service. It identifies products in the database where `source_text` is `NULL`, visits the corresponding product URL using a headless browser (Playwright), and applies a hierarchy of extraction heuristics.
 
 ### Enrichment Workflow
-The following diagram illustrates the lifecycle of a product from initial discovery by the scraper to final enrichment.
+The following diagram illustrates the logical flow of the enrichment process:
 
 ```mermaid
 flowchart TD
-    A[scraper.py] -- "Store Title/Price/URL" --> B[(PostgreSQL)]
-    B -- "Query NULL source_text" --> C[enrich.py]
-    C -- "Launch Playwright" --> D[Product Page]
-    D -- "Heuristic Extraction" --> E{Content Found?}
-    E -- Yes --> F[Store Cleaned Text]
-    E -- No --> G[Store Empty String]
-    F --> H[(Update products Table)]
-    G --> H
+    Start[Start Enrichment Job] --> Fetch[Fetch Products where source_text IS NULL]
+    Fetch --> Browser[Launch Playwright Browser]
+    Browser --> Loop{For each product}
+    Loop --> Load[Navigate to Product URL]
+    Load --> Wait[Wait for JSON-LD/Selector]
+    Wait --> Extract[Execute Heuristic Extraction JS]
+    Extract --> Clean[Clean & Truncate Text]
+    Clean --> Store[Update DB: source_text & Timestamp]
+    Store --> Loop
+    Loop --> End[Job Complete]
 ```
 
-The system distinguishes between products that have never been attempted (`source_text IS NULL`) and those where no description could be found (stored as an empty string `""`). This prevents the system from indefinitely retrying failed extractions.
+The system uses a semaphore to control concurrency and includes "jitter" (random delays) between page loads to remain polite to target sites.
 
-Sources: [scraper/enrich.py:14-25](scraper/enrich.py#L14-L25), [scraper/enrich.py:73-95](scraper/enrich.py#L73-L95)
+Sources: [scraper/enrich.py:125-181](scraper/enrich.py#L125-L181), [scraper/enrich.py:192-198](scraper/enrich.py#L192-L198)
 
 ## Extraction Heuristics
 
-The enrichment logic uses a prioritized hierarchy of JavaScript-based extraction methods to retrieve data. This ensures high reliability across diverse e-commerce platforms without requiring per-site custom code.
+Extraction is performed client-side using injected JavaScript. It follows a strictly prioritized heuristic model to ensure the most reliable data is captured across varying e-commerce site architectures.
 
-### Priority Levels
-1.  **Custom Selector**: If a `detail_selector` is configured in the `scraper_config` table for a specific site, it takes the highest priority.
-2.  **JSON-LD Structured Data**: The system searches for `application/ld+json` scripts with a `@type` of `Product`. It specifically looks for the `description` field.
-3.  **Open Graph**: The `og:description` meta tag is used as a fallback.
-4.  **Standard Meta**: The standard HTML `description` meta tag is the final fallback.
+### Extraction Hierarchy
+1.  **Custom Selector:** Uses a site-specific `detail_selector` from the `scraper_config` table if provided (highest priority; site-specific).
+2.  **JSON-LD Linked Data:** Searches for `application/ld+json` scripts containing a `Product` type with a `description` field (most reliable for e-commerce).
+3.  **Open Graph:** Extracts the `og:description` meta property.
+4.  **Standard Meta Description:** Falls back to the standard HTML `description` meta tag.
 
-Sources: [scraper/enrich.py:53-70](scraper/enrich.py#L53-L70), [fetcher/fetcher.py:64-100](fetcher/fetcher.py#L64-L100)
+Sources: [scraper/enrich.py:87-116](scraper/enrich.py#L87-L116), [fetcher/fetcher.py:116-148](fetcher/fetcher.py#L116-L148)
 
-### Wait Conditions
-Many modern e-commerce sites are Single Page Applications (SPAs) that inject structured data client-side. The enrichment module includes a `RENDER_WAIT_MS` (default 12,000ms) and a JavaScript function `_JSONLD_READY_JS` to wait until the Product JSON-LD is actually present in the DOM before attempting extraction.
+### Data Sanitization
+Extracted text is processed to:
+*  Normalize whitespace (replacing multiple spaces/newlines with a single space).
+*  Truncate the string to a maximum length of 1200 characters (`MAX_SOURCE_LEN`).
+*  Store an empty string (rather than `NULL`) if no description is found, marking the row as "attempted" to prevent infinite retries.
 
-Sources: [scraper/enrich.py:38-51](scraper/enrich.py#L38-L51), [fetcher/fetcher.py:44-55](fetcher/fetcher.py#L44-L55)
+Sources: [scraper/enrich.py:53-56](scraper/enrich.py#L53-L56), [scraper/enrich.py:101-105](scraper/enrich.py#L101-L105)
 
-## Data Models and Storage
+## Database Schema Integration
 
-Enrichment results are stored in the `products` table, which includes fields for raw source text and higher-level descriptions.
+The enrichment system extends the `products` table with specific columns to track the source data and the downstream descriptions generated from that data.
 
+### Relevant Table Fields
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `source_text` | TEXT | The raw extracted description from the product page. |
-| `source_text_updated_at` | TIMESTAMP | Timestamp of the last enrichment attempt. |
-| `description` | TEXT | A refined or generated description (often updated via API). |
-| `description_why` | TEXT | Reasoning or context for the generated description. |
+| `source_text` | TEXT | Raw text extracted from the product page. |
+| `source_text_updated_at` | TIMESTAMP | Last time the extraction was performed. |
+| `category` | TEXT | Derived category name from URL path or breadcrumbs. |
+| `description` | TEXT | Enriched/generated description (often by external AI services). |
+| `description_why` | TEXT | Reasoning/context for the generated description. |
 | `description_updated_at` | TIMESTAMP | Timestamp of the last description update. |
 
-Sources: [scraper/scraper.py:270-280](scraper/scraper.py#L270-L280), [README.md:180-195](README.md#L180-L195)
+Sources: [scraper/scraper.py:273-281](scraper/scraper.py#L273-L281), [README.md:210-221](README.md#L210-L221)
 
-### Database Operations
-The system uses indices to optimize the selection of products requiring enrichment:
+### Performance Optimization
+To support efficient querying of the backlog, the system utilizes partial indexes:
+*  `idx_products_missing_source`: Indexes products where `source_text IS NULL`.
+*  `idx_products_missing_description`: Indexes products where `description IS NULL`.
 
-```sql
-CREATE INDEX IF NOT EXISTS idx_products_missing_source ON products(id) WHERE source_text IS NULL;
-```
+Sources: [scraper/scraper.py:282-283](scraper/scraper.py#L282-L283)
 
-Sources: [scraper/scraper.py:285](scraper/scraper.py#L285)
+## API and Integration
 
-## Integration with External Fetchers
+The platform provides REST API endpoints to facilitate the consumption of source text and the submission of enriched descriptions.
 
-In unified architectures, the enrichment logic is also implemented in a stateless "fetcher" component. This component leases jobs from a central engine and performs `detail` renders to extract `source_text`, title, price, and category data.
+### API Endpoint Summary
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/products?missing_description=true` | Retrieves products that have source text but lack a final description. |
+| `PUT` | `/products/{id}/description` | Updates a product's description and "why" fields. |
+| `GET` | `/products` | Returns `source_text` and `category` alongside basic product data. |
+
+Sources: [api/api.py:115-120](api/api.py#L115-L120), [api/api.py:145-167](api/api.py#L145-L167)
+
+### Description Update Sequence
+The following sequence diagram shows how an external service interacts with the API to perform enrichment:
 
 ```mermaid
 sequenceDiagram
-    participant Engine as Cloudflare Worker
-    participant Fetcher as Playwright Fetcher
-    participant Site as Product Website
+    participant Ext as External Describer
+    participant API as Scraper API
+    participant DB as PostgreSQL
     
-    Fetcher->>Engine: POST /jobs/lease
-    Engine-->>Fetcher: Detail Job (URL, Selectors)
-    Fetcher->>Site: Navigate to Product URL
-    Fetcher->>Site: Execute _EXTRACT_JS
-    Site-->>Fetcher: Raw Description & Metadata
-    Fetcher->>Engine: POST /jobs/{id}/result
+    Ext->>API: GET /products?missing_description=true
+    API->>DB: SELECT ... WHERE description IS NULL
+    DB-->>API: Results with source_text
+    API-->>Ext: JSON Product List
+    Note over Ext: Generate description<br/>using source_text
+    Ext->>API: PUT /products/{id}/description
+    API->>DB: UPDATE products SET description=...
+    DB-->>API: Row updated
+    API-->>Ext: Status Success
 ```
 
-Sources: [fetcher/fetcher.py:1-25](fetcher/fetcher.py#L1-L25), [fetcher/fetcher.py:210-230](fetcher/fetcher.py#L210-L230)
+Sources: [api/api.py:120-136](api/api.py#L120-L136), [api/api.py:151-167](api/api.py#L151-L167)
 
-## Configuration and CLI Usage
+## Category Derivation
+A specialized utility, `derive_category`, extracts a readable category from the product's listing URL path. It filters out common technical segments (e.g., "sv", "shop", "p") and strips numeric IDs to provide the enrichment process with clean context about the product's placement in the merchant's taxonomy.
 
-The enrichment process can be controlled via command-line arguments to handle backlogs or specific site refreshes.
+Sources: [scraper/scraper.py:236-253](scraper/scraper.py#L236-L253), [fetcher/fetcher.py:48-73](fetcher/fetcher.py#L48-L73)
 
-| Argument | Description |
-| :--- | :--- |
-| `--limit` | Maximum number of products to process in one run. |
-| `--concurrency` | Number of parallel page loads (default 3). |
-| `--site` | Restrict enrichment to a specific site configuration name. |
-| `--refresh` | Re-extract text even for products that already have `source_text`. |
-
-Sources: [scraper/enrich.py:27-30](scraper/enrich.py#L27-L30), [scraper/enrich.py:157-162](scraper/enrich.py#L157-L162)
-
-## API Endpoints
-
-The system exposes REST API endpoints to retrieve products missing descriptions and to update enriched description fields.
-
-*  **GET `/products?missing_description=true`**: Returns products that do not yet have a generated description.
-*  **PUT `/products/{product_id}/description`**: Updates the `description` and `description_why` fields for a specific product.
-
-Sources: [api/api.py:125-140](api/api.py#L125-L140), [api/api.py:155-165](api/api.py#L155-L165)
-
-## Summary
-Product Description Enrichment is critical for grounding the platform's data in facts. By visiting individual product pages and utilizing a robust hierarchy of extraction heuristics, the system transforms basic "title and price" entries into rich data objects suitable for complex analysis and consumption by other services.
+The Product Description Enrichment module ensures that the scraped database contains more than just prices and titles, providing a rich, factual foundation for advanced product data processing and display.

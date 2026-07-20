@@ -19,151 +19,129 @@ The following files were used as context for generating this wiki page:
 
 # System Architecture Overview
 
-## Introduction
-The Web Scraper Platform is a production-ready system designed for multi-site e-commerce scraping, price monitoring, and data enrichment. It utilizes a containerized architecture to manage product data extraction via headless browsers, store historical price information in a PostgreSQL database, and provide both a REST API and a Web UI for management and consumption.
+The Web Scraper Platform is a production-ready system designed for multi-site e-commerce scraping, price monitoring, and data enrichment. It leverages a microservices-inspired architecture containerized via Docker, comprising a PostgreSQL database, a Playwright-based scraping engine, a FastAPI REST API, and a Flask-based Web UI.
 
-The system is structured into three primary layers: the **Control Plane** (Web UI and REST API), the **Execution Layer** (Scraper Engine and Fetchers), and the **Data Layer** (PostgreSQL). It supports advanced features such as stealth mode to bypass bot protection, automatic selector detection, and asynchronous data enrichment.
-Sources: [README.md:1-15](README.md#L1-L15), [CLAUDE.md:3-8](CLAUDE.md#L3-L8), [AGENTS.md:3-8](AGENTS.md#L3-L8)
+The system is designed to handle complex scraping tasks including bypassing bot protections (Akamai, Cloudflare) via stealth modes, managing asynchronous browser instances for performance, and providing automated data enrichment to extract detailed product descriptions.
+
+Sources: [README.md:1-20](README.md#L1-L20), [CLAUDE.md:1-25](CLAUDE.md#L1-L25), [AGENTS.md:1-20](AGENTS.md#L1-L20)
 
 ## Core Components
-The architecture is composed of several specialized modules that interact to perform automated scraping tasks and serve data to end-users.
 
-| Component | Technology | Description |
-|-----------|------------|-------------|
-| **Web UI** | Flask | Provides a graphical interface for configuration, monitoring, and data visualization. |
-| **REST API** | FastAPI / Flask | Exposes endpoints for programmatic access to product data, deals, and stats. |
-| **Scraper Engine** | Playwright / Python | Orchestrates the scraping logic, handles concurrent pages, and manages database persistence. |
-| **Fetcher** | Playwright | A stateless component that performs headless browser rendering and extraction based on job leases. |
-| **Enrichment Module** | Playwright / Python | Resumable process that visits individual product pages to extract detailed descriptions and metadata. |
-| **Database** | PostgreSQL | Stores site configurations, product details, price history, and system settings. |
+The architecture consists of four primary service layers that interact to facilitate the scraping lifecycle:
 
-Sources: [README.md:11-20](README.md#L11-L20), [CLAUDE.md:10-25](CLAUDE.md#L10-L25), [scraper/scraper.py:25-50](scraper/scraper.py#L25-L50), [fetcher/fetcher.py:1-25](fetcher/fetcher.py#L1-L25)
+### 1. Data Layer (PostgreSQL)
+The central repository for the system. It stores scraper configurations, discovered products, price history, and global application settings. It uses a `ThreadedConnectionPool` for efficient concurrent access from the scraping engine.
 
-### High-Level System Flow
-The following diagram illustrates the interaction between the user, the control interface, the scraping engine, and the external target websites.
+Sources: [scraper/scraper.py:126-145](scraper/scraper.py#L126-L145), [README.md:105-155](README.md#L105-L155)
 
-```mermaid
-graph TD
-    User[User / External Service] -->|HTTP/REST| WebUI[Web UI / REST API]
-    WebUI -->|Trigger Scrape| Engine[Scraper Engine]
-    WebUI -->|Query Data| DB[(PostgreSQL)]
-    
-    subgraph "Execution Layer"
-        Engine -->|Job Management| Fetcher[Stateless Fetcher]
-        Engine -->|Persistence| DB
-        Fetcher -->|Headless Browser| Target[Target E-commerce Sites]
-        Enrich[Enrichment Module] -->|Product Details| DB
-    end
-    
-    Target -.->|HTML/JSON-LD| Fetcher
-    Fetcher -.->|Extracted Data| Engine
-```
+### 2. Scraping Engine (Scraper & Fetcher)
+The "muscle" of the system. 
+*  **Scraper:** Manages the main scraping loops, handles CSS selector logic, and manages the database buffer flush.
+*  **Fetcher:** A stateless Playwright-based worker that performs the actual rendering and extraction of product data (titles, prices, source text).
+*  **Enrichment:** A specialized module that visits individual product pages to extract detailed source text that listing pages lack.
 
-The diagram shows the flow of requests from the user through the Web UI/API to the Scraper Engine, which coordinates with Fetchers and the database to extract and store data from external sites.
-Sources: [scraper/scraper.py:650-680](scraper/scraper.py#L650-L680), [fetcher/fetcher.py:35-50](fetcher/fetcher.py#L35-L50), [webui/app.py:110-150](webui/app.py#L110-L150)
+Sources: [scraper/scraper.py:270-350](scraper/scraper.py#L270-L350), [fetcher/fetcher.py:1-30](fetcher/fetcher.py#L1-L30), [scraper/enrich.py:1-25](scraper/enrich.py#L1-L25)
 
-## Data Layer and Schema
-The system relies on a PostgreSQL database for all persistent state, including scraping configurations and historical price data.
+### 3. API & Control Plane
+*  **REST API:** A FastAPI-based service providing programmatic access to product data, deals, and stats. It requires `X-API-Key` authentication.
+*  **Web UI:** A Flask-based interface for managing configurations, monitoring status, and triggering manual scrapes. It proxies requests to the underlying Scraper Engine.
 
-### Database Entities
+Sources: [webui/app.py:80-150](webui/app.py#L80-L150), [README.md:65-90](README.md#L65-L90), [CLAUDE.md:15-30](CLAUDE.md#L15-L30)
 
-```mermaid
-erDiagram
-    scraper_config ||--o{ products : "defines"
-    products ||--o{ price_history : "tracks"
-    products ||--o| alert_cooldown : "manages"
-    
-    scraper_config {
-        int id PK
-        string name
-        string base_url
-        string product_selector
-        string pagination_type
-        int enabled
-        int use_stealth
-        string proxy_url
-    }
-    
-    products {
-        int id PK
-        string url
-        string title
-        int current_price
-        timestamp last_updated
-        int site_config_id FK
-        text source_text
-        string category
-    }
-    
-    price_history {
-        int id PK
-        int product_id FK
-        int price
-        timestamp timestamp
-    }
-    
-    settings {
-        string key PK
-        string value
-    }
-```
+## System Data Flow
 
-The ER diagram defines the relationships between site configurations, the products discovered, and their individual price histories.
-Sources: [README.md:158-215](README.md#L158-L215), [scraper/scraper.py:175-250](scraper/scraper.py#L175-L250)
-
-## Execution Logic
-
-### Scraper Engine and Fetcher Interaction
-The system uses a job-based model where the engine or a "Work-like" service (referenced in the Fetcher as `ENGINE_URL`) manages tasks that stateless fetchers lease and execute.
-
-1.  **Lease:** Fetchers request a batch of rendering jobs.
-2.  **Render:** Fetchers use Playwright to load URLs, handle SPA content, and bypass bot protection.
-3.  **Extract:** Data is extracted using CSS selectors or JSON-LD heuristics.
-4.  **Report:** Results are posted back to the engine for storage.
-
-Sources: [fetcher/fetcher.py:1-20](fetcher/fetcher.py#L1-L20), [scraper/scraper.py:380-450](scraper/scraper.py#L380-L450)
-
-### Scraping Process Flow
+The following diagram illustrates the interaction between a user, the Web UI, the Scraping Engine, and the target E-commerce websites.
 
 ```mermaid
 flowchart TD
-    Start[Start Scraper Loop] --> GetConfigs[Load Active Configs]
-    GetConfigs --> Worker{Worker Thread}
-    Worker --> PageReq[New Playwright Page]
-    PageReq --> Stealth{Stealth Mode?}
-    Stealth -->|Yes| ApplyStealth[Apply Stealth/Proxy]
-    Stealth -->|No| LoadPage[Load Target URL]
-    ApplyStealth --> LoadPage
-    LoadPage --> Scroll[Infinite Scroll Heuristic]
-    Scroll --> Extract[Extract Products]
-    Extract --> Buffer[Add to Write Buffer]
-    Buffer -->|Threshold Reached| Flush[Flush to PostgreSQL]
-    Flush --> Done[Wait for Interval]
-    Done --> Start
+    User[User / Admin] -->|Configures Site| UI[Web UI - Flask]
+    UI -->|Proxy Request| Engine[Scraper Engine - FastAPI]
+    Engine -->|Store/Retrieve| DB[(PostgreSQL)]
+    
+    subgraph Scraping_Process
+        Engine -->|Launch| PW[Playwright / Stealth]
+        PW -->|HTTP Request| Target[E-commerce Sites]
+        Target -->|HTML/JSON-LD| PW
+        PW -->|Extracted Data| Buffer[Write Buffer]
+        Buffer -->|Periodic Flush| DB
+    end
+    
+    DB -->|Price History| API[REST API - FastAPI]
+    API -->|JSON Data| External[External Services]
 ```
 
-This flowchart details the internal logic of `scraper.py`, including stealth application, scrolling, and buffered database writes.
-Sources: [scraper/scraper.py:400-550](scraper/scraper.py#L400-L550), [scraper/scraper.py:585-610](scraper/scraper.py#L585-L610)
+The diagram shows the flow from user configuration through the Playwright rendering process and final storage in the PostgreSQL database.
+Sources: [scraper/scraper.py:465-500](scraper/scraper.py#L465-L500), [webui/app.py:100-130](webui/app.py#L100-L130), [fetcher/fetcher.py:275-300](fetcher/fetcher.py#L275-L300)
 
-## Data Enrichment and AI Grounding
-The `enrich.py` module serves as a resumable background process to transform discovered product URLs into data-rich records. This is critical for downstream consumers like a "product-describer."
+## Database Schema
 
-*  **Heuristic Extraction:** It prioritizes JSON-LD `Product` nodes, falling back to Open Graph (`og:description`) and standard meta tags.
-*  **SPA Support:** It utilizes `RENDER_WAIT_MS` (default 12,000ms) to ensure client-side structured data is injected before extraction.
-*  **State Management:** It uses the `source_text` column in the `products` table to track progress, where an empty string indicates a failed discovery and `NULL` indicates a pending task.
+The system relies on five main tables to manage the scraping state and results.
 
-Sources: [scraper/enrich.py:15-50](scraper/enrich.py#L15-L50), [scraper/enrich.py:85-110](scraper/enrich.py#L85-L110)
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `scraper_config` | Defines how to scrape specific sites | `product_selector`, `price_selector`, `use_stealth`, `proxy_url` |
+| `products` | Stores latest product state | `url`, `current_price`, `source_text`, `category` |
+| `price_history` | Tracks price changes over time | `product_id`, `price`, `timestamp` |
+| `settings` | Global system configuration | `concurrent_pages`, `scrape_interval`, `headless` |
+| `alert_cooldown` | Manages notification frequency | `product_id`, `last_alert` |
+
+Sources: [README.md:105-155](README.md#L105-L155), [scraper/scraper.py:160-225](scraper/scraper.py#L160-L225)
+
+## Scraping Logic and Extraction
+
+The system utilizes two primary methods for discovering and extracting product data:
+
+### Extraction Sequence
+1.  **Browser Initialization:** Launches Chromium with specific arguments to avoid detection (`--no-sandbox`, `AutomationControlled` disabled).
+2.  **Stealth Application:** Applies `playwright-stealth` to mimic human behavior if the site configuration requires it.
+3.  **Heuristic Discovery:** For enrichment and detail pages, the system attempts to find data in order of reliability:
+  *  Custom CSS `detail_selector` if provided (highest priority; site-specific).
+  *  `JSON-LD` Product nodes with `description` field (most reliable for e-commerce).
+  *  Open Graph (`og:description`) meta tags.
+  *  Standard HTML Meta Description tags.
+
+Sources: [scraper/scraper.py:105-120](scraper/scraper.py#L105-L120), [fetcher/fetcher.py:58-135](fetcher/fetcher.py#L58-L135), [scraper/enrich.py:87-116](scraper/enrich.py#L87-L116)
+
+### Scraping Sequence Diagram
+This diagram details the internal process of a single scraping task, including the retry logic and database buffering.
+
+```mermaid
+sequenceDiagram
+    participant S as Scraper Loop
+    participant P as Playwright
+    participant B as Write Buffer
+    participant D as Database
+
+    S->>P: New Page (with Proxy/Stealth)
+    P->>P: Wait for DOMContentLoaded
+    P->>P: Accept Cookies (Heuristic)
+    P->>P: Infinite Scroll (rounds=30)
+    P-->>S: Return Element Handles
+    loop for each element
+        S->>S: extract_product()
+    end
+    S->>B: Append to Buffer
+    alt Buffer Size >= 10
+        B->>D: flush_buffer()
+        D-->>B: Commit Transaction
+    end
+```
+
+The sequence shows how the scraper manages page interactions and batch-writes to the database to minimize connection overhead.
+Sources: [scraper/scraper.py:350-450](scraper/scraper.py#L350-L450), [fetcher/fetcher.py:230-260](fetcher/fetcher.py#L230-L260)
 
 ## Security and Authentication
+
 The system implements security at multiple levels:
+*  **SSRF Protection:** The engine validates URLs against private network ranges (10.0.0.0/8, 127.0.0.0/8, etc.) to prevent Server-Side Request Forgery.
+*  **API Security:** All REST endpoints (except `/health`) require an `X-API-Key`.
+*  **Internal Communication:** The Web UI communicates with the Scraper Engine using an `X-Engine-Key` for HMAC-based verification.
+*  **Secret Management:** Credentials (API keys, DB passwords) are auto-generated on first start and stored in a restricted `/credentials` directory.
 
-*  **API Security:** All REST endpoints (except `/health`) require an `X-API-Key` provided via header.
-*  **Inter-Service Security:** Communication between the Web UI and Scraper Engine is protected by an `X-Engine-Key`.
-*  **Web UI Security:** Protected by Basic Authentication (`WEBUI_USERNAME` and `WEBUI_PASSWORD`).
-*  **SSRF Protection:** The scraper validates all URLs against a list of private/internal network ranges to prevent Server-Side Request Forgery.
-
-Sources: [README.md:73-85](README.md#L73-L85), [scraper/scraper.py:75-100](scraper/scraper.py#L75-L100), [webui/app.py:85-115](webui/app.py#L85-L115)
+Sources: [scraper/scraper.py:90-103](scraper/scraper.py#L90-L103), [webui/app.py:60-78](webui/app.py#L60-L78), [README.md:55-63](README.md#L55-L63), [CLAUDE.md:20-25](CLAUDE.md#L20-L25)
 
 ## Conclusion
-The architecture of the Web Scraper Platform provides a robust framework for high-volume data collection. By decoupling the control interface from the headless browser execution layer and utilizing a central PostgreSQL instance for state, the system achieves a balance between operational visibility and scraping performance. Features like stealth mode and automated selector detection further enhance its utility in a production environment.
-Sources: [README.md:1-10](README.md#L1-L10), [CLAUDE.md:3-10](CLAUDE.md#L3-L10)
+
+The Web Scraper Platform provides a robust architecture for automated data gathering. By separating the browser rendering (Playwright) from the management logic (FastAPI/Flask) and utilizing a centralized PostgreSQL database for state, the system ensures reliability and scalability. The inclusion of stealth modes and heuristic extraction allows it to function effectively even against sites with aggressive anti-bot measures.
+
+Sources: [README.md:1-10](README.md#L1-L10), [AGENTS.md:1-10](AGENTS.md#L1-L10)

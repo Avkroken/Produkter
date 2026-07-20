@@ -2,10 +2,10 @@
 
 > This directory is machine-managed by cubic. Edit wiki content through [cubic wiki settings](https://www.cubic.dev/wiki/blixten85/scraper) and custom instructions.
 
-Wiki version: 1
-Source commit: cd6d00dcfc349663d07450282045b7f03beeb90f
+Wiki version: 2
+Source commit: 4b9cbc617a59e1012e1aafd1acf0eb054595ff5a
 Source branch: main
-Generated: 2026-07-19T20:22:31.226Z
+Generated: 2026-07-20T06:11:05.467Z
 
 ## Contents
 
@@ -25,16 +25,16 @@ Generated: 2026-07-19T20:22:31.226Z
 - [Multi-Site Scraping Engine](03-section-features/01-feature-scraper.md)
 - [Auto-Detect Selectors](03-section-features/02-feature-autodetect.md)
 - [Stealth Mode & Bot Bypass](03-section-features/03-feature-stealth.md)
-- [Price Monitoring & Discord Alerts](03-section-features/04-feature-alerts.md)
+- [Subcategory Auto-Discovery](03-section-features/04-feature-discovery.md)
 - [Product Description Enrichment](03-section-features/05-feature-enrich.md)
-- [Subcategory Auto-Discovery](03-section-features/06-feature-discovery.md)
+- [Price Monitoring & Discord Alerts](03-section-features/06-feature-alerts.md)
+- [Data Export Capabilities](03-section-features/07-feature-export.md)
 
 ### Data Management
 
 - [Database Schema & Structure](04-section-data/01-data-schema.md)
-- [PostgreSQL & Connection Pooling](04-section-data/02-data-pooling.md)
-- [Data Export Capabilities](04-section-data/03-data-export.md)
-- [Automated Database Backups](04-section-data/04-data-backups.md)
+- [PostgreSQL Connection Pooling](04-section-data/02-data-pooling.md)
+- [Automated Database Backups](04-section-data/03-data-backups.md)
 
 ### Frontend Components (WebUI)
 
@@ -44,21 +44,20 @@ Generated: 2026-07-19T20:22:31.226Z
 
 ### Backend Systems
 
-- [REST API Endpoints & Docs](06-section-backend/01-backend-api.md)
-- [API Key Authentication](06-section-backend/02-backend-auth.md)
-- [Background Scraper Worker](06-section-backend/03-backend-scraper-worker.md)
-- [URL Fetcher Module](06-section-backend/04-backend-fetcher-module.md)
-- [Background Alerts Worker](06-section-backend/05-backend-alerts-worker.md)
+- [REST API Endpoints & Docs](06-section-backend/01-backend-public-api.md)
+- [Internal Scraper Engine API](06-section-backend/02-backend-engine-api.md)
+- [API Key Authentication](06-section-backend/03-backend-auth.md)
+- [URL Fetcher Module](06-section-backend/04-backend-fetcher.md)
 
 ### Deployment and Infrastructure
 
 - [Docker Compose Deployment](07-section-infra/01-infra-docker.md)
-- [Secure Secrets Management](07-section-infra/02-infra-env-secrets.md)
-- [SOCKS5/HTTP Proxy Support](07-section-infra/03-infra-proxy.md)
-- [Process Management with Supervisord](07-section-infra/04-infra-supervisor.md)
+- [Process Management with Supervisord](07-section-infra/02-infra-supervisor.md)
+- [Secure Secrets Management](07-section-infra/03-infra-secrets.md)
+- [SOCKS5/HTTP Proxy Support](07-section-infra/04-infra-proxy.md)
 
 ### Extensibility and Customization
 
-- [AI Agents & Claude Integration](08-section-ext/01-ext-ai-agents.md)
-- [Adding New Scraper Targets](08-section-ext/02-ext-adding-sites.md)
-- [Contributing & Issue Reporting](08-section-ext/03-ext-contributing.md)
+- [Adding New Scraper Targets](08-section-extensibility/01-ext-adding-sites.md)
+- [AI Agents & Claude Integration](08-section-extensibility/02-ext-ai-agents.md)
+- [Contributing & Issue Reporting](08-section-extensibility/03-ext-contributing.md)

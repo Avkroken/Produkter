@@ -8,132 +8,161 @@ wiki_page_id: "overview-dev-setup"
 
 The following files were used as context for generating this wiki page:
 
+- [README.md](README.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CLAUDE.md](CLAUDE.md)
 - [AGENTS.md](AGENTS.md)
-- [README.md](README.md)
 - [scraper/scraper.py](scraper/scraper.py)
 </details>
 
 # Local Development Setup
 
-Local development setup for the Web Scraper Platform involves configuring a multi-service architecture that includes a Python-based scraper engine, a FastAPI REST API, a Flask Web UI, and a PostgreSQL database. The environment can be managed either through direct host installation for individual component development or via Docker Compose for a full-stack experience.
+This page provides the necessary steps and technical details to set up the Web Scraper platform for local development. The project is a production-ready web scraping platform utilizing a Python-based backend (Flask and FastAPI), Playwright for browser automation, and PostgreSQL for data persistence.
 
-The platform relies on Playwright for headless browser automation and utilizes environment variables for all sensitive configuration and credential management.
+The development environment can be managed either through a native Python installation for individual component development or via Docker Compose for a full-stack orchestration.
 
-Sources: [CLAUDE.md](CLAUDE.md), [README.md](README.md), [scraper/scraper.py](scraper/scraper.py)
+Sources: [README.md:1-12](README.md#L1-L12), [CLAUDE.md:1-5](CLAUDE.md#L1-L5)
 
-## Environment Configuration
+## Prerequisites and Tech Stack
 
-Before running the services, specific environment variables and directory structures must be established. The system uses a `.env` file for primary configuration and automatically generates certain credentials on the first startup if they are not provided.
+Before starting the setup, ensure your local machine meets the following requirements:
 
-### Mandatory Environment Variables
-| Variable | Description |
-| :--- | :--- |
-| `DOCKER` | Path to the local directory where persistent volumes are stored. |
-| `TZ` | Timezone for the containers (e.g., `Europe/Stockholm`). |
-| `DOMAIN` | Hostname for the setup (optional). |
+*  **Python 3**: The core logic is written in Python.
+*  **Playwright**: Used for headless browser scraping with Chromium.
+*  **PostgreSQL**: The primary database for product data and configurations.
+*  **Docker & Docker Compose**: Recommended for service orchestration.
+*  **Supervisor**: Used within the container to manage multiple processes.
 
-### Required Directory Structure
-The following directories must be manually created in the path defined by the `DOCKER` variable to allow for volume mounting:
-- `/scraper/postgres`: Database data files.
-- `/scraper/logs`: Application and scraper logs.
-- `/scraper/playwright-cache`: Browser binaries and cache.
-- `/scraper/credentials`: Automatically generated API keys and DB passwords.
+Sources: [CLAUDE.md:7-12](CLAUDE.md#L7-L12), [AGENTS.md:7-12](AGENTS.md#L7-L12)
 
-Sources: [CONTRIBUTING.md:24-27](CONTRIBUTING.md#L24-L27), [README.md:46-51](README.md#L46-L51), [README.md:105-109](README.md#L105-L109)
+### Component Architecture
 
-## Component Architecture
-
-The development environment consists of three primary logic blocks interacting with a central PostgreSQL database.
+The system consists of several interconnected modules that must be initialized during development:
 
 ```mermaid
 graph TD
-    User([Developer/User]) --> WebUI[Flask Web UI :3000]
-    User --> API[FastAPI REST API :8000]
-    WebUI -- Internal API Calls --> API
-    API -- Query/Manage --> DB[(PostgreSQL :5432)]
-    Scraper[Scraper Engine] -- Scrape Tasks --> Playwright[Playwright/Chromium]
-    Scraper -- Write Results --> DB
-    Playwright -- Fetch Data --> Web([External E-commerce Sites])
+    subgraph Local_Machine
+        A[Git Clone Repository] --> B[Configure .env]
+        B --> C{Setup Choice}
+        C -- Docker --> D[Docker Compose Up]
+        C -- Manual --> E[Install Pip Requirements]
+        E --> F[Playwright Install]
+        F --> G[Start API Server]
+        F --> H[Start Web UI]
+    end
+    D --> I[PostgreSQL]
+    D --> J[Scraper Service]
+    J --> K[Web UI / Port 3000]
+    J --> L[REST API / Port 8000]
 ```
 
-The diagram above illustrates the flow of data from external websites through the Playwright-driven Scraper Engine into the PostgreSQL database, which is then served via the REST API and Web UI.
-Sources: [CLAUDE.md:17-23](CLAUDE.md#L17-L23), [README.md:73-77](README.md#L73-L77), [scraper/scraper.py:270-340](scraper/scraper.py#L270-L340)
+The diagram above illustrates the two primary paths for setting up the local development environment.
 
-## Setup Methods
+Sources: [CONTRIBUTING.md:21-38](CONTRIBUTING.md#L21-L38), [CLAUDE.md:14-23](CLAUDE.md#L14-L23)
 
-### 1. Docker Compose (Recommended)
-This method starts the full production-parity stack.
+## Installation Steps
 
-1.  **Initialize Environment**:
-
-```bash
-    cp .env.example .env
-    # Edit .env with your DOCKER path and TZ
-    ```
-
-2.  **Start Stack**:
+### 1. Repository Initialization
+First, fork and clone the repository to your local environment.
 
 ```bash
-    docker compose up -d
-    ```
+git clone https://github.com/YOUR_USERNAME/scraper.git
+cd scraper
+```
 
-3.  **Retrieve Credentials**:
-  On the first run, the system generates an API key and database password.
+Sources: [CONTRIBUTING.md:21-23](CONTRIBUTING.md#L21-L23)
 
-```bash
-    docker compose logs postgres   # View generated DB password
-    docker compose logs scraper    # View generated API key
-    ```
-
-Sources: [CONTRIBUTING.md:23-32](CONTRIBUTING.md#L23-L32), [README.md:44-67](README.md#L44-L67)
-
-### 2. Manual Host Installation
-For developers wishing to run components individually for debugging.
-
-1.  **Install Dependencies**:
+### 2. Environment Configuration
+Create a `.env` file from the provided example. This file is required to define data paths and timezones.
 
 ```bash
-    pip install -r requirements.txt
-    playwright install chromium
-    ```
+cp .env.example .env
+# Edit .env with your preferred editor
+```
 
-2.  **Start Services**:
-  - **API Server**: `uvicorn api.api:app --reload`
-  - **Web UI**: `flask --app webui.app run`
-  - **Scraper**: `python scraper/scraper.py` (requires a running PostgreSQL instance)
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DOCKER` | Path where volumes (DB, logs, credentials) are stored | `/path/to/docker/data` |
+| `DOMAIN` | Hostname for the application (optional) | `example.com` |
+| `TZ` | System timezone | `Europe/Stockholm` |
 
-Sources: [CLAUDE.md:10-15](CLAUDE.md#L10-L15), [AGENTS.md:10-15](AGENTS.md#L10-L15)
+Sources: [CONTRIBUTING.md:26-29](CONTRIBUTING.md#L26-L29), [README.md:104-111](README.md#L104-L111)
 
-## Development Workflow and Standards
+### 3. Manual Service Execution
+For developers who prefer running services outside of Docker, the following commands initialize the environment and start the servers independently:
 
-The project follows strict development guidelines to ensure stability and security.
+```bash
+# Install dependencies
+pip install -r requirements.txt
+playwright install chromium
 
-### Code Standards
-- **Python**: Must adhere to PEP 8 style guides.
-- **JavaScript**: Managed via provided ESLint configurations.
-- **Permissions**: The `entrypoint.sh` script enforces restrictive permissions on the `credentials/` directory at every startup.
-- **Error Reporting**: Unexpected exceptions are reported to GitHub via `report_error_to_github()` if `GITHUB_ERROR_REPORT_TOKEN` is configured.
+# Start REST API (FastAPI)
+uvicorn api.api:app --reload
 
-### Database Schema Reference
-Local development often requires direct database interaction. The primary tables are:
-- `scraper_config`: Stores site-specific selectors and scrape intervals.
-- `products`: Stores currently tracked product data and prices.
-- `price_history`: Historical price points for trend analysis.
-- `settings`: Global application settings managed via the Web UI.
+# Start Web UI (Flask)
+flask --app webui.app run
+```
 
-Sources: [CONTRIBUTING.md:45-51](CONTRIBUTING.md#L45-L51), [CLAUDE.md:26-36](CLAUDE.md#L26-L36), [README.md:144-200](README.md#L144-L200)
+Sources: [CLAUDE.md:14-23](CLAUDE.md#L14-L23), [AGENTS.md:14-23](AGENTS.md#L14-L23)
 
-## Troubleshooting the Setup
+## Docker-Based Development
 
-| Issue | Resolution |
-| :--- | :--- |
-| **Postgres won't start** | Ensure the local data directory has the correct UID/GID: `sudo chown -R 999:999 ${DOCKER}/scraper/postgres` |
-| **API 401 Unauthorized** | Verify the `X-API-Key` header matches the key found in `${DOCKER}/scraper/credentials/api_key`. |
-| **Playwright Errors** | In Docker, ensure the `playwright-cache` volume is correctly mapped. On host, run `playwright install`. |
+Using Docker Compose is the most efficient way to ensure all dependencies (PostgreSQL, Playwright, and environment permissions) are correctly configured.
 
-Sources: [README.md:126-140](README.md#L126-L140), [scraper/scraper.py:440-455](scraper/scraper.py#L440-L455)
+### Service Orchestration
+The `docker compose up -d` command starts the following stack:
 
-### Summary
-Local development of the Web Scraper Platform is centered around a containerized architecture that minimizes manual configuration through auto-generated credentials and pre-defined Docker services. Developers can choose between a full-stack Docker deployment or individual component execution, provided the core environmental requirements and PostgreSQL dependencies are met.
+| Container | Port | Description |
+|-----------|------|-------------|
+| `postgres` | 5432 | Internal database access. Port 5432 is exposed on localhost for MCP access. |
+| `scraper` | 3000 | The Flask-based Web UI. |
+| `scraper` | 8000 | The FastAPI REST API. |
+
+Sources: [README.md:65-71](README.md#L65-L71), [scraper/scraper.py:843-851](scraper/scraper.py#L843-L851)
+
+### Credential Generation
+On the first startup, the platform automatically generates credentials in the `DOCKER/scraper/credentials/` directory:
+*  `db_password`: Generated by the postgres container.
+*  `api_key`: Required for all REST API endpoints except `/health`.
+*  `engine_key`: Internal key for scraper communication.
+
+Sources: [README.md:75-88](README.md#L75-L88), [scraper/scraper.py:161-177](scraper/scraper.py#L161-L177)
+
+## Development Conventions
+
+When contributing to the repository, adhere to the following standards:
+
+*  **Permissions**: The `entrypoint.sh` script sets restrictive permissions on the credentials directory at every startup.
+*  **Secrets Management**: All secrets (DB credentials, API keys) must be passed via environment variables. Never commit `.env` files.
+*  **Shell Scripts**: Use `set -euo pipefail` at the top of all shell scripts for safety.
+*  **Style**: Follow PEP 8 for Python and use the provided ESLint configuration for JavaScript.
+
+Sources: [CONTRIBUTING.md:49-55](CONTRIBUTING.md#L49-L55), [CLAUDE.md:31-35](CLAUDE.md#L31-L35), [AGENTS.md:31-34](AGENTS.md#L31-L34)
+
+### Data Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant UI as Web UI (Port 3000)
+    participant API as REST API (Port 8000)
+    participant SCR as Scraper Engine
+    participant DB as PostgreSQL
+
+    Dev->>UI: Configure New Site
+    UI->>API: POST /config
+    API->>DB: Save Configuration
+    Dev->>UI: Trigger Scrape
+    UI->>API: POST /scrape
+    API->>SCR: Initialize Playwright
+    SCR->>DB: Write Product Data
+    API-->>UI: Return Success
+```
+
+This diagram shows the typical development flow when testing new scraper configurations through the local UI and API.
+
+Sources: [scraper/scraper.py:648-690](scraper/scraper.py#L648-L690), [README.md:126-150](README.md#L126-L150)
+
+## Conclusion
+
+Local development of the Scraper platform requires a combination of Python service management and database orchestration. By following the Docker-based setup, developers can ensure that the complex dependencies of Playwright and PostgreSQL are handled automatically, allowing for immediate focus on scraper logic and UI enhancements.

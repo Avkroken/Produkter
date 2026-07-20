@@ -8,116 +8,122 @@ wiki_page_id: "arch-error-handling"
 
 The following files were used as context for generating this wiki page:
 
-- [api/github\_report.py](api/github_report.py)
-- [scraper/github\_report.py](scraper/github_report.py)
-- [alerts/github\_report.py](alerts/github_report.py)
-- [tests/test\_github\_report.py](tests/test_github_report.py)
+- [github_report.py](github_report.py)
 - [scraper/scraper.py](scraper/scraper.py)
 - [webui/app.py](webui/app.py)
 - [scraper/enrich.py](scraper/enrich.py)
 - [CLAUDE.md](CLAUDE.md)
+- [tests/test_github_report.py](tests/test_github_report.py)
 </details>
 
 # Error Handling & GitHub Reporting
 
-The Error Handling and GitHub Reporting system is a specialized diagnostic module designed to capture unexpected exceptions across various services (API, Scraper, WebUI, and Alerts) and automatically report them as GitHub issues. Its primary purpose is to facilitate hands-off debugging by tagging reports for AI intervention (via `@claude`) while ensuring sensitive data like credentials and personal information are strictly redacted before submission.
+## Introduction
+The scraper project implements a robust, automated error handling and reporting system designed to capture unexpected exceptions across its various modules (API, WebUI, Scraper Engine, and Enrichment). The primary goal is to provide "best-effort" reporting that creates GitHub issues tagged for developer intervention without exposing sensitive credentials or crashing the calling process.
 
-The system is implemented as a "best-effort" utility, meaning it is designed to never crash the calling application even if reporting fails due to network issues or missing configuration. It is replicated across multiple service directories to ensure local availability for each process managed by Supervisor.
-Sources: [CLAUDE.md:34-41](CLAUDE.md#L34-L41), [scraper/github\_report.py:53-56](scraper/github\_report.py#L53-L56)
+This system centralizes reporting logic in `github_report.py`, which is distributed across different service working directories to accommodate environments managed by Supervisor. It features automatic data redaction, issue deduplication via error fingerprinting, and integration with external monitoring tools like Sentry.
 
-## Automated Reporting Logic
+Sources: [CLAUDE.md:33-40](CLAUDE.md#L33-L40), [github_report.py:1-15](github_report.py#L1-L15)
 
-The core logic resides in the `report_error_to_github` function. When an unhandled exception occurs, the system generates a unique "fingerprint" of the error to prevent duplicate reports (deduplication) and then submits a redacted report to the configured GitHub repository.
+---
 
-### Reporting Process Flow
+## Automated GitHub Reporting Logic
+The core of the reporting system is the `report_error_to_github` function. It manages the lifecycle of an error report from initial capture to the creation of a GitHub issue.
 
-The following diagram illustrates the flow from exception capture to GitHub issue creation:
+### Data Flow and Redaction
+Before any data is transmitted to GitHub, it passes through a redaction layer that masks known secret patterns. The redaction logic targets environment variables whose names contain KEY/TOKEN/SECRET/PASSWORD/PASS and common credential patterns (e.g., sk-..., ghp_..., AKIA...), plus email addresses and home directory paths. However, arbitrary or residual secrets that do not match these patterns may still leak.
 
 ```mermaid
 flowchart TD
-    A[Unexpected Exception] --> B{Token Set?}
-    B -- No --> C[Ignore/Log Locally]
-    B -- Yes --> D[Generate Fingerprint]
-    D --> E[Check for Open Issue]
-    E -- Found --> F[Return Existing URL]
-    E -- Not Found --> G[Redact Content]
-    G --> H[Create GitHub Issue]
-    H --> I[Return New URL]
+    A[Unexpected Exception] --> B[Capture Traceback]
+    B --> C{Sanitize Data?}
+    C -->|Yes| D[Mask Env Secrets]
+    D --> E[Mask Key Patterns]
+    E --> F[Mask Emails & Paths]
+    F --> G[Generate Fingerprint]
+    G --> H[Check for Existing Issue]
+    H -->|Not Found| I[Post to GitHub API]
+    H -->|Found| J[Return Existing URL]
 ```
 
-The reporting logic prioritizes deduplication by searching for existing open issues containing the unique error fingerprint in the title.
-Sources: [scraper/github\_report.py:53-112](scraper/github\_report.py#L53-L112), [tests/test\_github\_report.py:38-51](tests/test\_github\_report.py#L38-L51)
+The diagram shows the sequence of operations performed to safely report an error while avoiding duplicate issues.
+Sources: [github_report.py:33-45](github_report.py#L33-L45), [github_report.py:70-85](github_report.py#L70-L85)
 
-### Exception Fingerprinting
-To identify recurring errors without leaking sensitive trace data, the system extracts the last line of the traceback (filename and line number) and the exception class name. This raw string is then hashed using SHA-256 and truncated to the first 10 characters.
-Sources: [scraper/github\_report.py:44-50](scraper/github\_report.py#L44-L50)
+### Redaction Rules
+The system applies several regex-based and environment-aware rules:
+*  **Environment Variables**: Values of variables containing markers like `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, or `PASS` are replaced with `[REDACTED]`.
+*  **Known Patterns**: Matches for common keys (e.g., `sk-...`, `ghp_...`, `Bearer ...`) are masked.
+*  **Personal Data**: Email addresses are replaced with `[EMAIL REDACTED]`.
+*  **System Paths**: Home directories (e.g., `/home/username/`) are generalized to `/home/[user]`.
 
-## Data Redaction and Sanitization
+Sources: [github_report.py:33-45](github_report.py#L33-L45), [tests/test_github_report.py:9-30](tests/test_github_report.py#L9-L30)
 
-A critical feature of the reporting system is the `_redact` function. It applies multiple layers of security to ensure that logs sent to a public or semi-public GitHub issue do not contain secrets.
+### Error Fingerprinting and Deduplication
+To prevent issue spam during repeated crashes, the system generates a stable 10-character fingerprint based on the exception type and the last line of the traceback.
 
-| Category | Redaction Method | Details |
-| :--- | :--- | :--- |
-| **Environment Variables** | Keyword Matching | Any value from environment variables containing `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, or `PASS` is replaced with `[REDACTED]`. |
-| **Known Patterns** | Regex Matching | Matches common patterns such as `sk-...`, `ghp_...`, `AKIA...`, and `Bearer ...`. |
-| **Personal Info** | Regex Matching | Emails are replaced with `[EMAIL REDACTED]`. |
-| **System Paths** | Regex Matching | Home directories (e.g., `/home/username`) are generalized to `/home/[user]`. |
+| Component | Logic | Description |
+|-----------|-------|-------------|
+| **Fingerprint** | `hashlib.sha256(raw).hexdigest()[:10]` | Unique ID derived from ExceptionName@File:Line. |
+| **Search** | `repo:{repo} is:issue is:open in:title [{fp}]` | Queries GitHub for open issues containing the fingerprint. |
+| **Labeling** | `["bug", "auto-reported"]` | Applied to new issues for easy filtering. |
 
-Sources: [scraper/github\_report.py:31-41](scraper/github\_report.py#L31-L41), [tests/test\_github\_report.py:10-34](tests/test\_github\_report.py#L10-L34)
+Sources: [github_report.py:48-54](github_report.py#L48-L54), [github_report.py:75-80](github_report.py#L75-L80)
 
-```python
-def _redact(text: str) -> str:
-    for key, value in os.environ.items():
-        if value and len(value) >= 8 and any(m in key.upper() for m in _SECRET_ENV_MARKERS):
-            text = text.replace(value, "[REDACTED]")
-    text = _KEY_PATTERN_RE.sub("[REDACTED]", text)
-    text = _EMAIL_RE.sub("[EMAIL REDACTED]", text)
-    text = _HOME_PATH_RE.sub("/home/[user]", text)
-    return text
-```
-
-Sources: [scraper/github\_report.py:32-39](scraper/github\_report.py#L32-L39)
+---
 
 ## Service Integration
+Error handling is integrated into the specific operational flows of the application's main components.
 
-The reporting mechanism is integrated into the global error handlers of the Flask and FastAPI components, as well as standalone scripts.
+### WebUI and Scraper Engine (Flask)
+Both the WebUI (`webui/app.py`) and the Scraper Engine (`scraper/scraper.py`) use Flask error handlers to catch unhandled exceptions during HTTP requests.
 
-### WebUI and Scraper API Integration
-In both `webui/app.py` and `scraper/scraper.py`, a global `@app.errorhandler(Exception)` is used to catch any unhandled errors during HTTP requests. This handler logs the exception locally and then calls `report_error_to_github`.
-
-```mermaid
-sequenceDiagram
-    participant App as "Service (API/WebUI)"
-    participant Rep as "GitHub Reporter"
-    participant GH as "GitHub API"
-
-    App->>App: Catch Exception
-    App->>Rep: report_error_to_github(repo, title, exc, context)
-    Rep->>Rep: Fingerprint & Redact
-    Rep->>GH: GET /search/issues (Check duplicates)
-    GH-->>Rep: 200 OK (0 items)
-    Rep->>GH: POST /repos/{repo}/issues (@claude tagged)
-    GH-->>Rep: 201 Created
-    Rep-->>App: Issue URL
+```python
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.exception("Unhandled error handling %s %s", request.method, request.path)
+    report_error_to_github(
+        "blixten85/scraper",
+        f"Oväntat fel: {request.method} {request.path}",
+        exc,
+        context={"method": request.method, "path": request.path},
+    )
+    return jsonify({"error": "Internal server error"}), 500
 ```
 
-Sources: [scraper/scraper.py:37-51](scraper/scraper.py#L37-L51), [webui/app.py:41-53](webui/app.py#L41-L53)
+Sources: [scraper/scraper.py:41-54](scraper/scraper.py#L41-L54), [webui/app.py:44-57](webui/app.py#L44-L57)
 
-### Standalone Module Usage
-The enrichment script (`scraper/enrich.py`) also utilizes this system to report failures during batch product processing, ensuring that long-running background tasks are monitored for stability.
-Sources: [scraper/enrich.py:202-205](scraper/enrich.py#L202-L205)
+### Scraper Loop and Enrichment
+For background tasks, try-except blocks wrap the main execution loops to ensure transient failures do not kill the service permanently.
+
+*  **Scraper Loop**: Errors in `run_scraper` are reported but the loop continues after the configured `scrape_interval`.
+*  **Enrichment**: The `enrich.py` module reports "one-shot" failures via the same GitHub mechanism before exiting with a non-zero status.
+
+Sources: [scraper/scraper.py:650-658](scraper/scraper.py#L650-L658), [scraper/enrich.py:228-232](scraper/enrich.py#L228-L232)
+
+---
+
+## External Monitoring (Sentry)
+In addition to GitHub reporting, the WebUI component is integrated with **Sentry** for real-time error tracking and performance monitoring.
+
+*  **Initialization**: Configured via `SENTRY_DSN` environment variable.
+*  **Privacy**: `send_default_pii` is set to `False` and request body capture is disabled to protect user data.
+*  **Capture**: Explicitly calls `sentry_sdk.capture_exception(exc)` within the global error handler.
+
+Sources: [webui/app.py:23-31](webui/app.py#L23-L31), [webui/app.py:50](webui/app.py#L50)
+
+---
 
 ## Configuration Requirements
+The GitHub reporting feature is "best-effort" and remains dormant unless specifically configured.
 
-The system remains dormant unless specific environment variables are provided.
+| Environment Variable | Required | Function |
+|----------------------|----------|----------|
+| `GITHUB_ERROR_REPORT_TOKEN` | Yes | Personal Access Token with repo scope to create issues. |
+| `SENTRY_DSN` | No | Enables Sentry integration if provided. |
 
-*  **`GITHUB_ERROR_REPORT_TOKEN`**: A GitHub Personal Access Token with permissions to create issues in the target repository.
-*  **Repository Name**: Passed as an argument (e.g., `blixten85/scraper`) to the reporting function.
-*  **Labels**: Issues are automatically created with the labels `bug` and `auto-reported`.
-
-Sources: [scraper/github\_report.py:57-58](scraper/github\_report.py#L57-L58), [scraper/github\_report.py:103-104](scraper/github\_report.py#L103-L104)
+Sources: [github_report.py:66-68](github_report.py#L66-L68), [webui/app.py:24](webui/app.py#L24)
 
 ## Conclusion
-
-The Error Handling & GitHub Reporting system provides a robust, self-healing diagnostic layer for the Scraper platform. By combining automated fingerprinting, strict data redaction, and deduplication logic, it allows developers to monitor production failures through GitHub issues without manual intervention or security risks. The use of the `@claude` tag further enables automated AI-driven analysis of reported bugs.
-Sources: [CLAUDE.md:34-41](CLAUDE.md#L34-L41), [scraper/github\_report.py:90-99](scraper/github\_report.py#L90-L99)
+The project employs a tiered error handling strategy: local logging for immediate debugging, GitHub reporting for automated issue tracking with built-in privacy protections, and Sentry for deep diagnostic monitoring. This approach ensures that developers are alerted to production failures while maintaining the security and stability of the scraping platform.

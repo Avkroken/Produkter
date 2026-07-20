@@ -11,161 +11,131 @@ The following files were used as context for generating this wiki page:
 - [README.md](README.md)
 - [scraper/scraper.py](scraper/scraper.py)
 - [scraper/enrich.py](scraper/enrich.py)
-- [fetcher/fetcher.py](fetcher/fetcher.py)
+- [fetcher/fetcher.py](https://github.com/blixten85/fetcher/blob/4b9cbc617a59e1012e1aafd1acf0eb054595ff5a/fetcher/fetcher.py)
 - [webui/templates/config.html](webui/templates/config.html)
-
 </details>
 
 # Database Schema & Structure
 
-## Introduction
+The Web Scraper Platform utilizes a PostgreSQL database as its primary persistence layer to manage scraped product data, historical price points, scraping configurations, and system-wide settings. The database architecture is designed to support multi-site scraping with high-frequency updates and provides connection pooling via `ThreadedConnectionPool` for efficient resource management.
 
-The Web Scraper Platform utilizes a PostgreSQL database to manage multi-site scraping configurations, product data, price history, and system-wide settings. It is designed for production-grade reliability, featuring connection pooling and structured relationships to support features like price monitoring and automated product enrichment.
+The schema is primarily initialized and maintained through the `init_db()` function in the main scraper module, which ensures all required tables, columns, and indices exist upon service startup. This structure facilitates features such as price drop monitoring, automated enrichment of product descriptions, and site-specific scraping parameters.
 
-The database serves as the central state management system for the entire platform, coordinating between the scraping engine (`scraper.py`), the product enrichment module (`enrich.py`), and the user interface (`webui`). It ensures data persistence for scraped items while maintaining historical price records to enable deal detection and alerts.
+Sources: [README.md:12-25](README.md#L12-L25), [scraper/scraper.py:202-212](scraper/scraper.py#L202-L212), [scraper/scraper.py:246-324](scraper/scraper.py#L246-L324)
 
-Sources: [README.md:1-20](README.md#L1-L20), [scraper/scraper.py:12-25](scraper/scraper.py#L12-L25)
+## Entity Relationship Overview
 
-## Entity Relationship Diagram
-
-The following diagram illustrates the relationships between the core tables in the system, including the foreign key constraints between products, their history, and site configurations.
+The database consists of five core tables that manage the lifecycle of a product from discovery to price monitoring and description enrichment.
 
 ```mermaid
 erDiagram
-    scraper_config ||--o{ products : "configures"
-    products ||--o{ price_history : "tracks"
-    products ||--o| alert_cooldown : "manages"
-    settings ||--|| settings : "key-value"
-
-    products {
-        int id PK
-        text url
-        text title
-        int current_price
-        timestamp first_seen
-        timestamp last_updated
-        int site_config_id FK
-        text description
-        text source_text
-        timestamp source_text_updated_at
-    }
-
-    scraper_config {
-        int id PK
-        text name
-        text base_url
-        text product_selector
-        text title_selector
-        text price_selector
-        text link_selector
-        text pagination_type
-        int enabled
-    }
-
-    price_history {
-        int id PK
-        int product_id FK
-        int price
-        timestamp timestamp
-    }
-
-    alert_cooldown {
-        int product_id PK, FK
-        timestamp last_alert
+    scraper_config ||--o{ products : "defines (logical)"
+    products ||--o{ price_history : "tracks (CASCADE)"
+    products ||--o| alert_cooldown : "manages (CASCADE)"
+    settings {
+        text key PK
+        text value
+        timestamptz updated_at
     }
 ```
 
-Sources: [README.md:183-228](README.md#L183-L228), [scraper/scraper.py:206-285](scraper/scraper.py#L206-L285)
+The relationships between products and price_history/alert_cooldown enforce referential integrity via `ON DELETE CASCADE` constraints. The link between products and scraper_config is logical only (no foreign key constraint) to allow for configuration deletion without cascading to products.
 
-## Data Models
+Sources: [README.md:214-266](README.md#L214-L266), [scraper/scraper.py:269-317](scraper/scraper.py#L269-L317)
+
+## Core Data Models
 
 ### Products Table
-The `products` table stores the primary record for every discovered item. It tracks the current state of the product, including its URL, most recent price, and metadata for enrichment.
+The `products` table is the central repository for all scraped items. It stores basic metadata, current pricing, and enriched description data.
 
 | Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | SERIAL | Primary key. |
-| `url` | TEXT | Unique product URL. |
-| `title` | TEXT | Product name or title. |
-| `current_price` | INTEGER | The most recently scraped price in SEK. |
-| `site_config_id` | INTEGER | FK to `scraper_config`. |
-| `description` | TEXT | High-level product description. |
-| `source_text` | TEXT | Raw extracted text from the product page for enrichment. |
-| `category` | TEXT | Derived category from URL path or JSON-LD. |
-| `last_updated` | TIMESTAMP | Last time the price or title was updated. |
+|-------|------|-------------|
+| `id` | SERIAL | Primary Key |
+| `url` | TEXT | Unique product URL |
+| `title` | TEXT | Product name/title |
+| `current_price` | INTEGER | Last observed price |
+| `site_config_id` | INTEGER | Logical reference to `scraper_config(id)` (no FK constraint) |
+| `description` | TEXT | Enriched product description |
+| `source_text` | TEXT | Raw extracted text from product page |
+| `category` | TEXT | Derived category from URL or JSON-LD |
+| `first_seen` | TIMESTAMP | Initial discovery time |
+| `last_updated` | TIMESTAMP | Last time the price or title changed |
 
-Sources: [scraper/scraper.py:208-216](scraper/scraper.py#L208-L216), [scraper/scraper.py:263-268](scraper/scraper.py#L263-L268), [scraper/enrich.py:133-143](scraper/enrich.py#L133-L143)
+Sources: [README.md:215-226](README.md#L215-L226), [scraper/scraper.py:269-278](scraper/scraper.py#L269-L278), [scraper/scraper.py:333-340](scraper/scraper.py#L333-L340)
 
-### Scraper Configuration Table
-This table defines how the scraping engine interacts with different e-commerce sites. It stores CSS selectors and operational parameters.
-
-| Field | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `name` | TEXT | N/A | Unique identifier for the site (e.g., "Inet.se"). |
-| `base_url` | TEXT | N/A | The starting URL(s) for the scraper. |
-| `product_selector` | TEXT | N/A | CSS selector for the product container. |
-| `title_selector` | TEXT | N/A | CSS selector for the product name. |
-| `price_selector` | TEXT | N/A | CSS selector for the price element. |
-| `pagination_type` | TEXT | 'query' | Type of pagination ('query' or 'subcategory'). |
-| `use_stealth` | INTEGER | 0 | Boolean flag to enable bot protection bypass. |
-| `proxy_url` | TEXT | '' | Site-specific proxy configuration. |
-
-Sources: [scraper/scraper.py:228-247](scraper/scraper.py#L228-L247), [webui/templates/config.html:150-180](webui/templates/config.html#L150-L180)
-
-### Settings Table
-The `settings` table uses a key-value structure to store global configuration options that can be modified via the WebUI without restarting the service.
-
-| Key | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `concurrent_pages` | int | 2 | Number of simultaneous browser pages. |
-| `scrape_interval` | int | 3600 | Seconds between full scraping runs. |
-| `headless` | bool | True | Whether to run the browser without a GUI. |
-| `min_drop_percent` | float | 5.0 | Minimum price drop to trigger an alert. |
-
-Sources: [scraper/scraper.py:53-90](scraper/scraper.py#L53-L90), [scraper/scraper.py:255-259](scraper/scraper.py#L255-L259)
-
-## Database Initialization and Migration
-
-The application handles schema creation and updates automatically during the `init_db()` phase. This includes creating tables, adding missing columns to existing tables (e.g., `use_stealth`, `source_text`), and seeding the database with default templates if no configurations exist.
-
-```python
-# Example of column migration logic in scraper.py
-cur.execute("ALTER TABLE scraper_config ADD COLUMN IF NOT EXISTS use_stealth INTEGER DEFAULT 0")
-cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT")
-cur.execute("CREATE INDEX IF NOT EXISTS idx_products_url ON products(url)")
-```
-
-Sources: [scraper/scraper.py:206-285](scraper/scraper.py#L206-L285)
-
-## Indexing Strategy
-
-To maintain performance with high data volumes, the schema includes several indexes targeting common query patterns used by the API and the scraper.
-
-*  **URL Uniqueness**: `idx_products_url` ensures unique product entries and fast lookups during ingestion.
-*  **Update Tracking**: `idx_products_last_updated` facilitates fetching recently updated items for the Dashboard.
-*  **Price History**: `idx_price_history_product_time` optimizes the retrieval of price trends for specific products.
-*  **Enrichment Backlog**: Partial indexes like `idx_products_missing_source` allow `enrich.py` to quickly find products that haven't been visited yet.
-
-Sources: [scraper/scraper.py:269-275](scraper/scraper.py#L269-L275), [scraper/enrich.py:100-115](scraper/enrich.py#L100-L115)
-
-## Data Flow Architecture
-
-The following diagram shows how data flows from external sites into the database and is subsequently consumed by the UI and Enrichment modules.
+### Price History Table
+This table tracks every price change for every product, enabling the "deals" and historical tracking features.
 
 ```mermaid
 flowchart TD
-    Site[E-commerce Site] -->|Scrape| Engine[scraper.py]
-    Engine -->|INSERT/UPDATE| DB[(PostgreSQL)]
-    DB -->|SELECT Backlog| Enrich[enrich.py]
-    Enrich -->|Visit Product URL| Site
-    Enrich -->|UPDATE source_text| DB
-    DB -->|API Queries| UI[WebUI Dashboard]
+    A[Scraper Extract] --> B{Price Changed?}
+    B -- Yes --> C[Update products Table]
+    C --> D[Insert into price_history]
+    B -- No --> E[Update last_updated only]
 ```
 
-Sources: [scraper/scraper.py:650-700](scraper/scraper.py#L650-L700), [scraper/enrich.py:155-180](scraper/enrich.py#L155-L180), [fetcher/fetcher.py:180-210](fetcher/fetcher.py#L180-L210)
+Records are inserted into `price_history` only when a price variation is detected during a scrape run compared to the `current_price` stored in the `products` table.
 
-## Conclusion
+Sources: [scraper/scraper.py:262-269](scraper/scraper.py#L262-L269), [scraper/scraper.py:596-620](scraper/scraper.py#L596-L620)
 
-The database structure of the Web Scraper Platform is designed to support scalable, multi-site e-commerce monitoring. By separating site-specific configurations from product data and price history, the system maintains a clean hierarchy that enables advanced features like stealth scraping, automated selector detection, and factual product enrichment. The use of a centralized settings table and automated migrations ensures that the platform remains configurable and easy to maintain in production environments.
+### Scraper Configuration Table
+The `scraper_config` table defines how the system interacts with different e-commerce sites, including CSS selectors and stealth parameters.
 
-Sources: [README.md:1-15](README.md#L1-L15), [scraper/scraper.py:20-50](scraper/scraper.py#L20-L50)
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | TEXT | Unique name for the site (e.g., "Inet.se") |
+| `base_url` | TEXT | The starting URL(s) for crawling |
+| `product_selector` | TEXT | CSS selector for the product container |
+| `pagination_type` | TEXT | Method for paging ('query' or 'subcategory') |
+| `use_stealth` | INTEGER | Toggle for Playwright-Stealth (0 or 1) |
+| `proxy_url` | TEXT | Optional site-specific proxy |
+
+Sources: [README.md:234-256](README.md#L234-L256), [scraper/scraper.py:271-291](scraper/scraper.py#L271-L291), [webui/templates/config.html:100-140](webui/templates/config.html#L100-L140)
+
+## System Settings & Orchestration
+
+The `settings` table stores global configuration parameters that control the scraper's behavior across all sites.
+
+```python
+SETTINGS_META = {
+    'concurrent_pages': {'default': 2, 'description': 'Pages scraped simultaneously.'},
+    'scrape_interval': {'default': 3600, 'description': 'Seconds between runs.'},
+    'proxy_url': {'default': '', 'description': 'Global SOCKS5/HTTP proxy.'},
+    'min_drop_percent': {'default': 5.0, 'description': 'Min % drop for alerts.'}
+}
+```
+
+Sources: [scraper/scraper.py:53-83](scraper/scraper.py#L53-L83), [scraper/scraper.py:299-303](scraper/scraper.py#L299-L303)
+
+## Data Flow: Enrichment & Discovery
+
+The system performs a two-stage data capture. Initial discovery captures listing data, while an enrichment process populates detailed product information.
+
+```mermaid
+sequenceDiagram
+    participant S as Scraper (Listing)
+    participant D as Database
+    participant E as Enricher (Product Page)
+    
+    S->>D: INSERT products (title, price, url)
+    D-->>E: SELECT products WHERE source_text IS NULL
+    E->>E: Visit Product URL
+    E->>E: Extract JSON-LD / Detail Selector
+    E->>D: UPDATE products SET source_text, description
+```
+
+The `enrich.py` module specifically targets rows where `source_text IS NULL` to ground the product data in facts rather than relying solely on listing titles.
+
+Sources: [scraper/enrich.py:18-34](scraper/enrich.py#L18-L34), [scraper/enrich.py:84-110](scraper/enrich.py#L84-L110), [fetcher/fetcher.py:70-110](fetcher/fetcher.py#L70-L110)
+
+## Performance Optimization
+
+The schema includes several indices and structural features to maintain performance as the dataset grows:
+*  **Unique Constraints:** `products(url)` and `scraper_config(name)` prevent duplicate entries.
+*  **Partial Indices:** `idx_products_missing_source` specifically targets products needing enrichment (`WHERE source_text IS NULL`).
+*  **Composite Indices:** `idx_price_history_product_time` optimizes historical price lookups by grouping product IDs with descending timestamps.
+*  **Cascading Deletes:** Foreign keys on `price_history` and `alert_cooldown` use `ON DELETE CASCADE` to ensure data integrity when a product is removed.
+
+Sources: [scraper/scraper.py:264](scraper/scraper.py#L264), [scraper/scraper.py:311-318](scraper/scraper.py#L311-L318), [scraper/scraper.py:841-850](scraper/scraper.py#L841-L850)
+
+The database structure serves as the backbone of the platform, enabling reliable multi-site scraping while providing the necessary historical data for price monitoring and product analysis.

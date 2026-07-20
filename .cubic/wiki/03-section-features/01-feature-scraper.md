@@ -18,132 +18,153 @@ The following files were used as context for generating this wiki page:
 
 # Multi-Site Scraping Engine
 
-The **Multi-Site Scraping Engine** is the core component of the Web Scraper Platform, responsible for orchestrated data extraction across diverse e-commerce websites. It utilizes a headless browser architecture powered by Playwright to navigate pages, handle dynamic content, and bypass bot protections. The engine is designed to be highly configurable, allowing users to define site-specific selectors through a Web UI while providing automation features like auto-discovery of subcategories and selector auto-detection.
+The **Multi-Site Scraping Engine** is the core component of the Web Scraper Platform, responsible for orchestrating automated data extraction across diverse e-commerce websites. It leverages Playwright for headless browser automation, allowing it to navigate complex JavaScript-heavy sites, bypass bot protections, and extract structured product information such as titles, prices, and URLs.
 
-Sources: [scraper/scraper.py](scraper/scraper.py), [README.md:10-21](README.md#L10-L21)
+The engine operates as a standalone service that communicates with a PostgreSQL database for persistent storage of configurations and scraped data. It exposes an internal Flask-based API (typically on port 5001) which the WebUI uses to trigger manual scrapes, test configurations, and auto-detect CSS selectors for new sites.
 
-## Core Architecture
+Sources: [README.md:9-17](README.md#L9-L17), [scraper/scraper.py:1022-1029](scraper/scraper.py#L1022-L1029), [CLAUDE.md:16-23](CLAUDE.md#L16-L23)
 
-The engine operates as a standalone service with an internal Flask-based control API. It manages a pool of PostgreSQL connections to persist scraped data and uses an asynchronous loop to execute scraping tasks based on user-defined intervals.
+## Architecture and Data Flow
 
-### Component Relationship
-The following diagram illustrates how the scraping engine interacts with other system components:
+The engine is built on an asynchronous architecture using `asyncio` and `playwright`. It manages a pool of browser contexts to perform concurrent scraping tasks while maintaining rate limits and stealth requirements.
+
+### Component Interaction
+The following diagram illustrates the interaction between the Scraper Engine, the database, and the target websites:
 
 ```mermaid
 graph TD
-    UI[Web UI / Flask] -->|Proxy Requests| EngineAPI[Engine Control API]
-    EngineAPI -->|Trigger/Config| Scraper[Scraper Logic]
-    Scraper -->|Playwright| Web[Target Websites]
-    Scraper -->|Buffer & Flush| DB[(PostgreSQL)]
-    Enrich[Enrichment Module] -->|Deep Crawl| Web
-    Enrich -->|Ground Facts| DB
+    subgraph Engine_Service[Scraper Engine]
+        A[scraper_loop] --> B[run_scraper]
+        B --> C{Active Configs}
+        C --> D[worker]
+        D --> E[scrape_site]
+        E --> F[Playwright Context]
+    end
+    
+    subgraph Storage[Data Layer]
+        G[(PostgreSQL)]
+    end
+    
+    subgraph Target_Web[External Sites]
+        H[Site A]
+        I[Site B]
+    end
+
+    C -.->|Load| G
+    E -->|Extract| F
+    F <-->|HTTP/JS| H
+    F <-->|HTTP/JS| I
+    E -->|Write Buffer| J[flush_buffer]
+    J -->|SQL INSERT/UPDATE| G
 ```
 
-The Scraping Engine coordinates between the user configuration, the browser automation layer, and the database.
-Sources: [scraper/scraper.py:843-855](scraper/scraper.py#L843-L855), [webui/app.py:100-115](webui/app.py#L100-L115), [scraper/enrich.py:15-28](scraper/enrich.py#L15-L28)
+The engine utilizes a periodic loop that fetches active configurations from the `scraper_config` table and initializes workers based on the `concurrent_pages` setting.
 
-## Scraping Logic and Data Flow
+Sources: [scraper/scraper.py:649-670](scraper/scraper.py#L649-L670), [scraper/scraper.py:730-749](scraper/scraper.py#L730-L749), [scraper/scraper.py:441-482](scraper/scraper.py#L441-L482)
 
-The engine employs a multi-stage process for data extraction, focusing on efficiency and stealth. It supports two primary pagination modes: standard query-based (e.g., `?page=2`) and subcategory auto-discovery.
+## Scraping Logic and Pagination
 
-### Data Extraction Process
-1.  **Configuration Loading**: Active configurations are fetched from the `scraper_config` table.
-2.  **Browser Orchestration**: A Chromium instance is launched with specific arguments to minimize resource usage (e.g., `--no-sandbox`, `--disable-dev-shm-usage`).
-3.  **Page Navigation**: Pages are loaded with configurable retries and exponential backoff.
-4.  **Stealth & Interaction**: If enabled, `playwright-stealth` is applied, and common cookie consent dialogs are automatically accepted.
-5.  **Element Extraction**: CSS selectors are used to identify product containers, titles, prices, and links.
-6.  **Buffering**: Extracted data is stored in a `write_buffer` and periodically flushed to the database to reduce I/O overhead.
+The engine supports two primary modes of operation for navigating websites: standard query-based pagination and subcategory auto-discovery.
 
-Sources: [scraper/scraper.py:381-420](scraper/scraper.py#L381-L420), [scraper/scraper.py:598-630](scraper/scraper.py#L598-L630)
+### Pagination Modes
+| Mode | Description | Logic |
+| :--- | :--- | :--- |
+| **Query** | Standard page-by-page scraping. | Appends `?page=N` to the base URL and iterates until `max_pages` or no new items found. |
+| **Subcategory** | Crawls deeper into site structures. | Uses a `pagination_selector` to find category links and adds them to a queue for processing. |
 
-### Execution Flow Diagram
-This sequence diagram shows the lifecycle of a single scraping run for a specific site configuration:
+### Execution Flow
+The `scrape_site` function determines the strategy based on the configuration:
+
+```mermaid
+flowchart TD
+    Start[Start scrape_site] --> CheckType{Pagination Type?}
+    CheckType -- subcategory --> SubMode[Subcategory Discovery]
+    CheckType -- query --> QueryMode[Sequential Pages]
+    
+    SubMode --> Queue[Add Base URL to Queue]
+    Queue --> Pop[Pop URL from Queue]
+    Pop --> Load[Scrape Page with Retry]
+    Load --> Ext[Extract Products]
+    Ext --> FindCats[Find Category Links]
+    FindCats --> Queue
+    
+    QueryMode --> PageLoop[Iterate Page 1 to Max]
+    PageLoop --> LoadQ[Scrape Page with Retry]
+    LoadQ --> ExtQ[Extract Products]
+    ExtQ --> Next{Next Page?}
+    Next -- Yes --> PageLoop
+```
+
+Sources: [scraper/scraper.py:539-550](scraper/scraper.py#L539-L550), [scraper/scraper.py:557-610](scraper/scraper.py#L557-L610), [scraper/scraper.py:612-646](scraper/scraper.py#L612-L646)
+
+## Stealth and Bot Protection
+
+To handle modern e-commerce security measures (e.g., Akamai, Cloudflare, PerimeterX), the engine implements several stealth features.
+
+### Anti-Detection Measures
+*  **Playwright Stealth**: Uses the `playwright-stealth` package to mask browser fingerprints.
+*  **Custom Headers**: Sets realistic User-Agents, locales (`sv-SE`), and timezones.
+*  **Jitter and Delays**: Implements random waits (e.g., 2-5 seconds) between page loads and interactions.
+*  **Proxy Support**: Supports SOCKS5/HTTP proxies on both a global and per-site basis.
+*  **Infinite Scroll Awareness**: Simulates user scrolling behavior to trigger lazy-loaded product containers.
+
+Sources: [scraper/scraper.py:516-525](scraper/scraper.py#L516-L525), [scraper/scraper.py:690-705](scraper/scraper.py#L690-L705), [scraper/scraper.py:101-107](scraper/scraper.py#L101-L107)
+
+## Data Extraction and Enrichment
+
+Extraction is performed using CSS selectors defined in the site configuration. If a product's price or title is not found via the primary selector, the engine uses fallbacks or regex-based extraction.
+
+### Selector Heuristics
+The engine provides a `/detect` endpoint that uses a sophisticated JavaScript-based heuristic to guess selectors for new sites:
+1.  **Container Search**: Looks for repetitive patterns in `article`, `li`, or `div` tags.
+2.  **Price Detection**: Scans for patterns like `\d[\d\s]*\s*(kr|SEK|:-)`.
+3.  **Link Identification**: Locates the closest anchor tag (`<a>`) relative to the container.
+
+### Product Enrichment
+While the main scraper focuses on listings, the `enrich.py` module performs one-shot visits to individual product pages to extract detailed descriptions.
 
 ```mermaid
 sequenceDiagram
-    participant Loop as Scraper Loop
-    participant BW as Browser Context
-    participant Web as Target Site
-    participant Buf as Write Buffer
+    participant E as enrich.py
     participant DB as PostgreSQL
-
-    Loop->>BW: Create Context (Proxy/UA)
-    Loop->>BW: Open Page (with Retry)
-    BW->>Web: Request URL
-    Web-->>BW: HTML Content
-    BW->>BW: Apply Stealth/Accept Cookies
-    BW->>BW: Scroll & Extract Elements
-    BW->>Buf: Append Product Data
-    Note over Buf, DB: Periodic Flush (10 items or 5s)
-    Buf->>DB: INSERT/UPDATE products
-    Buf->>DB: INSERT price_history
-    Loop->>BW: Close Context
+    participant P as Playwright
+    participant S as Site
+    
+    E->>DB: Fetch backlog (source_text IS NULL)
+    DB-->>E: List of product URLs
+    loop Each Product
+        E->>P: New Page (with Stealth)
+        P->>S: Load Product URL
+        S-->>P: Render HTML/JSON-LD
+        E->>P: Run _EXTRACT_JS
+        P->>E: Clean Description text
+        E->>DB: UPDATE products SET source_text
+    end
 ```
 
-The engine uses a buffered approach to database writes to maintain performance during high-concurrency scraping.
-Sources: [scraper/scraper.py:598-650](scraper/scraper.py#L598-L650), [scraper/scraper.py:653-705](scraper/scraper.py#L653-L705)
-
-## Key Modules and Functions
-
-### Scraper Engine (`scraper/scraper.py`)
-| Function | Description |
-| :--- | :--- |
-| `run_scraper()` | Main entry point that initializes the browser, manages concurrency semaphores, and starts workers. |
-| `scrape_site()` | Handles pagination logic and coordinate the extraction of items from multiple pages. |
-| `extract_product()` | Parses a single element using site-specific CSS selectors to create a data dictionary. |
-| `flush_buffer()` | Executes bulk database operations to update product prices and record history. |
-| `detect_selectors()` | A heuristic-based module that attempts to automatically identify CSS selectors for a new URL. |
-
-Sources: [scraper/scraper.py:133-140](scraper/scraper.py#L133-L140), [scraper/scraper.py:288-320](scraper/scraper.py#L288-L320), [scraper/scraper.py:465-495](scraper/scraper.py#L465-L495), [scraper/scraper.py:716-750](scraper/scraper.py#L716-L750)
-
-### Enrichment Module (`scraper/enrich.py`)
-The enrichment module is a specialized component that performs "deep crawling." While the main engine only scrapes listing pages, the enrichment module visits individual product URLs to extract detailed descriptions and structured JSON-LD data. This prevents the system from relying solely on listing titles for product identification.
-
-Sources: [scraper/enrich.py:15-30](scraper/enrich.py#L15-L30)
+Sources: [scraper/scraper.py:875-1010](scraper/scraper.py#L875-L1010), [scraper/enrich.py:27-46](scraper/enrich.py#L27-L46), [scraper/enrich.py:66-93](scraper/enrich.py#L66-L93)
 
 ## Configuration and Settings
 
-The engine's behavior is controlled through a mix of global settings and site-specific configurations stored in PostgreSQL.
+Engine behavior is controlled via global settings stored in the database and specific per-site configurations.
+
+### Global Settings
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `concurrent_pages` | 2 | Parallel browser contexts. |
+| `scrape_interval` | 3600 | Seconds between full runs. |
+| `headless` | True | Whether to run browser without GUI. |
+| `proxy_url` | "" | Global SOCKS5/HTTP proxy. |
 
 ### Scraper Configuration Schema
-The `scraper_config` table defines how the engine interacts with specific domains:
+Configurations are stored in the `scraper_config` table and include:
+*  `base_url`: The starting point for the scraper.
+*  `product_selector`: CSS selector for the item container.
+*  `title_selector` / `price_selector` / `link_selector`: Selectors for internal data.
+*  `use_stealth`: Boolean flag to enable anti-bot measures.
+*  `url_scope`: Restricts subcategory discovery to specific URL paths.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `base_url` | TEXT | The starting point for the crawl. |
-| `product_selector`| TEXT | CSS selector for the item container. |
-| `pagination_type` | TEXT | Either 'query' or 'subcategory'. |
-| `use_stealth` | INT | Flag (0/1) to enable bot protection bypass. |
-| `proxy_url` | TEXT | SOCKS5/HTTP proxy for site-specific requests. |
-| `url_scope` | TEXT | Pattern to restrict discovered subcategory links. |
+Sources: [scraper/scraper.py:56-100](scraper/scraper.py#L56-L100), [scraper/scraper.py:326-348](scraper/scraper.py#L326-L348), [README.md:154-177](README.md#L154-L177)
 
-Sources: [README.md:129-152](README.md#L129-L152), [scraper/scraper.py:186-210](scraper/scraper.py#L186-L210)
-
-### Global Engine Settings
-Engine-wide parameters are managed via the `settings` table:
-
-```mermaid
-classDiagram
-    class Settings {
-        +int concurrent_pages
-        +bool headless
-        +int scrape_interval
-        +string proxy_url
-        +float min_drop_percent
-        +int cooldown_hours
-    }
-```
-
-Settings are accessed via `get_setting(key)` which retrieves values from the database with fallbacks to predefined defaults.
-Sources: [scraper/scraper.py:45-75](scraper/scraper.py#L45-L75), [scraper/scraper.py:113-130](scraper/scraper.py#L113-L130)
-
-## Bot Protection Bypass
-The engine implements several strategies to evade bot detection:
-*  **Stealth Mode**: Uses `playwright_stealth` to hide browser fingerprints.
-*  **Behavioral Mimicry**: Includes random sleep intervals between page loads (3-7 seconds) and scrolling to trigger lazy-loaded content.
-*  **Request Headers**: Sets realistic User-Agents and localized headers (e.g., `sv-SE`, `Europe/Stockholm`).
-*  **Proxy Support**: Supports both global and per-site SOCKS5/HTTP proxies to rotate IP addresses.
-
-Sources: [scraper/scraper.py:384-410](scraper/scraper.py#L384-L410), [scraper/scraper.py:725-745](scraper/scraper.py#L725-L745), [webui/templates/config.html:158-180](webui/templates/config.html#L158-L180)
-
-The Multi-Site Scraping Engine provides a robust foundation for product monitoring by combining flexible configuration with automated extraction techniques and resilient browser management.
+## Conclusion
+The Multi-Site Scraping Engine provides a robust framework for tracking product data across various e-commerce platforms. By combining flexible pagination strategies, heuristic selector detection, and stealth-capable browser automation, it ensures reliable data collection even from sites with aggressive bot protection or complex client-side rendering.

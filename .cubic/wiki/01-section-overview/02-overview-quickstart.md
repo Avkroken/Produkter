@@ -11,176 +11,154 @@ The following files were used as context for generating this wiki page:
 - [README.md](README.md)
 - [scraper/scraper.py](scraper/scraper.py)
 - [CLAUDE.md](CLAUDE.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
 - [AGENTS.md](AGENTS.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 - [webui/templates/config.html](webui/templates/config.html)
-
 </details>
 
 # Quick Start Guide
 
-The Web Scraper Platform is a production-ready solution designed for multi-site e-commerce scraping, price monitoring, and data exposure via REST API and WebUI. It leverages Playwright for headless browser scraping and PostgreSQL for persistent data storage, featuring built-in stealth modes to bypass common bot protections like Cloudflare and Akamai.
+The Web Scraper Platform is a production-ready system designed for multi-site e-commerce scraping, price monitoring, and data exposure via a REST API and WebUI. It utilizes a tech stack consisting of Python 3 (Flask and FastAPI), Playwright for headless browser automation, and PostgreSQL for persistent data storage.
 
-Sources: [README.md:1-20](README.md#L1-L20), [CLAUDE.md:3-8](CLAUDE.md#L3-L8)
+This guide provides the necessary steps to deploy the platform using Docker, configure environment variables, and begin scraping product data. The system is designed to be "plug-and-play" with auto-generated credentials on first startup and built-in stealth modes to bypass common bot protection services like Akamai and Cloudflare.
 
-## Initial Setup and Deployment
+Sources: [README.md:1-13](README.md#L1-L13), [CLAUDE.md:3-8](CLAUDE.md#L3-L8)
 
-The platform is designed to run primarily via Docker, ensuring a consistent environment for the scraper engine, database, and user interface.
+## Initial Deployment
 
-### Environment Configuration
-Users must create a `.env` file containing critical path and localization variables. Only three variables are strictly required for the initial launch.
+The platform is primarily distributed as a Docker-based solution, allowing all services (PostgreSQL, WebUI, and REST API) to be started with a single command.
+
+### Deployment Steps
+1.  **Environment Setup**: Create a `.env` file containing the base directory for data storage and regional settings.
+2.  **Directory Initialization**: Manually create the required subdirectories for database storage, logs, and credentials to ensure correct volume mapping.
+3.  **Service Launch**: Execute the Docker compose stack.
 
 ```bash
-# Example .env configuration
-DOCKER=/path/to/docker/data   # volume storage location
-DOMAIN=example.com            # custom hostname
-TZ=Europe/Stockholm           # system timezone
+# 1. Setup .env
+cat > .env <<'EOF'
+DOCKER=/path/to/docker/data
+DOMAIN=example.com
+TZ=Europe/Stockholm
+EOF
+
+# 2. Create directories
+mkdir -p /path/to/docker/data/scraper/{postgres,logs,playwright-cache,credentials}
+
+# 3. Start stack
+docker compose up -d
 ```
 
-Sources: [README.md:104-110](README.md#L104-L110)
+Sources: [README.md:20-42](README.md#L20-L42), [CONTRIBUTING.md:28-35](CONTRIBUTING.md#L28-L35)
 
-### Directory Structure
-Before starting the containers, the following host directories must exist to persist data:
-*  `scraper/postgres`: Database files
-*  `scraper/logs`: Application logs
-*  `scraper/playwright-cache`: Browser cache
-*  `scraper/credentials`: Auto-generated secrets
+### Service Architecture
+The following diagram illustrates the interaction between the primary services and the shared storage volumes.
 
-Sources: [README.md:35-37](README.md#L35-L37)
+```mermaid
+graph TD
+    subgraph Host_Machine
+        ENV[.env Configuration]
+        VOL[Data Volumes /scraper/*]
+    end
+    
+    subgraph Docker_Network
+        SCR[Scraper Container]
+        DB[(PostgreSQL Container)]
+        API[FastAPI REST API]
+        UI[Flask Web UI]
+    end
 
-### Service Startup
-The platform uses Docker Compose to orchestrate three primary services:
-1.  `postgres`: Internal database service on port 5432.
-2.  `scraper` (WebUI): Accessible on port 3000.
-3.  `scraper` (REST API): Accessible on port 8000.
+    ENV --> SCR
+    SCR <--> DB
+    SCR <--> VOL
+    API <--> DB
+    UI <--> DB
+```
 
-Sources: [README.md:52-57](README.md#L52-L57), [CLAUDE.md:32-38](CLAUDE.md#L32-L38)
+The system exposes the Web UI on port `3000` and the REST API on port `8000` (or `8765` depending on internal mapping).
+Sources: [README.md:46-52](README.md#L46-L52), [CLAUDE.md:23-28](CLAUDE.md#L23-L28)
 
 ## Credential Management
 
-Credentials are auto-generated on the first system start to ensure security. These are stored in the `DOCKER/scraper/credentials/` directory.
+Credentials are automatically generated during the first startup and stored as plain text files within the `credentials` directory. This ensures a secure-by-default installation without requiring manual password configuration in `.env` files.
 
-| File | Description | Source |
+| File | Source | Purpose |
 | :--- | :--- | :--- |
-| `db_password` | PostgreSQL password | [README.md:65](README.md#L65) |
-| `api_key` | REST API authentication key | [README.md:66](README.md#L66) |
-| `discord_webhook` | URL for price drop notifications (Manual setup) | [README.md:67](README.md#L67) |
+| `db_password` | `postgres` container | Password for the PostgreSQL `scraper` user |
+| `api_key` | `scraper` container | `X-API-Key` required for REST API authentication |
+| `engine_key` | `scraper` container | Internal key used for service-to-service communication |
+| `webui_password` | `scraper` container | Password for WebUI Basic Authentication (username: admin) |
 
-### Retrieving Generated Secrets
-After the initial `docker compose up -d`, secrets can be retrieved from the logs or the file system:
+Sources: [README.md:56-65](README.md#L56-L65), [scraper/scraper.py:165-177](scraper/scraper.py#L165-L177), [webui/app.py:84-90](webui/app.py#L84-L90)
+
+To retrieve generated credentials after initialization:
 
 ```bash
-# Retrieve API key from filesystem
+# API key for REST API access
 cat /path/to/docker/data/scraper/credentials/api_key
 
-# Check database password in logs
-docker compose logs postgres
+# WebUI password for Basic Auth (username: admin)
+cat /path/to/docker/data/scraper/credentials/webui_password
 ```
 
-Sources: [README.md:44-45](README.md#L44-L45), [README.md:71-72](README.md#L71-L72)
+The WebUI on port 3000 is protected by Basic Auth (username: `admin`, password from `webui_password` file).
 
-## System Architecture
+Sources: [README.md:67-70](README.md#L67-L70), [webui/app.py:106-120](webui/app.py#L106-L120)
 
-The following diagram illustrates the interaction between the scraping engine, the storage layer, and the user interfaces.
+## Configuration and Usage
+
+Once the platform is running, users interact with it primarily through the WebUI for site configuration or the REST API for data consumption.
+
+### Adding a Scraper Site
+Users can configure new sites via the WebUI by navigating to `/config`. The system provides templates for popular Swedish retailers and an "Auto-detect" feature that uses Playwright heuristics to identify CSS selectors for titles, prices, and links.
 
 ```mermaid
 flowchart TD
-    subgraph Client_Interfaces
-        UI[Web UI Port 3000]
-        API[REST API Port 8000]
-    end
-
-    subgraph Core_Services
-        SE[Scraper Engine]
-        DB[(PostgreSQL)]
-    end
-
-    subgraph Target_Sites
-        WEB[E-commerce Sites]
-    end
-
-    UI -->|Configure| DB
-    API -->|Query| DB
-    SE -->|Persist Data| DB
-    SE -->|Playwright/Stealth| WEB
-    DB -->|Trigger| SE
+    Start[Add Site Button] --> Input[Enter Start URL]
+    Input --> Detect{Auto-detect?}
+    Detect -- Yes --> Heuristics[Playwright Analysis]
+    Detect -- No --> Manual[Manual CSS Selectors]
+    Heuristics --> Save[Save Config to DB]
+    Manual --> Save
+    Save --> Scraper[Scraper Loop Starts]
 ```
 
-The Scraper Engine utilizes Playwright to fetch data from target sites, which is then stored in PostgreSQL. Users interact with this data through a Flask-based WebUI or a FastAPI-based REST API.
-Sources: [CLAUDE.md:10-38](CLAUDE.md#L10-L38), [scraper/scraper.py:270-300](scraper/scraper.py#L270-L300)
+Sources: [webui/templates/config.html:43-125](webui/templates/config.html#L43-L125), [scraper/scraper.py:837-975](scraper/scraper.py#L837-L975)
 
-## Configuring a New Scraper
+### API Interaction
+All API endpoints (except `/health`) require the `X-API-Key` header.
 
-Scraping behavior is defined via Site Configurations. These can be added manually through the WebUI or using pre-defined templates for popular sites like Inet.se, Komplett.se, and Webhallen.com.
+*  **List Products**: `GET /products`
+*  **Search**: `GET /products?search=RTX`
+*  **Check Health**: `GET /health` (No authentication required)
 
-### Mandatory Selectors
-To scrape a site, the following CSS selectors must be defined:
-*  **Product Selector**: The container for an individual product item.
-*  **Title Selector**: The element containing the product name.
-*  **Price Selector**: The element containing the price string.
-*  **Link Selector**: The anchor tag pointing to the product page.
+Sources: [README.md:76-88](README.md#L76-L88), [scraper/scraper.py:1140-1144](scraper/scraper.py#L1140-L1144)
 
-Sources: [webui/templates/config.html:68-85](webui/templates/config.html#L68-L85), [scraper/scraper.py:345-360](scraper/scraper.py#L345-L360)
+## System Requirements and Settings
 
-### Scraper Execution Logic
-The scraper operates in different modes based on the site's structure, primarily handling standard pagination or subcategory discovery.
+The `scraper/scraper.py` module maintains a set of configurable parameters that can be adjusted via the "Advanced Settings" section in the WebUI.
 
-```mermaid
-sequenceDiagram
-    participant S as Scraper Engine
-    participant P as Playwright (Browser)
-    participant D as Database
-    
-    S->>P: Load Start URL (Stealth Mode)
-    P->>P: Execute accept_cookies()
-    P->>P: Perform _infinite_scroll()
-    P->>S: Return DOM Elements
-    S->>S: extract_product() (Title, Price, Link)
-    S->>D: INSERT/UPDATE products table
-    S->>D: INSERT price_history table
-```
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `concurrent_pages` | Integer | 2 | Number of simultaneous Playwright pages |
+| `scrape_interval` | Integer | 3600s | Delay between full scraping cycles |
+| `headless` | Boolean | True | Whether to run browser without a GUI |
+| `min_drop_percent`| Float | 5.0% | Threshold for price drop alerts |
 
-Sources: [scraper/scraper.py:440-480](scraper/scraper.py#L440-L480), [scraper/scraper.py:530-560](scraper/scraper.py#L530-L560)
+Sources: [scraper/scraper.py:46-78](scraper/scraper.py#L46-L78)
 
-## REST API Usage
+The application logic follows a specific flow for every scraping run:
+1.  Initialize connection pool and verify database schema.
+2.  Load active site configurations from `scraper_config` table.
+3.  Launch Playwright with specified stealth arguments (e.g., `--disable-blink-features=AutomationControlled`).
+4.  Execute scraping, apply cookie consent bypass, and flush data to `products` and `price_history` tables.
 
-All API endpoints (except `/health`) require authentication via the `X-API-Key` header.
+Sources: [scraper/scraper.py:180-200](scraper/scraper.py#L180-L200), [scraper/scraper.py:537-560](scraper/scraper.py#L537-L560)
 
-### Common Endpoints
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/products` | List all scraped products |
-| `GET` | `/products?search=...` | Filter products by name |
-| `GET` | `/deals` | Retrieve products with significant price drops |
-| `POST` | `/scrape` | Manually trigger a scraping run |
+## Troubleshooting
+*  **Postgres Permission Issues**: If the database fails to start, ensure the data directory is owned by UID 999: `sudo chown -R 999:999 ${DOCKER}/scraper/postgres`.
+*  **Missing API Key**: Check the file directly at `/path/to/docker/data/scraper/credentials/api_key`.
+*  **Scraping Failures**: Use the "Detect" button in the WebUI to test if selectors are still valid. Check `docker compose logs scraper` for Playwright errors.
 
-Sources: [README.md:78-87](README.md#L78-L87), [scraper/scraper.py:882-895](scraper/scraper.py#L882-L895)
+Sources: [README.md:105-125](README.md#L105-L125), [CONTRIBUTING.md:11-16](CONTRIBUTING.md#L11-L16)
 
-## Development Setup
-
-For developers contributing to the project, a local environment can be established without Docker:
-
-1.  **Install Dependencies**:
-
-```bash
-    pip install -r requirements.txt
-    playwright install chromium
-    ```
-
-2.  **Environment Setup**:
-
-```bash
-    cp .env.example .env
-    # Edit .env with local DB details
-    ```
-
-3.  **Run Services Individually**:
-  *  API: `uvicorn api.api:app --reload`
-  *  Web UI: `flask --app webui.app run`
-
-Sources: [CLAUDE.md:12-21](CLAUDE.md#L12-L21), [CONTRIBUTING.md:27-38](CONTRIBUTING.md#L27-L38)
-
-## Summary
-The Web Scraper Platform provides a managed ecosystem for automated data extraction. By combining Playwright's browser automation with a structured PostgreSQL schema, it allows for sophisticated tracking of e-commerce prices. Users can get started quickly using Docker and built-in site templates, with the flexibility to expand via the REST API or custom CSS selectors.
-
-Sources: [README.md:1-25](README.md#L1-L25), [AGENTS.md:5-15](AGENTS.md#L5-L15)
+The Web Scraper Platform provides a robust foundation for automated data collection. By combining Docker containerization with automated selector detection and stealth browser techniques, it simplifies the transition from local development to production-scale scraping.

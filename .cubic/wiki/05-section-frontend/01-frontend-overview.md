@@ -10,6 +10,7 @@ The following files were used as context for generating this wiki page:
 
 - [webui/app.py](webui/app.py)
 - [webui/static/script.js](webui/static/script.js)
+- [webui/static/style.css](webui/static/style.css)
 - [webui/templates/index.html](webui/templates/index.html)
 - [webui/templates/config.html](webui/templates/config.html)
 - [scraper/scraper.py](scraper/scraper.py)
@@ -18,113 +19,124 @@ The following files were used as context for generating this wiki page:
 
 # WebUI Overview & Architecture
 
-The WebUI serves as the central control plane for the Web Scraper Platform, providing a graphical interface for monitoring scraping activities, managing site configurations, and adjusting system-wide settings. It is built using the Flask web framework and acts as a secure proxy layer between end-users and the underlying Scraper Engine and REST API.
+The WebUI serves as the central control plane for the Web Scraper Platform, providing a visual interface for monitoring scraped products, managing scraper configurations, and adjusting system-wide settings. It is built using a Flask backend that acts as a secure proxy to the underlying Scraper Engine and REST API.
 
-Architecture-wise, the WebUI is decoupled from the data-processing services, communicating with the `SCRAPER_API` (port 8765) and `SCRAPER_ENGINE` (port 5001) via internal HTTP requests. This design ensures that the user-facing interface remains responsive while heavy scraping or data analysis tasks are handled by dedicated background processes.
+Sources: [webui/app.py:1-10](webui/app.py#L1-L10), [README.md:12-25](README.md#L12-L25)
 
-Sources: [webui/app.py:12-28](webui/app.py#L12-L28), [README.md:52-56](README.md#L52-L56), [CLAUDE.md:27-32](CLAUDE.md#L27-L32)
+## System Architecture
 
-## System Architecture & Data Flow
+The WebUI operates as a gateway between the end-user and the backend services. It implements a decoupled architecture where the frontend (HTML/JS/CSS) communicates with a Flask application, which then forwards requests to the Scraper Engine (port 5001) or the REST API (port 8000).
 
-The WebUI functions as a middleware component. It authenticates user requests using Basic Authentication and then forwards authorized actions to either the API (for data retrieval) or the Engine (for operational tasks like starting a scrape).
+### Service Interaction Flow
 
-### Component Relationship
-The following diagram illustrates how the WebUI interacts with other system components:
+The following diagram illustrates how the WebUI orchestrates requests between the user and backend services.
 
 ```mermaid
 flowchart TD
-    User[User Browser] -->|HTTP Basic Auth| WebUI[Flask WebUI]
+    User[User Browser] -->|HTTP| WebUI[Flask WebUI]
     WebUI -->|Proxy Request| Engine[Scraper Engine :5001]
-    WebUI -->|Proxy Request| API[REST API :8765]
-    Engine -->|Read/Write| DB[(PostgreSQL)]
-    API -->|Read| DB
-    Engine -.->|Headless Chrome| Web[Internet Sites]
+    WebUI -->|Proxy Request| API[REST API :8000]
+    Engine -->|SQL| DB[(PostgreSQL)]
+    API -->|SQL| DB
+    Engine -.->|HTTP| API
 ```
 
-The WebUI ensures security by validating paths via regex and injecting Content Security Policy (CSP) nonces into templates.
+The WebUI manages authentication and provides a unified interface for operations that involve multiple backend components. 
+Sources: [webui/app.py:32-33](webui/app.py#L32-L33), [webui/app.py:84-100](webui/app.py#L84-L100), [README.md:55-65](README.md#L55-L65)
 
-Sources: [webui/app.py:46-52](webui/app.py#L46-L52), [webui/app.py:88-102](webui/app.py#L88-L102), [webui/app.py:114-123](webui/app.py#L114-L123)
+## Backend Architecture (Flask)
 
-## Request Proxying & Security
+The Flask backend handles security, session management, and API orchestration.
 
-The WebUI does not connect directly to the PostgreSQL database. Instead, it utilizes two helper functions to communicate with internal services: `api_request` and `engine_request`.
+### Security and Middleware
+The application implements several security layers:
+*  **Basic Authentication**: Controlled via `WEBUI_USERNAME` and `WEBUI_PASSWORD` environment variables.
+*  **CSRF/CSP**: Generates a unique `csp_nonce` for every request to protect against Cross-Site Scripting (XSS).
+*  **Security Headers**: Sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and a strict Content Security Policy.
+*  **Path Validation**: Uses regular expressions (`PATH_RE`) to validate that proxied request paths contain only valid URL path characters. This validates only the path string syntax and does not restrict destination hosts or provide SSRF protection against requests to private network ranges.
 
-### API & Engine Communication
-All proxied requests include necessary authentication headers, such as `X-API-Key` or `X-Engine-Key`, which are retrieved from secure credential files.
+Sources: [webui/app.py:32](webui/app.py#L32), [webui/app.py:92-94](webui/app.py#L92-L94), [webui/app.py:106-120](webui/app.py#L106-L120), [webui/app.py:134-149](webui/app.py#L134-L149)
 
-| Function | Destination | Auth Header | Purpose |
+### Internal Proxy Methods
+The backend defines two primary internal functions for communicating with backend services:
+
+| Function | Destination | Header | Description |
 | :--- | :--- | :--- | :--- |
-| `api_request` | `SCRAPER_API` | `X-API-Key` | Fetching product data, stats, and history. |
-| `engine_request` | `SCRAPER_ENGINE` | `X-Engine-Key` | Managing configs, triggering scrapes, and auto-detection. |
+| `engine_request` | `SCRAPER_ENGINE` | `X-Engine-Key` | Manages scraper configurations, manual triggers, and exports. |
+| `api_request` | `SCRAPER_API` | `X-API-Key` | Retrieves product statistics, history, and deal data. |
 
-Sources: [webui/app.py:73-81](webui/app.py#L73-L81), [webui/app.py:108-115](webui/app.py#L108-L115)
+Sources: [webui/app.py:84-93](webui/app.py#L84-L93), [webui/app.py:111-118](webui/app.py#L111-L118)
 
-### Security Headers
-The WebUI implements several security measures to protect the control plane:
-* **CSP Nonce:** A 16-character hex nonce is generated per request to allow specific inline scripts.
-* **Headers:** Sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and a strict `Content-Security-Policy`.
-* **Path Validation:** The `_validate_path` function uses the regex `^/[A-Za-z0-9._~!$&'()*+,;=:@/%-]*$` to prevent SSRF and directory traversal.
+## Frontend Architecture
 
-Sources: [webui/app.py:34](webui/app.py#L34), [webui/app.py:84-86](webui/app.py#L84-L86), [webui/app.py:117-130](webui/app.py#L117-L130)
+The frontend is a single-page-style interface using Bootstrap 5 for styling and vanilla JavaScript for interactivity.
 
-## Frontend Components
+### Components and Logic
+The frontend logic is distributed across `script.js` and inline scripts in templates:
+*  **Theme Management**: Supports light and dark modes, persisting the choice in `localStorage`.
+*  **Data Polling**: Periodically fetches statistics (Total Products, Updated 24h) via `/api/stats`.
+*  **Dynamic Rendering**: Uses event delegation and fetch calls to manage configuration lists and product tables.
 
-The frontend is a single-page style application using Bootstrap 5.3 for styling and a custom `script.js` for asynchronous interactions.
+Sources: [webui/static/script.js:155-175](webui/static/script.js#L155-L175), [webui/templates/index.html:15-22](webui/templates/index.html#L15-L22), [webui/static/style.css:1-25](webui/static/style.css#L1-L25)
 
-### Dashboard & Monitoring
-The Dashboard (`index.html`) provides real-time statistics and product listings. It uses a polling mechanism to keep data fresh.
+### Data Loading Sequence
+The following sequence diagram shows how the Dashboard populates data on load.
 
 ```mermaid
 sequenceDiagram
-    participant JS as script.js
-    participant UI as WebUI (Flask)
-    participant API as REST API
-    JS->>UI: GET /api/stats
-    UI->>API: GET /stats (with API Key)
-    API-->>UI: JSON Stats
-    UI-->>JS: JSON Stats
-    Note right of JS: Update DOM (Total Products, etc.)
+    participant U as User
+    participant F as Frontend (JS)
+    participant B as Flask Backend
+    participant A as REST API
+    U->>F: Load Dashboard
+    F->>B: GET /api/stats
+    B->>A: GET /stats
+    A-->>B: JSON Stats
+    B-->>F: JSON Stats
+    F->>F: Update stat-cards
+    F->>B: GET /api/products
+    B->>A: GET /products
+    A-->>B: Product List
+    B-->>F: Product List
+    F->>F: Render productsTable
 ```
 
-Sources: [webui/static/script.js:154-165](webui/static/script.js#L154-L165), [webui/templates/index.html:105-115](webui/templates/index.html#L105-L115)
+Sources: [webui/static/script.js:156-175](webui/static/script.js#L156-L175), [webui/templates/index.html:145-178](webui/templates/index.html#L145-L178), [webui/app.py:202-218](webui/app.py#L202-L218)
 
-### Configuration Management
-The Configuration page (`config.html`) allows users to:
-1.  **Add/Edit Sites:** Define CSS selectors for products, titles, prices, and links.
-2.  **Auto-Detect:** Submit a URL to the engine to automatically discover selectors using Playwright heuristics.
-3.  **Advanced Settings:** Toggle stealth mode, configure SOCKS5 proxies, and modify database credentials.
+## Feature Modules
 
-Sources: [webui/templates/config.html:150-185](webui/templates/config.html#L150-L185), [webui/templates/config.html:236-258](webui/templates/config.html#L236-L258)
+### Scraper Configuration
+Located at `/config`, this module allows users to create and manage site-specific scraper settings. It includes "Quick templates" for popular sites like Inet.se and Komplett.se.
 
-## API Endpoints (WebUI Internal)
+| Parameter | Selector Type | Description |
+| :--- | :--- | :--- |
+| `Product` | CSS Selector | The container element for a single product. |
+| `Title` | CSS Selector | The element containing the product name. |
+| `Price` | CSS Selector | The element containing the price string. |
+| `Link` | CSS Selector | The anchor element leading to the product page. |
 
-The WebUI exposes several endpoints to its own frontend that map to backend services:
+Sources: [webui/templates/config.html:150-185](webui/templates/config.html#L150-L185), [scraper/scraper.py:180-205](scraper/scraper.py#L180-L205)
 
-| Endpoint | Method | Backend Service | Description |
+### Auto-Detection System
+The WebUI provides a "Detect" feature that leverages Playwright heuristics in the Scraper Engine to guess CSS selectors for a target URL.
+1.  Frontend sends a POST to `/api/detect`.
+2.  Backend proxies to Engine's `/detect`.
+3.  Engine opens a headless browser, analyzes DOM for price patterns (e.g., `/\d[\d\s]*\s*(kr|SEK)/`), and identifies repetitive containers.
+4.  Returns identified selectors and bot protection type (Akamai, Cloudflare, etc.).
+
+Sources: [webui/app.py:236-243](webui/app.py#L236-L243), [scraper/scraper.py:648-735](scraper/scraper.py#L648-L735), [webui/templates/config.html:220-256](webui/templates/config.html#L220-L256)
+
+### Advanced Settings
+This section allows modification of system parameters stored in the `settings` database table. Changes are saved immediately via PUT requests to `/api/settings/<key>`.
+
+| Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `/api/configs` | GET/POST | Engine | List or create scraper configurations. |
-| `/api/scrape` | POST | Engine | Manually trigger a scraping run. |
-| `/api/detect` | POST | Engine | Auto-detect CSS selectors from a URL. |
-| `/api/stats` | GET | API | Get global stats (total products, etc.). |
-| `/api/products` | GET | API | Retrieve paginated product list with search. |
-| `/api/settings` | GET/PUT | Engine | Manage system-wide operational settings. |
+| `concurrent_pages` | int | 2 | Parallel browser instances. |
+| `scrape_interval` | int | 3600 | Seconds between full runs. |
+| `headless` | bool | true | Whether to hide the browser UI. |
+| `min_drop_percent` | float | 5.0 | Threshold for price alerts. |
 
-Sources: [webui/app.py:145-215](webui/app.py#L145-L215), [webui/app.py:228-245](webui/app.py#L228-L245)
-
-## Database Credentials Management
-
-A specialized set of endpoints allows users to update PostgreSQL credentials directly from the WebUI. This process involves the WebUI sending a request to the Engine, which then executes the `ALTER USER` SQL commands and updates local credential files.
-
-```mermaid
-flowchart TD
-    UI[WebUI Settings Page] -->|PUT /api/credentials/password| WebApp[webui/app.py]
-    WebApp -->|X-Engine-Key| Eng[scraper/scraper.py]
-    Eng -->|SQL: ALTER USER| DB[(PostgreSQL)]
-    Eng -->|Write File| Creds[credentials/db_password]
-```
-
-Sources: [webui/app.py:248-261](webui/app.py#L248-L261), [scraper/scraper.py:843-861](scraper/scraper.py#L843-L861)
+Sources: [scraper/scraper.py:46-75](scraper/scraper.py#L46-L75), [webui/templates/config.html:360-395](webui/templates/config.html#L360-L395)
 
 ## Conclusion
-
-The WebUI Architecture provides a secure, abstracted interface for managing the scraping lifecycle. By acting as a proxy with strict path validation and centralized authentication, it protects the Scraper Engine and REST API from direct exposure while providing a unified management experience for administrators.
+The WebUI Architecture provides a secure and centralized management layer for the scraping ecosystem. By separating the user interface from the heavy lifting of the Scraper Engine and the data access of the REST API, the system achieves a robust and scalable structure suitable for production deployment.

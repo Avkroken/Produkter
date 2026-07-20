@@ -14,129 +14,118 @@ The following files were used as context for generating this wiki page:
 - [AGENTS.md](AGENTS.md)
 - [scraper/scraper.py](scraper/scraper.py)
 - [CHANGELOG.md](CHANGELOG.md)
+
 </details>
 
 # Docker Compose Deployment
 
-The Docker Compose deployment for the Web Scraper Platform provides a production-ready, containerized environment that orchestrates the scraping engine, web interface, REST API, and PostgreSQL database. This architecture is designed to be "one-click" deployable, managing service dependencies, volume persistence, and automatic credential generation through a single command.
+The Docker Compose deployment provides a production-ready, containerized environment for the Web Scraper Platform. It orchestrates multiple services including a PostgreSQL database for persistent storage, a Scraper engine for data extraction, a REST API for programmatic access, and a WebUI for monitoring and configuration. This deployment model is designed to be "start-and-forget," with automatic credential generation and health monitoring.
 
-The deployment consolidates the application logic—including the Scraper, Web UI, and REST API—into a single core image managed by Supervisor, while maintaining a separate container for the database to ensure data persistence and security.
-Sources: [README.md:10](README.md#L10), [README.md:38](README.md#L38), [CLAUDE.md:37-41](CLAUDE.md#L37-L41), [CHANGELOG.md:143](CHANGELOG.md#L143)
+Sources: [README.md:9-19](README.md#L9-L19), [CLAUDE.md:8-13](CLAUDE.md#L8-L13)
 
-## Core Services
+## System Architecture
 
-The architecture consists of two primary containers that work in tandem to provide the full platform functionality.
-
-| Container | Port(s) | Role | Description |
-|-----------|---------|------|-------------|
-| `postgres` | 5432 | Database | Production-grade PostgreSQL storage for product data, price history, and configurations. |
-| `scraper` | 3000, 8000 | Application | Unified service running the Web UI (Port 3000), REST API (Port 8000), and Scraper Engine. |
-
-Sources: [README.md:46-51](README.md#L46-L51), [CHANGELOG.md:143](CHANGELOG.md#L143)
-
-### Service Interaction Flow
-
-The following diagram illustrates the relationship between the deployed containers and the external environment.
+The deployment leverages a multi-container architecture where the application logic and database are isolated into separate service containers. The `scraper` container is a consolidated image that runs the Web UI, REST API, and Scraper modules, while the `postgres` container manages the relational data.
 
 ```mermaid
-graph TD
-    User([User/Admin]) -->|Port 3000| ScraperContainer[Scraper Container]
-    App([External Apps]) -->|Port 8000| ScraperContainer
-    
-    subgraph ScraperContainer [Scraper Container]
-        WebUI[Web UI - Flask]
-        API[REST API - FastAPI]
-        Engine[Scraper Engine - Playwright]
-        Sup[Supervisor] --> WebUI
-        Sup --> API
-        Sup --> Engine
+flowchart TD
+    subgraph DockerHost["Docker Host"]
+        subgraph Network["Docker Bridge Network"]
+            SCRAPER[scraper container]
+            DB[(postgres container)]
+        end
+        VOLUMES[(Persistent Volumes)]
     end
-    
-    ScraperContainer -->|Internal 5432| DB[(PostgreSQL)]
-    Engine -->|HTTP/S| Internet((Internet))
+
+    USER[User / Developer] -->|Port 3000| SCRAPER
+    API_CONSUMER[API Client] -->|Port 8000| SCRAPER
+    SCRAPER <-->|Port 5432| DB
+    SCRAPER --- VOLUMES
+    DB --- VOLUMES
 ```
 
-The Scraper container uses `supervisord` to manage the lifecycle of the Web UI, API, and scraping processes simultaneously.
-Sources: [CLAUDE.md:4-10](CLAUDE.md#L4-L10), [CLAUDE.md:37-41](CLAUDE.md#L37-L41), [AGENTS.md:37-41](AGENTS.md#L37-L41)
+The diagram shows the high-level relationship between the user, the application container, the database, and the persistent storage volumes.
+Sources: [README.md:46-51](README.md#L46-L51), [CLAUDE.md:23-30](CLAUDE.md#L23-L30), [CHANGELOG.md:129-131](CHANGELOG.md#L129-L131)
 
-## Deployment Configuration
+### Service Definitions
 
-The deployment relies on a `.env` file for core environment variables, while advanced application settings are stored directly in the database.
+| Container | Internal Port | External Port | Description |
+|-----------|---------------|---------------|-------------|
+| `postgres` | 5432 | 5432 | PostgreSQL database; internal connection for the app, optional local access. |
+| `scraper` | 3000 | 3000 | Flask-based Web UI for configuration and monitoring. |
+| `scraper` | 8000 | 8000 | FastAPI REST API for product data consumption. |
+
+Sources: [README.md:46-51](README.md#L46-L51), [CLAUDE.md:8-13](CLAUDE.md#L8-L13), [CHANGELOG.md:92-94](CHANGELOG.md#L92-L94)
+
+## Configuration and Environment
+
+Deployment is driven by a `.env` file and specific directory structures on the host machine. Minimal configuration requires only three variables, while all advanced scraper settings (intervals, proxies, stealth mode) are managed via the WebUI and stored in the database.
 
 ### Required Environment Variables
-A minimal `.env` configuration requires three specific variables to define data locations and localization.
-
 | Variable | Description |
 |----------|-------------|
-| `DOCKER` | The absolute path on the host machine where persistent volumes (database, logs, credentials) are stored. |
-| `DOMAIN` | The hostname for the deployment (optional, used for custom setups). |
-| `TZ` | The timezone for the containers (e.g., `Europe/Stockholm`). |
+| `DOCKER` | The absolute path on the host where container volumes/data will be stored. |
+| `DOMAIN` | The hostname for the deployment (optional). |
+| `TZ` | System timezone (e.g., `Europe/Stockholm`). |
 
-Sources: [README.md:21-25](README.md#L21-L25), [README.md:86-90](README.md#L86-L90)
+Sources: [README.md:30-34](README.md#L30-L34), [README.md:81-87](README.md#L81-L87)
 
-### Persistent Volumes
-Data is persisted in the host directory defined by the `${DOCKER}` variable across several subdirectories:
-*  `${DOCKER}/scraper/postgres`: Database files.
-*  `${DOCKER}/scraper/logs`: Application and scraping logs.
-*  `${DOCKER}/scraper/playwright-cache`: Headless browser cache for improved performance.
-*  `${DOCKER}/scraper/credentials`: Auto-generated secrets including API keys and DB passwords.
+### Volume Structure
+The deployment requires specific directories under the `${DOCKER}/scraper/` path to ensure persistence and security:
+*  `postgres/`: Database files (requires ownership by UID 999).
+*  `logs/`: Application and scraping logs.
+*  `playwright-cache/`: Headless browser cache.
+*  `credentials/`: Auto-generated secrets (API keys, DB passwords).
 
-Sources: [README.md:28-31](README.md#L28-L31)
+Sources: [README.md:36-38](README.md#L36-L38), [README.md:112-114](README.md#L112-L114), [scraper/scraper.py:114-118](scraper/scraper.py#L114-L118)
 
-## Credential Management and Security
+## Initialization and Security
 
-The platform implements an automatic security bootstrapping process on the first startup.
+The deployment features an automated initialization sequence. On the first startup, the containers generate necessary credentials and set restrictive permissions.
 
-1.  **Auto-Generation**: On initial deployment, the `scraper` and `postgres` containers generate `api_key` and `db_password` files if they do not exist.
-2.  **Storage**: These secrets are stored in the `${DOCKER}/scraper/credentials/` directory.
-3.  **Permissions**: The `entrypoint.sh` script sets restrictive permissions on the credentials directory at every container startup to prevent unauthorized access.
-4.  **Retrieval**: Administrators can retrieve the generated API key by reading the file in the persistent volume or by checking container logs.
+```mermaid
+sequenceDiagram
+    participant Host as Docker Host
+    participant Scraper as Scraper Container
+    participant DB as Postgres Container
 
-```bash
-# Example retrieval of the generated API key
-cat /path/to/docker/data/scraper/credentials/api_key
+    Host->>Scraper: docker compose up
+    Scraper->>Scraper: entrypoint.sh runs
+    Scraper->>Scraper: chmod 700 /credentials
+    Scraper->>Scraper: generate api_key & engine_key
+    Scraper->>DB: Wait for DB healthy
+    DB->>DB: Generate db_password (first run)
+    Scraper->>DB: Initialize Schema (init_db)
+    Note over Scraper,DB: Services ready
 ```
 
-Sources: [README.md:55-71](README.md#L55-L71), [CLAUDE.md:44-45](CLAUDE.md#L44-L45), [scraper/scraper.py:155-167](scraper/scraper.py#L155-L167)
+This sequence illustrates the startup flow and secret generation.
+Sources: [README.md:58-69](README.md#L58-L69), [CLAUDE.md:32-34](CLAUDE.md#L32-L34), [scraper/scraper.py:133-146](scraper/scraper.py#L133-L146)
 
-## Deployment Lifecycle
+### Credential Management
+Credentials are never stored in images or source control. They are generated and stored in the `credentials/` volume:
+*  **API Key**: Used for `X-API-Key` header authentication on REST endpoints. Logged to stdout on first generation for initial retrieval.
+*  **Database Password**: Generated by the postgres container. Logged to stdout on first generation.
+*  **Engine Key**: Used for internal WebUI-to-Engine authentication. Generated silently (not logged).
+*  **WebUI Password**: Used for Basic Auth on the WebUI. Generated silently if not already present.
+*  **Discord Webhook**: A manually created file in the credentials directory for alerts.
 
-To initiate the deployment, the environment must be prepared with necessary directories and configuration files.
+Sources: [README.md:58-69](README.md#L58-L69), [scraper/scraper.py:126-146](scraper/scraper.py#L126-L146), [scraper/scraper.py:612-663](scraper/scraper.py#L612-L663)
 
-### Standard Startup Procedure
+## Maintenance and Operations
 
-```bash
-# 1. Prepare environment
-cp .env.example .env
-mkdir -p ${DOCKER}/scraper/{postgres,logs,playwright-cache,credentials}
+### Deployment Commands
+Common operations for managing the stack:
+*  `docker compose up -d`: Start the stack in detached mode.
+*  `docker compose ps`: Verify service status.
+*  `docker compose logs scraper`: View operational logs and scraping activity.
+*  `docker compose build`: Test image builds after configuration changes.
 
-# 2. Launch services
-docker compose up -d
+Sources: [CONTRIBUTING.md:27-37](CONTRIBUTING.md#L27-L37), [README.md:40-44](README.md#L40-L44)
 
-# 3. Verify status
-docker compose ps
-docker compose logs -f scraper
-```
+### Optional Daily Backups
+The platform supports an optional `pgdump` service within `docker-compose.yml`. This service performs a daily `pg_dump` of the PostgreSQL database, keeps backups for 7 days, and uses Docker secrets/volumes for secure access to the database password.
 
-Sources: [CONTRIBUTING.md:27-37](CONTRIBUTING.md#L27-L37), [README.md:18-38](README.md#L18-L38)
+Sources: [README.md:97-108](README.md#L97-L108)
 
-### Database Maintenance
-The platform supports automated daily backups using a `pg_dump` sidecar service. This service, when added to the `docker-compose.yml`, performs the following:
-*  Connects to the `postgres` service using the auto-generated password.
-*  Creates a daily `.dump` file in `${DOCKER}/scraper/backup`.
-*  Automatically deletes backups older than 7 days.
-Sources: [README.md:95-121](README.md#L95-L121)
-
-## Troubleshooting Deployment
-
-Common deployment issues often relate to file permissions or initialization states.
-
-| Issue | Resolution |
-|-------|------------|
-| **Postgres won't start** | Ensure the database volume has the correct UID/GID: `sudo chown -R 999:999 ${DOCKER}/scraper/postgres`. |
-| **API returns 401** | Verify the `X-API-Key` header matches the key found in `${DOCKER}/scraper/credentials/api_key`. |
-| **Services Fail to start** | Check logs via `docker compose logs` for specific Supervisor process failures. |
-
-Sources: [CONTRIBUTING.md:13](CONTRIBUTING.md#L13), [README.md:126-140](README.md#L126-L140)
-
-The Docker Compose deployment provides a robust foundation for the Web Scraper Platform by automating the complex setup of headless browsers, database synchronization, and security bootstrapping into a manageable two-container stack.
+The Docker Compose deployment ensures a consistent environment for the Scraper Platform across development and production, centralizing configuration while maintaining security through automated secret handling and volume isolation.
