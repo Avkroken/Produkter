@@ -56,13 +56,13 @@ jobs:
       - name: Short SHA
         id: sha
         run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+      # Bygger ALLTID bara lokalt. Push sker i ett eget steg efter Trivy —
+      # annars vore grinden verkningslös på main: imagen skulle redan ligga
+      # publicerad när skanningen fäller körningen.
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
-          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
-          # load gör imagen tillgänglig i den lokala docker-daemonen så Trivy
-          # kan skanna den även på PR:er, där den inte pushas. Enplattformsbygge,
-          # så docker-exportern klarar det.
+          push: false
           load: true
           tags: |
             ghcr.io/blixten85/scraper:latest
@@ -81,20 +81,34 @@ jobs:
           image-ref: ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
           format: sarif
           output: trivy-results.sarif
-          # Bara sådant som faktiskt går att åtgärda: utan ignore-unfixed blir
-          # det ~125 fynd på Debian-paket utan tillgänglig patch, vilket är
-          # exakt det brus som fick förra omgången att dismissas i klump.
+          # ignore-unfixed är hela brusfiltret: allt utan tillgänglig patch
+          # faller bort ändå. Det som blir kvar går per definition att åtgärda,
+          # och då är severity ointressant — hellre uppdatera det som går när
+          # det går, oavsett nivå.
           ignore-unfixed: true
-          severity: CRITICAL,HIGH
-          # Utan denna filtreras severity bara i loggen — SARIF:en skulle
-          # ändå innehålla allt, och bruset vore tillbaka i code scanning.
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           limit-severities-for-sarif: true
-          # Rapportera, fäll inte bygget. Höj till 1 när fyndnivån är känd.
-          exit-code: '0'
+          # Fäller körningen. Eftersom push sker först efter detta steg hinner
+          # ingen sårbar image publiceras.
+          #
+          # Obs: "åtgärdbart" betyder att en patch finns UPPSTRÖMS, inte att du
+          # kan göra något här och nu. För ett paket i bas-imagen är åtgärden
+          # att python:3.14-slim byggs om — Dependabot fångar det när digesten
+          # ändras, men det kan dröja. Under tiden är main röd. Det är avsiktligt
+          # valt: hellre synligt stopp än tyst publicerad sårbarhet.
+          exit-code: '1'
 
+      # always() så resultaten når code scanning även när Trivy fällde steget
+      # ovan — annars försvinner exakt de fynd som orsakade felet.
       - name: Ladda upp Trivy-resultat
         uses: github/codeql-action/upload-sarif@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         if: always()
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
+
+      - name: Publicera imagen (först efter godkänd skanning)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          docker push ghcr.io/blixten85/scraper:latest
+          docker push ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
