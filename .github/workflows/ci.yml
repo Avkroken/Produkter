@@ -40,7 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: python
     permissions:
+      contents: read
       packages: write
+      security-events: write # Trivy-resultat till code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -58,6 +60,41 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          # load gör imagen tillgänglig i den lokala docker-daemonen så Trivy
+          # kan skanna den även på PR:er, där den inte pushas. Enplattformsbygge,
+          # så docker-exportern klarar det.
+          load: true
           tags: |
             ghcr.io/blixten85/scraper:latest
             ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+
+      # Dependabot bevakar bas-imagens tagg i Dockerfile, men inget läser
+      # OS-paketen INUTI den byggda imagen. Den skanningen låg i build.yml,
+      # som togs bort i #174 när Docker skulle bort — men Docker kom tillbaka
+      # i #184 och skanningen följde inte med. Sedan dess har imagen pushats
+      # oskannad, och GitHub har flaggat "Trivy is reporting warnings" för att
+      # verktyget slutat rapportera.
+      - name: Trivy — skanna byggd image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+          format: sarif
+          output: trivy-results.sarif
+          # Bara sådant som faktiskt går att åtgärda: utan ignore-unfixed blir
+          # det ~125 fynd på Debian-paket utan tillgänglig patch, vilket är
+          # exakt det brus som fick förra omgången att dismissas i klump.
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          # Utan denna filtreras severity bara i loggen — SARIF:en skulle
+          # ändå innehålla allt, och bruset vore tillbaka i code scanning.
+          limit-severities-for-sarif: true
+          # Rapportera, fäll inte bygget. Höj till 1 när fyndnivån är känd.
+          exit-code: '0'
+
+      - name: Ladda upp Trivy-resultat
+        uses: github/codeql-action/upload-sarif@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
