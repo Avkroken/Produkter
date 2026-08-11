@@ -65,8 +65,8 @@ jobs:
           push: false
           load: true
           tags: |
-            ghcr.io/blixten85/scraper:latest
-            ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/denied-se/scraper:latest
+            ghcr.io/denied-se/scraper:sha-${{ steps.sha.outputs.short }}
 
       # Dependabot bevakar bas-imagens tagg i Dockerfile, men inget läser
       # OS-paketen INUTI den byggda imagen. Den skanningen låg i build.yml,
@@ -78,7 +78,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+          image-ref: ghcr.io/denied-se/scraper:sha-${{ steps.sha.outputs.short }}
           format: sarif
           output: trivy-results.sarif
           # ignore-unfixed är hela brusfiltret: allt utan tillgänglig patch
@@ -110,5 +110,5 @@ jobs:
       - name: Publicera imagen (först efter godkänd skanning)
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
-          docker push ghcr.io/blixten85/scraper:latest
-          docker push ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+          docker push ghcr.io/denied-se/scraper:latest
+          docker push ghcr.io/denied-se/scraper:sha-${{ steps.sha.outputs.short }}
