@@ -14,6 +14,11 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 WORKDIR /app
 
 COPY requirements.txt .
+# setuptools följer med bas-imagen och uppdateras INTE av apt-get upgrade —
+# det är ett Python-paket, inte ett Debian-paket. Trivy fällde bygget på
+# CVE-2025-47273 (HIGH) och CVE-2026-59890 (MEDIUM) i setuptools 70.3.0.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN playwright install-deps chromium
