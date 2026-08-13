@@ -9,7 +9,6 @@
 // testat mot stora/komplexa PDF:er i denna kodbas specifikt, se uppgift om
 // att verifiera CPU-tid/minne mot riktiga testfiler upp till 50MB-gränsen.
 
-import * as XLSX from "xlsx";
 import { AllProvidersExhausted, ProviderChain } from "../../shared/providers";
 
 export const SUPPORTED_EXTENSIONS = [".csv", ".xlsx", ".txt", ".docx", ".pdf"];
@@ -97,10 +96,14 @@ function parseCsvLine(line: string): string[] {
   return values;
 }
 
-function parseXlsx(bytes: ArrayBuffer): ExtractedRows {
-  const wb = XLSX.read(bytes, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rawRows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+// Dynamisk import av samma skäl som mammoth/unpdf nedan — modulen laddas
+// bara när någon faktiskt laddar upp en xlsx. "universal"-ingången är den som
+// fungerar i Workers: den tar en Blob och parsar med ren JS (saxen + fflate),
+// utan DOMParser eller Node-strömmar.
+async function parseXlsx(bytes: ArrayBuffer): Promise<ExtractedRows> {
+  const { default: readXlsxFile } = await import("read-excel-file/universal");
+  const sheets = await readXlsxFile(new Blob([bytes]));
+  const rawRows: unknown[][] = sheets[0]?.data ?? [];
   if (rawRows.length === 0) return { rows: [], fieldnames: ROW_FIELDS };
 
   const header = rawRows[0].map((c) => (c === null || c === undefined ? "" : String(c)));
