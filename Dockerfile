@@ -16,7 +16,14 @@ RUN apt-get update && apt-get full-upgrade -y && apt-get install -y --no-install
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --break-system-packages --no-cache-dir -r requirements.txt
+# Appens beroenden i ett eget träd. Debians Python-paket får inte ersättas av
+# PyPI-versioner — pip kan inte avinstallera dpkg-installerade paket, och
+# typing_extensions krockade direkt. Venv:en skapas utan pip, så uppströms
+# pips vendrade SBOM aldrig kommer in i imagen; installationen drivs av
+# Debians pip utifrån.
+RUN python3 -m venv --without-pip /opt/venv \
+    && pip install --no-cache-dir --python /opt/venv/bin/python -r requirements.txt
+ENV PATH="/opt/venv/bin:$PATH"
 
 COPY . .
 
