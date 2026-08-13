@@ -13,7 +13,7 @@
     "wrangler": "4.120.1"
   },
   "dependencies": {
-    "mammoth": "^1.12.0",
+    "mammoth": "^1.12.1",
     "unpdf": "^1.8.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
