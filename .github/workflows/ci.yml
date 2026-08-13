@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14.6'
+          python-version: '3.13'
           cache: pip
       - name: Install dependencies
         run: |
@@ -34,26 +34,3 @@ jobs:
       - name: Run tests
         run: |
           if [ -d tests ]; then python -m pip install pytest && python -m pytest; else echo "No tests directory found"; fi
-  docker:
-    runs-on: ubuntu-latest
-    needs: python
-    permissions:
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          push: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
-          tags: |
-            ghcr.io/blixten85/product-describer:latest
-            ghcr.io/blixten85/product-describer:sha-${{ steps.sha.outputs.short }}
