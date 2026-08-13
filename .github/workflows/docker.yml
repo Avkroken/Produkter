@@ -1,8 +1,7 @@
-name: Trivy
+name: Docker
 
-# Bygger imagen, skannar den och publicerar först om skanningen är ren.
-# Jobbet heter build för att code scanning-kategorin ska bli
-# .github/workflows/trivy.yml:build — samma registrering som redan finns.
+# Bygger imagen, skannar den med Trivy och publicerar först om skanningen
+# är ren.
 
 on:
   push:
@@ -18,10 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    # Jobb-id:t styr code scanning-kategorin och måste förbli build;
-    # visningsnamnet är det som rulesetet kräver som status check.
-    name: docker
+  docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
