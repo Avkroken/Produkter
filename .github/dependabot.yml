@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
+    assignees: ["blixten85"]
     directories:
       - "/app"
       - "/engine"
@@ -16,6 +17,7 @@ updates:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
+    assignees: ["blixten85"]
     directory: "/"
     schedule:
       interval: "weekly"
