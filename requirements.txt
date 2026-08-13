@@ -5,9 +5,7 @@ flask-cors>=6.0.5
 gunicorn==26.0.0
 fastapi==0.141.1
 uvicorn[standard]==0.52.1
-h11==0.16.0
 psycopg2-binary==2.9.12
 requests>=2.34.2
-idna==3.18
 waitress>=3.0.2
 sentry-sdk[flask,fastapi]>=2.66.1
