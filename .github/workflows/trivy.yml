@@ -19,6 +19,9 @@ permissions:
 
 jobs:
   build:
+    # Jobb-id:t styr code scanning-kategorin och måste förbli build;
+    # visningsnamnet är det som rulesetet kräver som status check.
+    name: docker
     runs-on: ubuntu-latest
     permissions:
       contents: read
