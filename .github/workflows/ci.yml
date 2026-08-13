@@ -102,7 +102,7 @@ jobs:
           #
           # Obs: "åtgärdbart" betyder att en patch finns UPPSTRÖMS, inte att du
           # kan göra något här och nu. För ett paket i bas-imagen är åtgärden
-          # att python:3.14-slim byggs om — Dependabot fångar det när digesten
+          # att debian:trixie-slim byggs om — Dependabot fångar det när digesten
           # ändras, men det kan dröja. Under tiden är main röd. Det är avsiktligt
           # valt: hellre synligt stopp än tyst publicerad sårbarhet.
           exit-code: '1'
@@ -114,7 +114,6 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-results.sarif
-          category: trivy-image
 
       - name: Publicera imagen (först efter godkänd skanning)
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
