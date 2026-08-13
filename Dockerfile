@@ -22,7 +22,7 @@ COPY requirements.txt .
 # pips vendrade SBOM aldrig kommer in i imagen; installationen drivs av
 # Debians pip utifrån.
 RUN python3 -m venv --without-pip /opt/venv \
-    && pip install --no-cache-dir --python /opt/venv/bin/python -r requirements.txt
+    && pip --python /opt/venv/bin/python install --no-cache-dir -r requirements.txt
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY . .
