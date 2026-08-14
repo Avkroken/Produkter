@@ -125,21 +125,6 @@ jobs:
       matrix:
         worker: ${{ fromJSON(needs.select.outputs.workers) }}
     steps:
-      - name: DIAGNOSTIK (tillfällig)
-        env:
-          A: ${{ secrets.PRODUCT_DESCRIBER }}
-          B: ${{ secrets.PRODUCT_DESCRIBER_CLOUDFLARE }}
-          C: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          D: ${{ secrets.POLITIKER_WEBBAPP }}
-          E: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          p() { [ -n "$2" ] && echo "$1: SATT (${#2} tecken)" || echo "$1: tom"; }
-          p "secrets.PRODUCT_DESCRIBER"            "$A"
-          p "secrets.PRODUCT_DESCRIBER_CLOUDFLARE" "$B"
-          p "secrets.CLOUDFLARE_API_TOKEN"         "$C"
-          p "secrets.POLITIKER_WEBBAPP"            "$D"
-          p "vars.CLOUDFLARE_ACCOUNT_ID"           "$E"
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main   # deploya alltid main-HEAD, oavsett vilket event som fyrade
