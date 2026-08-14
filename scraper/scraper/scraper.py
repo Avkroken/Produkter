@@ -174,9 +174,14 @@ def read_credential(name, default=""):
 
 
 def write_credential(name, value):
-    os.makedirs(CREDENTIALS_DIR, exist_ok=True)
-    with open(os.path.join(CREDENTIALS_DIR, name), 'w') as f:
-        f.write(value)
+    # Uppgifterna ligger i en monterad katalog i stil med Docker secrets och
+    # måste överleva en omstart av containern — därför på disk. Filen skapas
+    # med 0600 i stället för umask-standard, så bara ägaren kan läsa den.
+    os.makedirs(CREDENTIALS_DIR, mode=0o700, exist_ok=True)
+    path = os.path.join(CREDENTIALS_DIR, name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        f.write(value)  # codeql[py/clear-text-storage-sensitive-data]
 
 
 def get_db_user():
@@ -1352,7 +1357,7 @@ def change_db_password():
         cur.execute(pgsql.SQL("ALTER USER {} WITH PASSWORD %s").format(
             pgsql.Identifier(get_db_user())), (new_pw,))
         conn.commit()
-        write_credential('db_password', new_pw)  # lgtm[py/clear-text-storage-sensitive-data]
+        write_credential('db_password', new_pw)
         reinit_db_pool()
         return jsonify({'status': 'success'})
     except psycopg2.Error as e:
