@@ -17,7 +17,7 @@ name: Deploy
 # taggen först när deployen lyckats — inga dubbla eller missade deployer.
 #
 # Secrets (Repo → Settings → Environments → produktion):
-#   PRODUCT_DESCRIBER_CLOUDFLARE — Cloudflare API-token: Workers Scripts:Edit
+#   PRODUCT_DESCRIBER — Cloudflare API-token: Workers Scripts:Edit
 #     + D1, KV, R2, Queues. Environment secret på miljön produktion.
 #
 # Variables (Repo → Settings → Variables → Actions):
@@ -140,7 +140,7 @@ jobs:
         working-directory: cloudflare/${{ matrix.worker }}
         run: npx wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCT_DESCRIBER_CLOUDFLARE }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCT_DESCRIBER }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
   # Flytta vattenmärket till deployad HEAD — bara vid schema och bara om ingen
