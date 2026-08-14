@@ -1,9 +1,8 @@
 # Web Scraper Platform
 
-[![CI](https://github.com/blixten85/scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/scraper/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/blixten85/scraper)](https://github.com/blixten85/scraper/releases)
-[![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/blixten85/scraper/pkgs/container/scraper)
-[![License](https://img.shields.io/github/license/blixten85/scraper)](LICENSE)
+[![CI](https://github.com/blixten85/product-describer/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/product-describer/actions/workflows/ci.yml)
+[![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/users/blixten85/packages/container/package/scraper)
+[![License](https://img.shields.io/github/license/blixten85/product-describer)](../LICENSE)
 
 **Production-ready web scraping platform with PostgreSQL, WebUI, REST API, and price monitoring.**
 
@@ -242,4 +241,4 @@ settings (
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
+MIT - see [LICENSE](../LICENSE)

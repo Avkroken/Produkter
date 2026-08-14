@@ -46,7 +46,7 @@ def handle_unexpected_error(exc):
     logger.exception("Unhandled error handling %s %s", request.method, request.path)
     sentry_sdk.capture_exception(exc)
     report_error_to_github(
-        "blixten85/scraper",
+        "blixten85/product-describer",
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},

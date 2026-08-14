@@ -1,8 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+
+# Node / Cloudflare Workers
+node_modules/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+
+# Secrets & environment
 .env
+*.env
+!.env.example
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Editors & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+docker-compose.override.yml
+
+# Root Python app data
 batch_state.json
 *.csv
-__pycache__/
-*.pyc
 /config/
 /uploads/
 /outputs/

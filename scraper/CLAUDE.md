@@ -1,6 +1,10 @@
-# scraper — Claude Code Guide
+# scraper/ — Claude Code Guide
 
-A web scraper with a REST API and web UI. Scrapes product data and exposes it for consumption by other services (e.g. product-describer).
+The part of product-describer that produces the product data. Repo-wide rules
+live in the root `CLAUDE.md`; this document covers `scraper/` and every path
+below is relative to it.
+
+A web scraper with a REST API and web UI. Scrapes product data and exposes it for consumption by the describer (the root Python app and `cloudflare/`).
 
 ## Tech Stack
 
@@ -46,8 +50,9 @@ supervisord.conf
 - Never store credentials in the image or commit them
 - `set -euo pipefail` at the top of all shell scripts
 - Unexpected exceptions in api/webui/scraper/alerts call
-  `report_error_to_github()` (`github_report.py`, copied into each
-  process's own working directory since supervisord runs each from a
-  different one) — best-effort, opens a `@claude`-tagged GitHub issue with
-  secrets/emails/paths redacted if `GITHUB_ERROR_REPORT_TOKEN` is set,
-  no-ops otherwise
+  `report_error_to_github()` — best-effort, opens a `@claude`-tagged GitHub
+  issue with secrets/emails/paths redacted if `GITHUB_ERROR_REPORT_TOKEN` is
+  set, no-ops otherwise. It lives in a single `github_report.py` at the image
+  root; supervisord starts each process from a different directory, so the
+  Dockerfile sets `PYTHONPATH=/app` to make the shared module importable
+  rather than keeping a copy beside every entrypoint

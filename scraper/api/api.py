@@ -97,7 +97,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
     logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
     sentry_sdk.capture_exception(exc)
     report_error_to_github(
-        "blixten85/scraper",
+        "blixten85/product-describer",
         f"Oväntat fel: {request.method} {request.url.path}",
         exc,
         context={"method": request.method, "path": request.url.path},

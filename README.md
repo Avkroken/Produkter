@@ -33,7 +33,7 @@ formats, the AI finds every item mentioned automatically.
 Two modes are supported:
 
 - **File upload** — drag and drop in the web UI, or run `python main.py run products.csv`.
-- **Sync** — pull products directly from the [scraper](https://github.com/blixten85/scraper) API, generate descriptions, and write them back. Started with a docker-compose profile (see below).
+- **Sync** — pull products directly from the [scraper](scraper/) API, generate descriptions, and write them back. Started with a docker-compose profile (see below).
 
 ## Getting started
 
@@ -91,7 +91,7 @@ left off.
 ## Sync mode (scraper integration)
 
 Set `SYNC_ENABLED=true` and the main container also runs a background
-worker that polls the [scraper](https://github.com/blixten85/scraper) API
+worker that polls the [scraper](scraper/) API
 for products without descriptions, generates them via your configured
 provider chain, and writes them back. No extra container needed.
 

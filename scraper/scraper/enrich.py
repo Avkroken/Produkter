@@ -256,7 +256,7 @@ def main():
         asyncio.run(run(args))
     except Exception as e:  # best-effort felrapport, matchar scraper.py-konventionen
         logger.exception("Oväntat fel i enrich")
-        report_error_to_github("blixten85/scraper", "enrich: oväntat fel", e, {})
+        report_error_to_github("blixten85/product-describer", "enrich: oväntat fel", e, {})
         sys.exit(1)
 
 
