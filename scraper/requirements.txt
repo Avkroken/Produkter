@@ -8,4 +8,4 @@ uvicorn[standard]==0.52.1
 psycopg2-binary==2.9.12
 requests>=2.34.2
 waitress>=3.0.2
-sentry-sdk[flask,fastapi]>=2.66.1
+sentry-sdk[flask,fastapi]>=2.67.1
