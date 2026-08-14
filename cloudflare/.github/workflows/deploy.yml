@@ -1,0 +1,156 @@
+name: Deploy
+
+# Auto-deploy till Cloudflare. Repot har flera fristående Workers (var sin
+# wrangler.jsonc); bara de vars kod ändrats deployas. shared/ triggar de Workers
+# som importerar den.
+#
+# HUR DEPLOYEN TRIGGAS: bot-auto-merge görs av github-actions[bot] med
+# GITHUB_TOKEN, vars push/pull_request-events INTE triggar andra workflows
+# (GitHubs loopskydd). Undantaget är repository_dispatch/workflow_dispatch — dem
+# FÅR GITHUB_TOKEN fyra. Därför fyrar Bot Auto-Merge en
+# `repository_dispatch: deploy-main` så fort mergen landat, vilket når hit direkt
+# utan PAT. Människo-merges/direkta pushar fångas av push:[main] (riktig
+# användartoken, inte suppressad). En gles schema-cron är sista skyddsnät.
+#
+# EXAKT-EN-GÅNG: en flyttbar git-tagg `deployed` är vattenmärke för senast
+# deployade commit. Varje körning deployar diffen deployed..HEAD och flyttar
+# taggen först när deployen lyckats — inga dubbla eller missade deployer.
+#
+# Secrets (Repo → Settings → Environments → produktion):
+#   PRODUCT_DESCRIBER_CLOUDFLARE — Cloudflare API-token: Workers Scripts:Edit
+#     + D1, KV, R2, Queues. Environment secret på miljön produktion.
+#
+# Variables (Repo → Settings → Variables → Actions):
+#   CLOUDFLARE_ACCOUNT_ID    — kontots ID. Variabel, inte secret: det är ingen
+#                              hemlighet, och som secret maskeras det i loggarna
+#                              vilket bara försvårar felsökning.
+#
+# wrangler deploy rör INTE secrets satta via `wrangler secret put` — bara kod,
+# vars och bindings uppdateras.
+
+on:
+  # Människo-merges och direkta pushar till main (riktig användartoken triggar
+  # push; bot-auto-merges gör det INTE — de fångas av repository_dispatch nedan).
+  push:
+    branches: [main]
+  # Bot-auto-merges: Bot Auto-Merge fyrar detta så fort mergen faktiskt landat.
+  # Enda vägen GITHUB_TOKEN når hit direkt (utan PAT) — se toppkommentaren.
+  repository_dispatch:
+    types: [deploy-main]
+  # Sista skyddsnät om ovanstående missas (GitHub-cron är opålitlig på publika
+  # repon, så detta är backup — inte primärvägen längre).
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: "Vilken worker att deploya (eller 'all')"
+        type: choice
+        default: all
+        options: [all, app, engine, processor]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+# mark-jobbet pushar `deployed`-taggen -> kräver contents: write (repot har
+# read-only GITHUB_TOKEN som default, annars 403 på tag-push).
+permissions:
+  contents: write
+
+jobs:
+  # Vilka Workers ska deployas? Manuell körning -> den valda. Schema -> de vars
+  # filer ändrats sedan `deployed`-taggen (shared/ -> alla som importerar den).
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      workers: ${{ steps.pick.outputs.workers }}
+      head: ${{ steps.pick.outputs.head }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main   # deploya alltid main-HEAD, oavsett vilket event som fyrade
+          fetch-depth: 0
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          CHOICE: ${{ github.event.inputs.worker }}
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$CHOICE" = "all" ]; then
+              echo 'workers=["app","engine","processor"]' >> "$GITHUB_OUTPUT"
+            else
+              echo "workers=[\"$CHOICE\"]" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          # Schema: diff mot vattenmärket. Saknas taggen -> bara senaste commit.
+          if git rev-parse -q --verify refs/tags/deployed >/dev/null; then
+            BASE=$(git rev-parse refs/tags/deployed)
+          else
+            BASE=$(git rev-parse HEAD^ || git rev-parse HEAD)
+          fi
+          CHANGED=$(git diff --name-only "$BASE"..HEAD || true)
+          echo "Ändrade filer sedan $BASE:"; echo "$CHANGED"
+
+          python3 - "$CHANGED" <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          changed = sys.argv[1].splitlines()
+          workers = set()
+          shared_consumers = {"app", "engine", "processor"}
+          for f in changed:
+              top = f.split("/", 1)[0]
+              if top in {"app", "engine", "processor"}:
+                  workers.add(top)
+              elif top == "shared":
+                  workers |= shared_consumers
+          print("workers=" + json.dumps(sorted(workers)))
+          PY
+
+  deploy:
+    # Grinden för produktionsdeploy ligger i miljön, inte i den här filen:
+    # deployment branch policy släpper bara main, och hemligheten
+    # är ett environment secret. En körning på dev får därför ingen token.
+    environment: produktion
+    needs: select
+    if: needs.select.outputs.workers != '[]' && needs.select.outputs.workers != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: ${{ fromJSON(needs.select.outputs.workers) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main   # deploya alltid main-HEAD, oavsett vilket event som fyrade
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: ${{ matrix.worker }}/package-lock.json
+      - name: Install
+        working-directory: ${{ matrix.worker }}
+        run: npm ci
+      - name: Deploy ${{ matrix.worker }}
+        working-directory: ${{ matrix.worker }}
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCT_DESCRIBER_CLOUDFLARE }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  # Flytta vattenmärket till deployad HEAD — bara vid schema och bara om ingen
+  # deploy failade (skippad deploy = inga worker-ändringar = OK att avancera).
+  mark:
+    needs: [select, deploy]
+    if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.deploy.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          git tag -f deployed "${{ needs.select.outputs.head }}"
+          git push -f origin refs/tags/deployed

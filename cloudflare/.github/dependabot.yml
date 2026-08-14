@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    assignees: ["blixten85"]
+    directories:
+      - "/app"
+      - "/engine"
+      - "/processor"
+      - "/token-rotator"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "00:00"
+      timezone: "Europe/Stockholm"
+    groups:
+      npm-patch-minor:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    assignees: ["blixten85"]
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "01:00"
+      timezone: "Europe/Stockholm"
+    groups:
+      actions-patch-minor:
+        update-types: ["minor", "patch"]

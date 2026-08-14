@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Describer</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<section id="auth-view">
+  <div class="card auth-card">
+    <h1><img src="/logo.svg" class="logo-mark" alt=""> Product Describer</h1>
+
+    <form id="login-form">
+      <h2>Logga in</h2>
+      <input type="email" name="email" placeholder="E-postadress" required>
+      <input type="password" name="password" placeholder="Lösenord" required>
+      <button type="submit">Logga in</button>
+      <p id="login-msg" class="error"></p>
+    </form>
+
+    <form id="signup-form" hidden>
+      <h2>Skapa konto</h2>
+      <input type="email" name="email" placeholder="E-postadress" required>
+      <input type="password" name="password" placeholder="Lösenord (minst 8 tecken)" required minlength="8">
+      <button type="submit">Skapa konto</button>
+      <p id="signup-msg" class="error"></p>
+    </form>
+
+    <p class="link"><button type="button" id="toggle-auth-btn" class="link-btn">Inget konto? Registrera dig</button></p>
+
+    <div class="oauth-divider"><span>eller</span></div>
+    <a class="oauth-btn" href="/api/oauth/google">Logga in med Google</a>
+    <a class="oauth-btn" href="/api/oauth/microsoft">Logga in med Microsoft</a>
+  </div>
+</section>
+
+<main id="app-view" hidden>
+  <nav class="header-links">
+    <button id="hamburger-btn" class="hamburger" aria-label="Meny">☰</button>
+    <h1><img src="/logo.svg" class="logo-mark" alt=""> Product Describer</h1>
+    <button id="logout-btn" class="link-btn">Logga ut</button>
+  </nav>
+  <nav id="dept-drawer" hidden>
+    <button class="dept-link" data-dept="verktyg">Beskriv-verktyg</button>
+    <button class="dept-link" data-dept="underlag">Ansökningsunderlag</button>
+    <button class="dept-link" data-dept="katalog">Katalog</button>
+    <button class="dept-link" data-dept="bevakning">Prisbevakning</button>
+    <button class="dept-link" data-dept="forslag">Föreslå sida</button>
+    <button class="dept-link" data-dept="faq">FAQ</button>
+    <button class="dept-link" data-dept="stod">Stötta tjänsten</button>
+    <button class="dept-link" data-dept="admin" hidden>Admin</button>
+  </nav>
+
+  <section id="dept-verktyg" class="dept">
+  <div class="card" id="settings-card">
+    <h2>AI-leverantörer</h2>
+    <p class="hint">Lägg till minst en API-nyckel för att kunna skicka in filer.</p>
+    <div id="provider-list"></div>
+
+    <details id="add-key-details">
+      <summary>Lägg till / uppdatera en nyckel</summary>
+      <select id="provider-select"></select>
+      <input type="text" id="api-key-input" placeholder="API-nyckel">
+      <div id="extra-fields"></div>
+      <button type="button" id="save-key-btn">Spara</button>
+      <p id="settings-msg"></p>
+    </details>
+  </div>
+
+  <div class="card" id="upload-card">
+    <h2>Ny körning</h2>
+    <p class="hint">CSV, Excel (.xlsx), .txt, .docx eller .pdf — max 50MB.</p>
+    <form id="upload-form">
+      <input type="file" id="file-input" accept=".csv,.xlsx,.txt,.docx,.pdf" required>
+
+      <label>Ton</label>
+      <select name="tone">
+        <option value="">Variera (standard)</option>
+        <option value="saklig">Saklig</option>
+        <option value="entusiastisk">Entusiastisk</option>
+        <option value="humoristisk">Humoristisk</option>
+        <option value="lyxig">Lyxig</option>
+      </select>
+
+      <label>Längd</label>
+      <select name="length">
+        <option value="medel">Medel (standard)</option>
+        <option value="kort">Kort</option>
+        <option value="lang">Lång</option>
+      </select>
+
+      <input type="text" name="audience" placeholder="Målgrupp (valfritt)">
+      <textarea name="custom_direction" placeholder="Extra instruktion (valfritt)" rows="2"></textarea>
+
+      <button type="submit" id="upload-submit-btn">Starta körning</button>
+      <p id="upload-msg" class="error"></p>
+    </form>
+  </div>
+
+  <div class="card" id="jobs-card">
+    <h2>Dina körningar</h2>
+    <ul id="jobs-list"></ul>
+  </div>
+  </section>
+
+  <section id="dept-underlag" class="dept" hidden>
+  <div class="card" id="bistand-card">
+    <h2>Underlag till socialtjänsten</h2>
+    <p class="hint">Sök produkter, lägg till dem och skriv en motivering till varför du behöver dem. Skapa sedan ett utskrivbart underlag att skicka in.</p>
+
+    <div class="bistand-search">
+      <input type="text" id="catalog-q" placeholder="Sök produkt (namn)…">
+      <button type="button" id="catalog-search-btn">Sök</button>
+    </div>
+    <ul id="catalog-results" class="catalog-list"></ul>
+
+    <h3>Ditt underlag</h3>
+    <label class="describe-mode-row">
+      <input type="checkbox" id="describe-auto-toggle">
+      <span>Generera beskrivningar automatiskt</span>
+    </label>
+    <p class="hint" id="describe-auto-hint"></p>
+    <ul id="bistand-list" class="bistand-list"></ul>
+    <div class="cat-pager" id="bistand-pager" hidden>
+      <button type="button" id="bistand-prev" class="link-btn">← Föregående</button>
+      <span class="hint" id="bistand-info"></span>
+      <button type="button" id="bistand-next" class="link-btn">Nästa →</button>
+    </div>
+    <div id="bistand-generate"></div>
+    <a href="/underlag" target="_blank" rel="noopener" id="underlag-btn" class="btn-link">Öppna utskrivbart underlag →</a>
+  </div>
+  </section>
+
+  <section id="dept-katalog" class="dept" hidden>
+    <div class="card">
+      <h2>Katalog</h2>
+      <p class="hint">Bläddra och sök bland produkterna. Klicka på en produkt för detaljer, prishistorik och beskrivning.</p>
+      <div class="bistand-search">
+        <input type="text" id="cat-q" placeholder="Sök produkt (namn)…">
+        <button type="button" id="cat-search-btn">Sök</button>
+      </div>
+      <select id="cat-category"><option value="">Alla kategorier</option></select>
+      <div class="cat-bulk">
+        <span>Alla på sidan:</span>
+        <button type="button" id="cat-bulk-underlag" class="link-btn">+ Underlag</button>
+        <button type="button" id="cat-bulk-bevaka" class="link-btn">★ Bevaka</button>
+        <span class="hint" id="cat-bulk-msg"></span>
+      </div>
+      <div class="cat-bulk">
+        <span>Hela katalogen (nuvarande filter):</span>
+        <button type="button" id="cat-bulkall-underlag" class="link-btn">+ Underlag</button>
+        <button type="button" id="cat-bulkall-bevaka" class="link-btn">★ Bevaka</button>
+        <span class="hint" id="cat-bulkall-msg"></span>
+      </div>
+      <ul id="cat-results" class="catalog-list"></ul>
+      <div class="cat-pager">
+        <button type="button" id="cat-prev" class="link-btn" hidden>← Föregående</button>
+        <button type="button" id="cat-next" class="link-btn" hidden>Nästa →</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="dept-bevakning" class="dept" hidden>
+    <div class="card">
+      <h2>Prisbevakning</h2>
+      <p class="hint">Bevaka produkter och få larm när priset faller (≥5 % och ≥100 kr). Lägg till en produkt via "Bevaka pris" i katalogen.</p>
+      <ul id="watch-list" class="bistand-list"></ul>
+    </div>
+    <div class="card">
+      <h2>Larmkanaler</h2>
+      <p class="hint">Vart larmen ska skickas. Lägg till en eller flera.</p>
+      <ul id="channel-list" class="bistand-list"></ul>
+      <div class="channel-add">
+        <select id="channel-kind">
+          <option value="ntfy">ntfy (topic-URL)</option>
+          <option value="slack">Slack (webhook-URL)</option>
+          <option value="telegram">Telegram (bottoken:chatid)</option>
+          <option value="webhook">Webhook (URL)</option>
+        </select>
+        <input type="text" id="channel-target" placeholder="Adress/config…">
+        <button type="button" id="channel-add-btn">Lägg till</button>
+      </div>
+      <p class="hint" id="channel-msg"></p>
+    </div>
+  </section>
+
+  <section id="dept-forslag" class="dept" hidden>
+    <div class="card">
+      <h2>Föreslå en sida</h2>
+      <p class="hint">Sakna du en funktion eller sida? Föreslå den — förslaget granskas innan något byggs.</p>
+      <form id="suggest-form">
+        <input type="text" id="suggest-title" placeholder="Kort titel…" required>
+        <textarea id="suggest-desc" rows="4" placeholder="Beskriv vad sidan ska göra…"></textarea>
+        <button type="submit">Skicka förslag</button>
+        <p class="hint" id="suggest-msg"></p>
+      </form>
+    </div>
+    <div class="card" id="suggest-admin-card" hidden>
+      <h2>Inkomna förslag</h2>
+      <ul id="suggest-list" class="bistand-list"></ul>
+    </div>
+  </section>
+  <section id="dept-faq" class="dept" hidden>
+    <div class="card">
+      <h2>Vanliga frågor</h2>
+      <details><summary>Vad är Product Describer?</summary>
+        <p>En tjänst som genererar produktbeskrivningar med AI, bläddrar i en produktkatalog, bevakar priser och hjälper dig att sammanställa ett utskrivbart underlag till socialtjänsten.</p></details>
+      <details><summary>Vad kostar det?</summary>
+        <p>Att bläddra i katalogen, bevaka priser och skapa underlag är gratis. För att generera egna AI-beskrivningar lägger du till din egen API-nyckel (t.ex. Gemini) under Beskriv-verktyg — du betalar då leverantören direkt för din användning.</p></details>
+      <details><summary>Varför måste jag lägga till en egen API-nyckel för beskrivningar?</summary>
+        <p>Beskrivningar körs mot betalda AI-leverantörer. För att tjänsten ska vara gratis att driva använder varje konto sin egen nyckel. Redan genererade (cachade) beskrivningar visas gratis för alla.</p></details>
+      <details><summary>Var kommer produkterna ifrån?</summary>
+        <p>Katalogen byggs genom att automatiskt hämta publika produktsidor (t.ex. Webhallen, IKEA) med pris, kategori och länk. Priser uppdateras löpande så att prisbevakningen fungerar.</p></details>
+      <details><summary>Hur fungerar prisbevakningen?</summary>
+        <p>Lägg till en produkt via "Bevaka pris" i katalogen. Du får ett larm när priset faller minst 5 % och minst 100 kr. Larm skickas till de kanaler du lägger till (ntfy, Slack, Telegram eller webhook).</p></details>
+      <details><summary>Vad är "Ansökningsunderlag"?</summary>
+        <p>Du väljer produkter ur katalogen, skriver en motivering per produkt och skapar en utskrivbar sida (skriv ut / spara som PDF) att skicka till socialtjänsten.</p></details>
+      <details><summary>Kan jag lägga till många produkter på en gång?</summary>
+        <p>Ja. I katalogen finns dels "Alla på sidan" (de produkter som visas just nu), dels "Hela katalogen (nuvarande filter)" som lägger till alla produkter som matchar din sökning/kategori i underlaget eller prisbevakningen — i en enda knapptryckning. Redan tillagda hoppas över automatiskt.</p></details>
+      <details><summary>Kan jag föreslå en ny funktion?</summary>
+        <p>Ja — via "Föreslå sida". Förslaget granskas manuellt innan något byggs.</p></details>
+      <details><summary>Hur loggar jag in?</summary>
+        <p>Med e-post och lösenord, eller med Google/Microsoft.</p></details>
+    </div>
+  </section>
+
+  <section id="dept-stod" class="dept" hidden>
+    <div class="card stod-card">
+      <h2>Stötta tjänsten</h2>
+      <p class="hint">Tjänsten är gratis att använda. Vill du hjälpa till att täcka drift- och API-kostnader är en gåva varmt uppskattad.</p>
+      <div class="stod-options">
+        <a class="btn-link stod-btn" href="https://www.paypal.com/paypalme/anders0225/25" target="_blank" rel="noopener">Ge via PayPal (25 kr) →</a>
+        <a class="btn-link stod-btn" href="https://whydonate.com/sv/donate/product-describer" target="_blank" rel="noopener">Ge via WhyDonate →</a>
+      </div>
+      <div class="stod-qrs">
+        <figure><figcaption>PayPal — skanna och betala</figcaption>
+          <img src="/paypal-qr.jpeg" alt="PayPal QR-kod" class="donate-qr"></figure>
+        <figure><figcaption>Swish</figcaption>
+          <img src="/swish-qr.png" alt="Swish QR-kod" class="donate-qr"></figure>
+      </div>
+    </div>
+  </section>
+  <section id="dept-admin" class="dept" hidden>
+    <div class="card">
+      <h2>Statistik</h2>
+      <div id="admin-stats" class="stat-grid"></div>
+      <h3 class="chart-title">Nya konton per dag (30 dagar)</h3>
+      <div id="chart-accounts" class="chart-wrap"></div>
+      <h3 class="chart-title">Genererade beskrivningar per dag (30 dagar)</h3>
+      <div id="chart-descriptions" class="chart-wrap"></div>
+      <h3 class="chart-title">Loggade prispunkter per dag (14 dagar)</h3>
+      <div id="chart-prices" class="chart-wrap"></div>
+    </div>
+    <div class="card">
+      <h2>Konton</h2>
+      <p class="hint">Senaste 500. Rollbyte slår igenom direkt.</p>
+      <div class="table-scroll">
+        <table class="admin-table">
+          <thead><tr><th>E-post</th><th>Roll</th><th>Skapad</th><th>Jobb</th><th>Bevakn.</th><th>Underlag</th><th></th></tr></thead>
+          <tbody id="admin-accounts"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Sajter</h2>
+      <p class="hint"><code>detail_selector</code> = CSS-väljare som fetchern använder som första källa för produkttexten (annars JSON-LD → og → meta). Sätt den för butiker där den automatiska texten blir dålig. Tomt = bara heuristik. Ändringar sparas per rad.</p>
+      <div class="table-scroll">
+        <table class="admin-table">
+          <thead><tr><th>Sajt</th><th>Produkter</th><th>m. källtext</th><th>detail_selector</th><th>Stealth</th><th>Aktiv</th><th></th></tr></thead>
+          <tbody id="admin-sites"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <p class="hint">Katalogen exporteras utan source_text/beskrivningstext (bara flagga) — annars blir filen orimligt stor.</p>
+      <div class="cat-actions">
+        <a class="link-btn" href="/api/admin/export/products" download>Produkter (CSV)</a>
+        <a class="link-btn" href="/api/admin/export/products?format=json" download>Produkter (JSON)</a>
+        <a class="link-btn" href="/api/admin/export/accounts" download>Konton (CSV)</a>
+        <a class="link-btn" href="/api/admin/export/accounts?format=json" download>Konton (JSON)</a>
+      </div>
+    </div>
+  </section>
+  <div id="product-modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <button type="button" id="modal-close" class="link-btn">✕ Stäng</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
