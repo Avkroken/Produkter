@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraper — Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script nonce="{{ csp_nonce }}">
+        (function() {
+            const saved = localStorage.getItem('theme');
+            const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', saved || preferred);
+        })();
+    </script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <span class="spider-icon text-primary"></span> Web Scraper
+            </a>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <div class="scraping-indicator me-2">
+                    <span class="scraping-dot"></span> Monitoring
+                </div>
+                <a class="nav-link" href="/">Dashboard</a>
+                <a class="nav-link" href="/config">Configuration</a>
+                <button class="theme-toggle ms-1" id="themeToggle" title="Toggle theme">
+                    <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
+
+        <div class="page-header d-flex justify-content-between align-items-center">
+            <h1>Dashboard</h1>
+            <span class="text-muted" style="font-size:0.8rem;" id="lastUpdated"></span>
+        </div>
+
+        <!-- Stats -->
+        <div class="row g-3 mb-4">
+            <div class="col-sm-4">
+                <div class="card stat-card h-100" style="--stat-color: #3b82f6;">
+                    <div class="card-body">
+                        <div class="stat-value" id="total-products">—</div>
+                        <div class="stat-label">Total products</div>
+                        <i class="bi bi-box-seam stat-icon"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="card stat-card h-100" style="--stat-color: #22c55e;">
+                    <div class="card-body">
+                        <div class="stat-value" id="updated-24h">—</div>
+                        <div class="stat-label">Updated last 24h</div>
+                        <i class="bi bi-arrow-repeat stat-icon"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="card stat-card h-100" style="--stat-color: #a855f7;">
+                    <div class="card-body">
+                        <div class="stat-value" id="active-configs">—</div>
+                        <div class="stat-label">Active configurations</div>
+                        <i class="bi bi-sliders stat-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="card mb-4">
+            <div class="card-body d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" id="triggerScrapeBtn">
+                    <i class="bi bi-play-fill me-1"></i> Start scraping now
+                </button>
+                <a href="/config" class="btn btn-outline-secondary">
+                    <i class="bi bi-gear me-1"></i> Configuration
+                </a>
+                <button class="btn btn-outline-secondary" id="exportBtn">
+                    <i class="bi bi-download me-1"></i> Export CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Products -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Latest products</span>
+                <input type="text" id="searchInput" class="search-input form-control"
+                       style="max-width: 220px;"
+                       placeholder="&#xF52A; Search...">
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTable">
+                        <tr><td colspan="2" class="text-center py-4 text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top py-2 d-flex justify-content-between align-items-center" id="pagination" style="display:none!important">
+                <span class="text-muted" style="font-size:0.8rem;" id="paginationInfo"></span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" id="prevBtn" disabled>
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="nextBtn" disabled>
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/script.js"></script>
+    <script nonce="{{ csp_nonce }}">
+        const PAGE_SIZE = 50;
+        let currentPage = 0;
+        let totalProducts = 0;
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-bs-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            document.getElementById('themeIcon').className = dark ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+        }
+
+        document.querySelectorAll('.nav-link').forEach(l => {
+            if (l.getAttribute('href') === window.location.pathname) l.classList.add('active');
+        });
+
+        fetch('/api/stats')
+            .then(r => r.json())
+            .then(s => {
+                document.getElementById('total-products').textContent = (s.total_products || 0).toLocaleString();
+                document.getElementById('updated-24h').textContent = (s.updated_24h || 0).toLocaleString();
+                document.getElementById('active-configs').textContent = (s.active_configs || 0).toLocaleString();
+                document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'});
+            })
+            .catch(() => {});
+
+        function resetAndLoad() {
+            currentPage = 0;
+            loadProducts();
+        }
+
+        function prevPage() {
+            if (currentPage > 0) { currentPage--; loadProducts(); }
+        }
+
+        function nextPage() {
+            if ((currentPage + 1) * PAGE_SIZE < totalProducts) { currentPage++; loadProducts(); }
+        }
+
+        function loadProducts() {
+            const search = document.getElementById('searchInput').value;
+            const offset = currentPage * PAGE_SIZE;
+            fetch(`/api/products?limit=${PAGE_SIZE}&offset=${offset}&search=${encodeURIComponent(search)}`)
+                .then(r => r.json())
+                .then(data => {
+                    totalProducts = data.total || 0;
+                    const tbody = document.getElementById('productsTable');
+                    const pg = document.getElementById('pagination');
+
+                    if (!data.products || data.products.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="2">
+                            <div class="empty-state">
+                                <i class="bi bi-inbox"></i>
+                                No products found
+                            </div></td></tr>`;
+                        pg.style.display = 'none';
+                        return;
+                    }
+
+                    tbody.innerHTML = data.products.map(p => `
+                        <tr>
+                            <td><a class="product-link" href="${escapeHtml(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.title)}</a></td>
+                            <td><span class="price-badge">${formatPrice(p.current_price)}</span></td>
+                        </tr>
+                    `).join('');
+
+                    const start = offset + 1;
+                    const end = Math.min(offset + data.products.length, totalProducts);
+                    document.getElementById('paginationInfo').textContent = `${start}–${end} of ${totalProducts.toLocaleString()}`;
+                    document.getElementById('prevBtn').disabled = currentPage === 0;
+                    document.getElementById('nextBtn').disabled = end >= totalProducts;
+                    pg.style.removeProperty('display');
+                })
+                .catch(() => showToast('Failed to load products', 'danger'));
+        }
+
+        function triggerScrape() {
+            if (!confirm('Start scraping now?')) return;
+            fetch('/api/scrape', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => showToast(d.message || 'Scraping started', 'success'))
+                .catch(() => showToast('Failed to start scraping', 'danger'));
+        }
+
+        updateThemeIcon();
+        loadProducts();
+        startStatsPolling(30000);
+
+        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+        document.getElementById('searchInput').addEventListener('input', resetAndLoad);
+        document.getElementById('prevBtn').addEventListener('click', prevPage);
+        document.getElementById('nextBtn').addEventListener('click', nextPage);
+        document.getElementById('triggerScrapeBtn').addEventListener('click', triggerScrape);
+        document.getElementById('exportBtn').addEventListener('click', () => exportData());
+    </script>
+</body>
+</html>

@@ -8,6 +8,18 @@
 Generates Swedish product descriptions via your own Claude (Anthropic),
 ChatGPT (OpenAI), Gemini (Google) and/or Azure OpenAI Service API account.
 
+## Repots delar
+
+| Katalog | Vad |
+| --- | --- |
+| roten | Python-appen: webbgränssnitt, extraktorer och providers |
+| `cloudflare/` | Samma produkt byggd på Cloudflare Workers (`app`, `engine`, `processor`) |
+| `scraper/` | Webshop-scrapern som matar produktdata in i kedjan |
+
+De låg tidigare i tre repon trots att de hör ihop: `github_report.py` fanns
+duplicerad (och divergerad) i roten och i scrapern, och scraperns
+`wrangler.jsonc` deployar en Worker som heter `product-describer-app`.
+
 These are developer API accounts, billed separately from any consumer
 subscription (ChatGPT Plus, Claude Pro, Gemini Advanced, GitHub/Microsoft
 Copilot) you might also have — none of those subscriptions expose an API of

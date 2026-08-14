@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraper — Configuration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script nonce="{{ csp_nonce }}">
+        (function() {
+            const saved = localStorage.getItem('theme');
+            const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', saved || preferred);
+        })();
+    </script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <span class="spider-icon text-primary"></span> Web Scraper
+            </a>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <a class="nav-link" href="/">Dashboard</a>
+                <a class="nav-link" href="/config">Configuration</a>
+                <button class="theme-toggle ms-1" id="themeToggle" title="Toggle theme">
+                    <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
+
+        <div class="page-header d-flex justify-content-between align-items-center">
+            <h1>Configuration</h1>
+            <button class="btn btn-primary" id="addSiteBtn">
+                <i class="bi bi-plus-lg me-1"></i> Add site
+            </button>
+        </div>
+
+        <!-- Add Form -->
+        <div id="addForm" class="card mb-4" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>New scraper configuration</span>
+                <button class="btn btn-sm btn-outline-secondary" id="addFormCloseBtn">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <form id="addConfigForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" id="cfgName" required placeholder="e.g. Example.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Start URL</label>
+                            <div class="d-flex gap-2">
+                                <input type="text" class="form-control" id="cfgUrl" required placeholder="https://www.example.com/products">
+                                <button type="button" class="btn btn-outline-secondary text-nowrap" id="detectBtn" title="Auto-detect selectors">
+                                    <i class="bi bi-magic" id="detectIcon"></i> Detect
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="d-flex flex-column gap-1 mb-1">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="cfgSubcategory">
+                                    <label class="form-check-label" for="cfgSubcategory">
+                                        Auto-discover subcategories <small class="text-muted">(följ kategorilänkar)</small>
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="cfgStealth">
+                                    <label class="form-check-label" for="cfgStealth">
+                                        Stealth mode <small class="text-muted">(Akamai / Cloudflare)</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12" id="paginationSelectorRow" style="display:none">
+                            <label class="form-label">Category link selector <small class="text-muted">(vilka länkar scrapern följer)</small></label>
+                            <input type="text" class="form-control" id="cfgPaginationSelector" placeholder="a[href*='/kategori/']">
+                            <div class="form-text">CSS-selector för kategorilänkar på sidan. Fylls i automatiskt av templates.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Product container selector</label>
+                            <input type="text" class="form-control" id="cfgProduct" required placeholder="div.product-item">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Title selector</label>
+                            <input type="text" class="form-control" id="cfgTitle" required placeholder="h2.product-title">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Price selector</label>
+                            <input type="text" class="form-control" id="cfgPrice" required placeholder="span.price">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Link selector</label>
+                            <input type="text" class="form-control" id="cfgLink" required placeholder="a.product-link">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Exclude link pattern <small class="text-muted">(optional)</small></label>
+                            <input type="text" class="form-control" id="cfgExclude" placeholder="/produkt/x">
+                            <div class="form-text">Produktlänkar som innehåller denna sträng ignoreras (t.ex. fyndhörna-artiklar).</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Proxy URL <small class="text-muted">(optional)</small></label>
+                            <input type="text" class="form-control" id="cfgProxy" placeholder="socks5://user:pass@host:1080">
+                        </div>
+                        <div class="col-12 d-flex gap-2 pt-1">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="addFormCancelBtn">Cancel</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Templates -->
+        <div class="card mb-4">
+            <div class="card-header">Quick templates</div>
+            <div class="card-body d-flex flex-wrap gap-2" id="templatesContainer">
+                <button class="btn btn-outline-secondary btn-sm" data-template="inet">
+                    <i class="bi bi-lightning me-1"></i> Inet.se
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" data-template="komplett">
+                    <i class="bi bi-lightning me-1"></i> Komplett.se
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" data-template="webhallen">
+                    <i class="bi bi-lightning me-1"></i> Webhallen.com
+                </button>
+            </div>
+        </div>
+
+        <!-- Advanced settings -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center"
+                 style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#advancedBody">
+                <span><i class="bi bi-gear me-2"></i>Advanced settings</span>
+                <i class="bi bi-chevron-down" id="advancedChevron"></i>
+            </div>
+            <div class="collapse" id="advancedBody">
+                <div class="card-body">
+                    <div id="settingsGrid" class="row g-3">
+                        <div class="col-12 text-muted">Loading...</div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="mb-3"><i class="bi bi-key me-2"></i>Database credentials</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">New username</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="credUsername" placeholder="scraper">
+                                <button class="btn btn-outline-secondary" id="saveUsernameBtn">Save</button>
+                            </div>
+                            <div class="form-text">Renames the PostgreSQL user. Takes effect immediately.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">New password</label>
+                            <div class="input-group input-group-sm">
+                                <input type="password" class="form-control" id="credPassword" placeholder="min 8 characters">
+                                <button class="btn btn-outline-secondary" id="savePasswordBtn">Save</button>
+                            </div>
+                            <div class="form-text">Updates the PostgreSQL password immediately.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configs list -->
+        <div class="card">
+            <div class="card-header">Active configurations</div>
+            <div id="configsList">
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/script.js"></script>
+    <script nonce="{{ csp_nonce }}">
+        const templates = {
+            inet: {
+                name: "Inet.se",
+                base_url: "https://www.inet.se/kategori/",
+                product_selector: "a[href*='/produkt/']",
+                title_selector: "",
+                price_selector: "text=/\\d[\\d\\s]*\\s*kr/",
+                link_selector: "",
+                subcategory: true,
+                pagination_selector: "a[href*='/kategori/']",
+                exclude_link_pattern: "/produkt/x"
+            },
+            komplett: {
+                name: "Komplett.se",
+                base_url: "https://www.komplett.se/",
+                product_selector: "div.product-list-item",
+                title_selector: "h2.product-name",
+                price_selector: "span.product-price-now",
+                link_selector: "a.product-link",
+                subcategory: true,
+                pagination_selector: "a[href*='/category/']",
+                note: "Kräver proxy — blockeras av Akamai utan"
+            },
+            webhallen: {
+                name: "Webhallen.com",
+                base_url: "https://www.webhallen.com/se/",
+                product_selector: "div.product-item",
+                title_selector: "h2.product-title",
+                price_selector: "span.price",
+                link_selector: "a.product-link",
+                subcategory: true,
+                pagination_selector: "a[href*='/category/']"
+            }
+        };
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-bs-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            document.getElementById('themeIcon').className = dark ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+        }
+
+        document.querySelectorAll('.nav-link').forEach(l => {
+            if (l.getAttribute('href') === window.location.pathname) l.classList.add('active');
+        });
+
+        function toggleAddForm() {
+            const form = document.getElementById('addForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function togglePaginationSelector() {
+            const show = document.getElementById('cfgSubcategory').checked;
+            document.getElementById('paginationSelectorRow').style.display = show ? 'block' : 'none';
+        }
+
+        function loadTemplate(name) {
+            const t = templates[name];
+            if (!t) return;
+            document.getElementById('cfgName').value = t.name;
+            document.getElementById('cfgUrl').value = t.base_url || '';
+            document.getElementById('cfgProduct').value = t.product_selector;
+            document.getElementById('cfgTitle').value = t.title_selector;
+            document.getElementById('cfgPrice').value = t.price_selector;
+            document.getElementById('cfgLink').value = t.link_selector;
+            document.getElementById('cfgExclude').value = t.exclude_link_pattern || '';
+            document.getElementById('cfgProxy').value = '';
+            document.getElementById('cfgStealth').checked = false;
+            document.getElementById('cfgSubcategory').checked = !!t.subcategory;
+            document.getElementById('cfgPaginationSelector').value = t.pagination_selector || '';
+            togglePaginationSelector();
+            if (t.note) showToast(t.note, 'warning');
+            document.getElementById('addForm').style.display = 'block';
+            document.getElementById('addForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function normalizeUrl(raw) {
+            const s = raw.trim();
+            if (!s) return s;
+            return s.startsWith('http://') || s.startsWith('https://') ? s : 'https://' + s;
+        }
+
+        function autoDetect() {
+            const urlInput = document.getElementById('cfgUrl');
+            const url = normalizeUrl(urlInput.value.trim());
+            if (!url) { showToast('Enter a URL first', 'warning'); return; }
+            urlInput.value = url;
+            const btn = document.getElementById('detectBtn');
+            const icon = document.getElementById('detectIcon');
+            btn.disabled = true;
+            icon.className = 'bi bi-arrow-repeat spin';
+            fetch('/api/detect', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    if (res.product_selector) document.getElementById('cfgProduct').value = res.product_selector;
+                    if (res.title_selector)   document.getElementById('cfgTitle').value   = res.title_selector;
+                    if (res.price_selector)   document.getElementById('cfgPrice').value   = res.price_selector;
+                    if (res.link_selector)    document.getElementById('cfgLink').value    = res.link_selector;
+                    if (res.site_name && !document.getElementById('cfgName').value.trim())
+                        document.getElementById('cfgName').value = res.site_name;
+                    if (res.use_stealth)
+                        document.getElementById('cfgStealth').checked = true;
+                    const found = [res.product_selector, res.title_selector, res.price_selector, res.link_selector].filter(Boolean).length;
+                    const botMsg = res.bot_protection && res.bot_protection !== 'none'
+                        ? ` — ${escapeHtml(res.bot_protection)} detected, stealth enabled` : '';
+                    showToast(`Detected ${found}/4 selectors${botMsg}`, found >= 3 ? 'success' : 'warning');
+                } else {
+                    showToast('Detection failed: ' + (res.message || 'Unknown error'), 'danger');
+                }
+            })
+            .catch(() => showToast('Detection request failed', 'danger'))
+            .finally(() => {
+                btn.disabled = false;
+                icon.className = 'bi bi-magic';
+            });
+        }
+
+        function addConfig(e) {
+            e.preventDefault();
+            const isSubcategory = document.getElementById('cfgSubcategory').checked;
+            const data = {
+                name: document.getElementById('cfgName').value,
+                base_url: normalizeUrl(document.getElementById('cfgUrl').value.trim()),
+                product_selector: document.getElementById('cfgProduct').value,
+                title_selector: document.getElementById('cfgTitle').value,
+                price_selector: document.getElementById('cfgPrice').value,
+                link_selector: document.getElementById('cfgLink').value,
+                pagination_type: isSubcategory ? 'subcategory' : 'query',
+                pagination_selector: isSubcategory ? document.getElementById('cfgPaginationSelector').value.trim() : '',
+                exclude_link_pattern: document.getElementById('cfgExclude').value.trim(),
+                proxy_url: document.getElementById('cfgProxy').value.trim(),
+                use_stealth: document.getElementById('cfgStealth').checked,
+                enabled: true
+            };
+            fetch('/api/configs', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    showToast('Configuration saved', 'success');
+                    toggleAddForm();
+                    e.target.reset();
+                    loadConfigs();
+                } else {
+                    showToast('Error: ' + (res.message || 'Could not save'), 'danger');
+                }
+            })
+            .catch(() => showToast('Failed to save configuration', 'danger'));
+        }
+
+        function deleteConfig(id) {
+            if (!confirm('Delete this configuration?')) return;
+            fetch(`/api/configs/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(() => { showToast('Configuration deleted', 'success'); loadConfigs(); })
+                .catch(() => showToast('Failed to delete', 'danger'));
+        }
+
+        function loadConfigs() {
+            fetch('/api/configs')
+                .then(r => r.json())
+                .then(configs => {
+                    const el = document.getElementById('configsList');
+                    if (configs.length === 0) {
+                        el.innerHTML = `<div class="card-body">
+                            <div class="empty-state">
+                                <i class="bi bi-sliders"></i>
+                                No configurations yet — add your first site above
+                            </div></div>`;
+                        return;
+                    }
+                    el.innerHTML = `<div class="table-responsive"><table class="table table-hover">
+                        <thead><tr>
+                            <th>Name</th><th>Status</th><th></th>
+                        </tr></thead>
+                        <tbody>${configs.map(c => `
+                            <tr>
+                                <td>
+                                    <div class="fw-500">${escapeHtml(c.name)}</div>
+                                    ${(() => {
+                                        const urls = c.base_url.split('\n').map(u => u.trim()).filter(Boolean);
+                                        if (urls.length > 1) {
+                                            return `<div class="text-muted small text-truncate" style="max-width:220px">${escapeHtml(urls[0])}</div>
+                                            <div class="text-muted small">+${urls.length - 1} URL${urls.length > 2 ? ':er' : ''} till</div>`;
+                                        }
+                                        return `<div class="text-muted small text-truncate" style="max-width:220px">${escapeHtml(urls[0] || c.base_url)}</div>`;
+                                    })()}
+                                    ${c.proxy_url ? `<div class="text-muted small"><i class="bi bi-arrow-left-right me-1"></i>${escapeHtml(c.proxy_url.replace(/\/\/.*@/, '//***@'))}</div>` : ''}
+                                </td>
+                                <td class="align-middle">
+                                    ${c.enabled
+                                        ? '<span class="status-active"><i class="bi bi-circle-fill" style="font-size:0.5rem"></i> Active</span>'
+                                        : '<span class="status-inactive"><i class="bi bi-circle-fill" style="font-size:0.5rem"></i> Inactive</span>'
+                                    }
+                                    ${c.use_stealth ? ' <span class="badge bg-warning text-dark" title="Stealth mode active"><i class="bi bi-shield-shaded"></i></span>' : ''}
+                                </td>
+                                <td class="text-end align-middle">
+                                    <button class="btn btn-sm btn-outline-danger js-delete-config" data-config-id="${c.id}">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody></table></div>`;
+                })
+                .catch(() => showToast('Could not load configurations', 'danger'));
+        }
+
+        updateThemeIcon();
+        loadConfigs();
+
+        // === Advanced settings ===
+        const advancedBody = document.getElementById('advancedBody');
+        advancedBody.addEventListener('show.bs.collapse', loadSettings);
+        document.getElementById('advancedBody').addEventListener('shown.bs.collapse', () => {
+            document.getElementById('advancedChevron').className = 'bi bi-chevron-up';
+        });
+        document.getElementById('advancedBody').addEventListener('hidden.bs.collapse', () => {
+            document.getElementById('advancedChevron').className = 'bi bi-chevron-down';
+        });
+
+        function loadSettings() {
+            fetch('/api/settings')
+                .then(r => r.json())
+                .then(settings => renderSettings(settings))
+                .catch(() => {
+                    document.getElementById('settingsGrid').innerHTML =
+                        '<div class="col-12 text-danger">Could not load settings</div>';
+                });
+        }
+
+        function renderSettings(settings) {
+            const grid = document.getElementById('settingsGrid');
+            grid.innerHTML = Object.entries(settings).map(([key, s]) => {
+                const inputId = `setting_${key}`;
+                let input;
+                if (s.type === 'bool') {
+                    input = `<div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" id="${inputId}"
+                            ${s.value === 'true' || s.value === true ? 'checked' : ''}
+                            data-setting-key="${escapeHtml(key)}">
+                    </div>`;
+                } else {
+                    const unit = s.unit ? `<span class="input-group-text">${escapeHtml(s.unit)}</span>` : '';
+                    const placeholder = s.placeholder ? `placeholder="${escapeHtml(s.placeholder)}"` : '';
+                    const min = s.min != null ? `min="${s.min}"` : '';
+                    input = `<div class="input-group input-group-sm">
+                        <input type="${s.type === 'int' || s.type === 'float' ? 'number' : 'text'}"
+                            class="form-control" id="${inputId}"
+                            value="${escapeHtml(String(s.value))}"
+                            ${min} ${placeholder}
+                            data-setting-key="${escapeHtml(key)}">
+                        ${unit}
+                    </div>`;
+                }
+                return `<div class="col-md-6">
+                    <label class="form-label fw-500 mb-1" for="${inputId}">${escapeHtml(s.label)}</label>
+                    ${input}
+                    <div class="form-text mt-1">${escapeHtml(s.description)}</div>
+                    <div class="form-text text-secondary" style="font-size:0.75rem">
+                        <i class="bi bi-info-circle me-1"></i>${escapeHtml(s.why)}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function saveCredential(type) {
+            const fieldId = type === 'password' ? 'credPassword' : 'credUsername';
+            const value = document.getElementById(fieldId).value.trim();
+            if (!value) { showToast('Enter a value first', 'warning'); return; }
+            fetch(`/api/credentials/${type}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(type === 'password' ? { password: value } : { username: value })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    showToast(`${type === 'password' ? 'Password' : 'Username'} updated`, 'success');
+                    document.getElementById(fieldId).value = '';
+                } else {
+                    showToast('Failed: ' + (res.message || ''), 'danger');
+                }
+            })
+            .catch(() => showToast('Request failed', 'danger'));
+        }
+
+        function saveSetting(key, value) {
+            fetch(`/api/settings/${key}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ value })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') showToast('Setting saved', 'success');
+                else showToast('Failed to save: ' + (res.message || ''), 'danger');
+            })
+            .catch(() => showToast('Save failed', 'danger'));
+        }
+
+        // === Event listeners ===
+        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+        document.getElementById('addSiteBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addFormCloseBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addFormCancelBtn').addEventListener('click', toggleAddForm);
+        document.getElementById('addConfigForm').addEventListener('submit', addConfig);
+        document.getElementById('detectBtn').addEventListener('click', autoDetect);
+        document.getElementById('cfgSubcategory').addEventListener('change', togglePaginationSelector);
+        document.getElementById('saveUsernameBtn').addEventListener('click', () => saveCredential('username'));
+        document.getElementById('savePasswordBtn').addEventListener('click', () => saveCredential('password'));
+
+        // Event delegation — template buttons
+        document.getElementById('templatesContainer').addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-template]');
+            if (btn) loadTemplate(btn.dataset.template);
+        });
+
+        // Event delegation — delete config buttons (dynamically rendered)
+        document.getElementById('configsList').addEventListener('click', function(e) {
+            const btn = e.target.closest('.js-delete-config');
+            if (btn) deleteConfig(parseInt(btn.dataset.configId, 10));
+        });
+
+        // Event delegation — settings inputs (dynamically rendered)
+        document.getElementById('settingsGrid').addEventListener('change', function(e) {
+            const key = e.target.dataset.settingKey;
+            if (!key) return;
+            const value = e.target.type === 'checkbox' ? e.target.checked.toString() : e.target.value;
+            saveSetting(key, value);
+        });
+    </script>
+</body>
+</html>
