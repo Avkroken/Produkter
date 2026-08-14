@@ -101,7 +101,10 @@ jobs:
           workers = set()
           shared_consumers = {"app", "engine", "processor"}
           for f in changed:
-              top = f.split("/", 1)[0]
+              parts = f.split("/")
+              if len(parts) < 2 or parts[0] != "cloudflare":
+                  continue
+              top = parts[1]
               if top in {"app", "engine", "processor"}:
                   workers.add(top)
               elif top == "shared":
@@ -127,14 +130,14 @@ jobs:
           ref: main   # deploya alltid main-HEAD, oavsett vilket event som fyrade
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
-          node-version: 24.18.0
+          node-version: 24
           cache: npm
-          cache-dependency-path: ${{ matrix.worker }}/package-lock.json
+          cache-dependency-path: cloudflare/${{ matrix.worker }}/package-lock.json
       - name: Install
-        working-directory: ${{ matrix.worker }}
+        working-directory: cloudflare/${{ matrix.worker }}
         run: npm ci
       - name: Deploy ${{ matrix.worker }}
-        working-directory: ${{ matrix.worker }}
+        working-directory: cloudflare/${{ matrix.worker }}
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCT_DESCRIBER_CLOUDFLARE }}

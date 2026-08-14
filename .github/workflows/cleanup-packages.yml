@@ -1,8 +1,11 @@
 name: Cleanup old package versions
 
+# Varje push till main lägger en sha-taggad version i ghcr. Utan städning
+# växer paketen obegränsat; här behålls bara latest.
+
 on:
   schedule:
-    - cron: '0 3 * * 0'  # Sundays at 03:00
+    - cron: '0 3 * * 0' # söndagar 03:00
   workflow_dispatch:
 
 permissions:
@@ -11,16 +14,24 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [product-describer, scraper]
     steps:
-      - name: Delete untagged and old SHA versions
+      - name: Radera otaggade och gamla sha-versioner
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PACKAGE: ${{ matrix.package }}
         with:
           script: |
-            const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser({
-              package_type: 'container',
-              package_name: 'product-describer',
-              per_page: 100,
-            });
+            const package_name = process.env.PACKAGE;
+            const { data: versions } =
+              await github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser({
+                package_type: 'container',
+                package_name,
+                per_page: 100,
+              });
 
             const keep = new Set(['latest']);
             let deleted = 0;
@@ -30,10 +41,10 @@ jobs:
               if (tags.some(t => keep.has(t))) continue;
               await github.rest.packages.deletePackageVersionForAuthenticatedUser({
                 package_type: 'container',
-                package_name: 'product-describer',
+                package_name,
                 package_version_id: v.id,
               });
               deleted++;
             }
 
-            console.log(`Deleted ${deleted} old versions`);
+            console.log(`${package_name}: raderade ${deleted} gamla versioner`);
