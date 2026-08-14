@@ -2,7 +2,6 @@ name: Dependency Review
 
 on:
   pull_request:
-    branches: [main, dev]
 
 permissions:
   contents: read
@@ -19,5 +18,9 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
-          retry-on-snapshot-warnings: true
-          retry-on-snapshot-warnings-timeout: 120
+          # Ingen retry. Retryn väntar på snapshots från Dependency Submission
+          # API:t, och ingenting i det här repot skickar sådana — beroendegrafen
+          # läser manifesten direkt. Väntan kan alltså aldrig ge något, och när
+          # pollningen mot api.github.com tog timeout föll hela jobbet på ett
+          # problem som inte fanns.
+          retry-on-snapshot-warnings: false

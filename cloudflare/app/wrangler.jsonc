@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "product-describer-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/signup", "/login", "/logout", "/underlag"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "product_describer",
+      "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "product-describer-uploads"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSIONS",
+      "id": "adafd9ea9ec24bc8ab8da87ff80467cc"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "product-describer-jobs",
+        "binding": "JOB_QUEUE"
+      }
+    ]
+  },
+  "vars": {
+    // On-demand-beskrivning (Avd. B) proxas hit. INGEST_API_KEY sätts som secret.
+    "ENGINE_URL": "https://engine.denied.se",
+    // OAuth-inloggning — egna appar för product-describer. Microsoft client_id
+    // och båda client_secret sätts som wrangler secrets. Callback-URL:er registrerade i
+    // respektive OAuth-app: product-describer.denied.se/api/oauth/<provider>/callback.
+    "OAUTH_GOOGLE_CLIENT_ID": "551393755081-gtbd45b203icbbp0cu0q0p4meppli2fu.apps.googleusercontent.com",
+    "MAIL_FROM": "noreply@send.denied.se",
+    "ADMIN_EMAIL": "anders.eriksson@denied.se"
+  }
+}

@@ -1,0 +1,5 @@
+PROVIDER_CONFIG_KEY="generera-med: openssl rand -base64 32"
+
+# OAuth-värden sätts i produktion via `wrangler secret put <NAMN>`.
+OAUTH_MICROSOFT_CLIENT_ID="your-microsoft-oauth-client-id"
+

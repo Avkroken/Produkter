@@ -35,7 +35,9 @@ updates:
 
   - package-ecosystem: "docker-compose"
     assignees: ["blixten85"]
-    directory: "/"
+    directories:
+      - "/"
+      - "/scraper"
     schedule:
       interval: "weekly"
       day: "tuesday"
@@ -43,4 +45,36 @@ updates:
       timezone: "Europe/Stockholm"
     groups:
       docker-compose-patch-minor:
+        update-types: ["minor", "patch"]
+
+  # Scrapern som flyttade hit. Egen Dockerfile och requirements.txt per
+  # deltjänst (api, webui, fetcher, alerts, scraper).
+  - package-ecosystem: "pip"
+    assignees: ["blixten85"]
+    directories:
+      - "/scraper"
+      - "/scraper/*"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "00:00"
+      timezone: "Europe/Stockholm"
+    groups:
+      scraper-pip-patch-minor:
+        update-types: ["minor", "patch"]
+
+  # Workers-versionen som flyttade hit.
+  - package-ecosystem: "npm"
+    assignees: ["blixten85"]
+    directories:
+      - "/cloudflare/app"
+      - "/cloudflare/engine"
+      - "/cloudflare/processor"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "00:20"
+      timezone: "Europe/Stockholm"
+    groups:
+      npm-patch-minor:
         update-types: ["minor", "patch"]

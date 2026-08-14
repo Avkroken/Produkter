@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - dev
   workflow_dispatch:
 
 concurrency:
@@ -16,21 +15,57 @@ permissions:
   contents: read
 
 jobs:
+  # Ett jobb för båda Python-projekten. Inte en matris: den obligatoriska
+  # checken heter python, och matrisjobb heter "python (scraper)" — namnet
+  # skulle försvinna och checken bli gul för evigt.
   python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.13'
+          python-version: '3.x'
           cache: pip
-      - name: Install dependencies
+
+      - name: Installera beroenden
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
-          find . -path './.git' -prune -o -name 'requirements.txt' -not -path './requirements.txt' -print0 | xargs -0 -r -n1 python -m pip install -r
+          find . -path './.git' -prune -o -path './cloudflare' -prune -o \
+            -name 'requirements.txt' -print0 | xargs -0 -r -n1 python -m pip install -r
           if [ -f pyproject.toml ]; then python -m pip install -e '.[test]' || python -m pip install -e .; fi
-      - run: python -m compileall .
-      - name: Run tests
+
+      - name: Kompilera
+        run: python -m compileall . -x '^\./cloudflare/'
+
+      - name: Kör tester
         run: |
-          if [ -d tests ]; then python -m pip install pytest && python -m pytest; else echo "No tests directory found"; fi
+          python -m pip install pytest
+          for d in . scraper; do
+            if [ -d "$d/tests" ]; then
+              echo "--- $d"
+              (cd "$d" && python -m pytest)
+            fi
+          done
+
+  node:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [app, engine, processor]
+    defaults:
+      run:
+        working-directory: cloudflare/${{ matrix.worker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+
+      - name: Installera beroenden
+        run: npm install
+
+      - name: Typkontroll
+        run: npx tsc --noEmit
