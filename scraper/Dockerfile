@@ -39,6 +39,12 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN playwright install-deps chromium
 
+# Supervisord startar de fyra processerna från olika kataloger (/app/scraper,
+# /app/api, /app/alerts, /app). Utan detta blir sys.path[0] processens egen
+# katalog, och delade moduler som github_report.py måste finnas i en kopia
+# bredvid varje entrypoint. Med /app på PYTHONPATH räcker en kopia i roten.
+ENV PYTHONPATH=/app
+
 COPY . .
 
 RUN chmod +x entrypoint.sh

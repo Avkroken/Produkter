@@ -1,5 +1,19 @@
 # product-describer — Claude Code Guide
 
+## Repository layout
+
+Three parts of one product, previously three separate repositories:
+
+| Directory | What |
+| --- | --- |
+| root | The Python app — web UI, extractors, provider failover (this document) |
+| `cloudflare/` | The same product on Cloudflare Workers (`app`, `engine`, `processor`) — see `cloudflare/README.md` |
+| `scraper/` | The webshop scraper that feeds product data into the chain — see `scraper/CLAUDE.md` |
+
+The rest of this document covers the root Python app.
+
+## The root app
+
 Generates Swedish product descriptions and "varför" justifications via the
 user's own Claude (Anthropic), ChatGPT (OpenAI), Gemini (Google) and/or
 Azure OpenAI Service API accounts, with automatic failover between
@@ -89,4 +103,28 @@ docker compose up -d
 - Unexpected exceptions (Flask error handler, sync loop) call
   `report_error_to_github()` (`github_report.py`) — best-effort, opens a
   `@claude`-tagged GitHub issue with secrets/emails/paths redacted if
-  `GITHUB_ERROR_REPORT_TOKEN` is set, no-ops otherwise
+  `GITHUB_ERROR_REPORT_TOKEN` is set, no-ops otherwise. The root image and
+  the scraper image are built from different contexts, so each carries its
+  own copy of `github_report.py`; keep them identical — `scraper/` has the
+  same file and the same tests
+
+## Allowed
+- Create branches
+- Modify code
+- Run tests
+- Open PRs
+
+## Forbidden
+- Push directly to main/master
+- Merge PRs
+- Delete branches
+- Disable workflows
+- Modify secrets
+- Change GitHub org settings
+
+## Requirements
+- All tests must pass
+- Keep PRs focused
+- Never include unrelated changes
+- Never commit credentials
+- Never force push

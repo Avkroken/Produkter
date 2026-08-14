@@ -1,6 +1,11 @@
-# 🤝 Contributing to Web Scraper Platform
+# 🤝 Contributing to product-describer
 
 Thank you for considering contributing to this project!
+
+The repository holds three parts of one product: the Python app in the root,
+the Cloudflare Workers build in `cloudflare/`, and the scraper in `scraper/`.
+The setup steps below are for the scraper stack; the root app and the Workers
+build have their own instructions in `README.md` and `cloudflare/README.md`.
 
 ## 🐛 Reporting Bugs
 
@@ -25,8 +30,8 @@ Thank you for considering contributing to this project!
 
 - Fork and clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/scraper.git
-cd scraper
+git clone https://github.com/YOUR_USERNAME/product-describer.git
+cd product-describer/scraper
 ```
 
 - Configure environment

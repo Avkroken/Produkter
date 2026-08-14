@@ -10,22 +10,12 @@ import logging
 import re
 import requests
 import secrets as _secrets
-import sentry_sdk
-from sentry_sdk.integrations.flask import FlaskIntegration
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, g, Response
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
 from github_report import report_error_to_github
-
-sentry_sdk.init(
-    dsn=os.getenv("SENTRY_DSN"),
-    integrations=[FlaskIntegration()],
-    traces_sample_rate=1.0,
-    send_default_pii=False,
-    max_request_body_size="never",
-)
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
@@ -44,9 +34,8 @@ def handle_unexpected_error(exc):
     if isinstance(exc, HTTPException):
         return exc
     logger.exception("Unhandled error handling %s %s", request.method, request.path)
-    sentry_sdk.capture_exception(exc)
     report_error_to_github(
-        "blixten85/scraper",
+        "blixten85/product-describer",
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},

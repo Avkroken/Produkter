@@ -1,4 +1,7 @@
-# Data
+# Scraper-specific ignores. Everything generic (Python, Node, secrets, logs,
+# editors, Docker) lives in the repo root .gitignore.
+
+# Scraped data and local databases
 data/
 *.db
 *.db-shm
@@ -6,77 +9,15 @@ data/
 *.sqlite
 *.sqlite3
 
-# Secrets & Environment
-secrets/
-.env
-*.env
-!.env.example
-
-# Logs
-logs/
-*.log
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDE
-.DS_Store
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Docker
-docker-compose.override.yml
-
-# Backups
-backups/
-*.backup
-
-# Temporary
-tmp/
-temp/
-*.tmp
-secrets/
-secrets/
-data/
-.env
-secrets/
-data/
-.env
-secrets/
+# Scraper output — .txt is an output format here, so it is ignored wholesale
 products.txt
 *.txt
 !requirements.txt
-*.orig
 
-# wrangler files
-.wrangler
-.dev.vars*
-!.dev.vars.example
+# Backups and scratch
+backups/
+*.backup
+tmp/
+temp/
+*.tmp
+*.orig
