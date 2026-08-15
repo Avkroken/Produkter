@@ -59,28 +59,11 @@ jobs:
 
       # Bilden byggs lokalt och publiceras först efter godkänd skanning —
       # annars vore grinden verkningslös: den vore redan ute när Trivy fäller.
-      - name: Trivy — skanna byggd image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      # Själva skanningen bor i .github/actions/trivy, en fil per verktyg.
+      - name: Trivy
+        uses: ./.github/actions/trivy
         with:
-          scan-type: image
           image-ref: ghcr.io/blixten85/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
-          format: sarif
-          output: trivy-results.sarif
-          # ignore-unfixed är brusfiltret: det som saknar patch faller bort.
-          # Det som blir kvar går per definition att åtgärda.
-          ignore-unfixed: true
-          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          limit-severities-for-sarif: true
-          exit-code: '1'
-
-      # always() så fynden når code scanning även när steget ovan fällde bygget.
-      # Kategorin måste vara unik per image, annars skriver den ena imagens
-      # resultat över den andras i code scanning.
-      - name: Ladda upp Trivy-resultat
-        uses: github/codeql-action/upload-sarif@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
           category: trivy-${{ matrix.image }}
 
       - name: Publicera imagen (först efter godkänd skanning)
