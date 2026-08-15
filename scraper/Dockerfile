@@ -1,4 +1,8 @@
-FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+# Flytande: `stable-slim` följer Debians nuvarande stable, `trixie-slim` gör
+# det inte — den sitter kvar på trixie även när nästa stable släppts. En
+# pinnad digest ovanpå det hade dessutom frusit även säkerhetsuppdateringarna
+# tills Dependabot råkade bumpa den.
+FROM debian:stable-slim
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 

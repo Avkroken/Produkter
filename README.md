@@ -35,6 +35,16 @@ Two modes are supported:
 - **File upload** — drag and drop in the web UI, or run `python main.py run products.csv`.
 - **Sync** — pull products directly from the [scraper](scraper/) API, generate descriptions, and write them back. Started with a docker-compose profile (see below).
 
+## Versioner
+
+Beroenden och basimager hålls **flytande**, inte pinnade. `debian:stable-slim`
+följer Debians nuvarande stable; `trixie-slim` gjorde det inte, och en pinnad
+digest ovanpå frös även säkerhetsuppdateringarna.
+
+Enda undantaget är GitHub Actions, som pinnas till commit-SHA — en tagg kan
+pekas om till annan kod, en SHA kan det inte. Se `AGENTS.md` för regeln i sin
+helhet.
+
 ## Getting started
 
 ```bash
