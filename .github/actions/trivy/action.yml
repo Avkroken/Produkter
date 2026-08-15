@@ -1,16 +1,13 @@
 name: Trivy
 description: >-
   Skannar en redan byggd, lokalt laddad image och laddar upp fynden till code
-  scanning. Fäller anropande jobb om något åtgärdbart hittas.
+  scanning. Fäller ALDRIG bygget — se exit-code nedan.
 
 # Composite action, inte en reusable workflow (`workflow_call`): en reusable
 # workflow kör som ett EGET jobb på en EGEN runner, och imagen finns bara i den
 # byggande runnerns docker-daemon (`load: true`). Att flytta den dit hade krävt
 # `docker save` -> artifact -> `docker load`, vilket för scraper-imagen (Debian
-# med Playwright/Chromium) är flera GB fram och tillbaka per körning — och
-# framför allt: skanningen MÅSTE ligga i samma jobb som bygget för att kunna
-# grinda publiceringen. Publiceras imagen i ett separat jobb är den redan ute
-# när Trivy fäller.
+# med Playwright/Chromium) är flera GB fram och tillbaka per körning.
 
 inputs:
   image-ref:
@@ -35,11 +32,18 @@ runs:
         # ignore-unfixed är brusfiltret: det som saknar patch faller bort.
         # Det som blir kvar går per definition att åtgärda.
         ignore-unfixed: true
+        # Alla nivåer, inte bara HIGH/CRITICAL: allt som går att åtgärda ska
+        # synas och åtgärdas.
         severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
         limit-severities-for-sarif: true
-        exit-code: '1'
+        # Fäller INTE bygget. Fynden kommer nästan alltid från basimagen, och
+        # att blockera en dokumentationsfix för en CVE som Debian patchar i
+        # nästa uppdatering hjälper ingen. Allt rapporteras till code scanning,
+        # där det syns och kan åtgärdas — Dependabot och basimage-bumparna gör
+        # sedan jobbet.
+        exit-code: '0'
 
-    # always() så fynden når code scanning även när steget ovan fällde bygget.
+    # always() så fynden når code scanning även om skanningssteget avbryts.
     - name: Ladda upp resultatet
       uses: github/codeql-action/upload-sarif@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
       if: always()

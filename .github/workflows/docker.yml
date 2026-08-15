@@ -1,7 +1,9 @@
 name: Docker
 
-# Bygger imagen, skannar den med Trivy och publicerar först om skanningen
-# är ren. Två images sedan scrapern flyttade hit — samma steg, olika context.
+# Bygger imagen, publicerar den och skannar den med Trivy. Skanningen
+# rapporterar till code scanning men fäller inte bygget — se
+# .github/actions/trivy. Två images sedan scrapern flyttade hit — samma steg,
+# olika context.
 
 on:
   push:
@@ -57,16 +59,16 @@ jobs:
             ghcr.io/blixten85/${{ matrix.image }}:latest
             ghcr.io/blixten85/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
 
-      # Bilden byggs lokalt och publiceras först efter godkänd skanning —
-      # annars vore grinden verkningslös: den vore redan ute när Trivy fäller.
-      # Själva skanningen bor i .github/actions/trivy, en fil per verktyg.
+      # Skanningen bor i .github/actions/trivy, en fil per verktyg. Imagen
+      # byggs lokalt (load: true) så den finns att skanna även på PR:er, där
+      # inget publiceras.
       - name: Trivy
         uses: ./.github/actions/trivy
         with:
           image-ref: ghcr.io/blixten85/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
           category: trivy-${{ matrix.image }}
 
-      - name: Publicera imagen (först efter godkänd skanning)
+      - name: Publicera imagen
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         run: |
           docker push ghcr.io/blixten85/${{ matrix.image }}:latest
