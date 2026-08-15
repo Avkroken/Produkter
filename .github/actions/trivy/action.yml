@@ -1,0 +1,48 @@
+name: Trivy
+description: >-
+  Skannar en redan byggd, lokalt laddad image och laddar upp fynden till code
+  scanning. Fäller anropande jobb om något åtgärdbart hittas.
+
+# Composite action, inte en reusable workflow (`workflow_call`): en reusable
+# workflow kör som ett EGET jobb på en EGEN runner, och imagen finns bara i den
+# byggande runnerns docker-daemon (`load: true`). Att flytta den dit hade krävt
+# `docker save` -> artifact -> `docker load`, vilket för scraper-imagen (Debian
+# med Playwright/Chromium) är flera GB fram och tillbaka per körning — och
+# framför allt: skanningen MÅSTE ligga i samma jobb som bygget för att kunna
+# grinda publiceringen. Publiceras imagen i ett separat jobb är den redan ute
+# när Trivy fäller.
+
+inputs:
+  image-ref:
+    description: Fullständig tagg på den lokalt laddade imagen som ska skannas.
+    required: true
+  category:
+    description: >-
+      Kategori i code scanning. Måste vara unik per image — annars skriver den
+      ena imagens resultat över den andras.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Skanna imagen
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.image-ref }}
+        format: sarif
+        output: trivy-results.sarif
+        # ignore-unfixed är brusfiltret: det som saknar patch faller bort.
+        # Det som blir kvar går per definition att åtgärda.
+        ignore-unfixed: true
+        severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+        limit-severities-for-sarif: true
+        exit-code: '1'
+
+    # always() så fynden når code scanning även när steget ovan fällde bygget.
+    - name: Ladda upp resultatet
+      uses: github/codeql-action/upload-sarif@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
+      if: always()
+      with:
+        sarif_file: trivy-results.sarif
+        category: ${{ inputs.category }}
