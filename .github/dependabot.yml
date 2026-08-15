@@ -12,9 +12,14 @@ updates:
       pip-patch-minor:
         update-types: ["minor", "patch"]
 
+  # Båda Dockerfilerna: roten och scraperns. Bara "/" innebar att scraperns
+  # basimage aldrig bumpades — och det är basimagen nästan alla Trivy-fynd
+  # kommer från, så utan den här raden rapporteras fynd som ingen åtgärdar.
   - package-ecosystem: "docker"
     assignees: ["blixten85"]
-    directory: "/"
+    directories:
+      - "/"
+      - "/scraper"
     schedule:
       interval: "weekly"
       day: "tuesday"
