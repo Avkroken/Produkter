@@ -4,6 +4,23 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
+  // product-describer.denied.se serveras av den här workern, men domänen är
+  // inte konfigurerad här — den ligger bara i dashboarden. En custom domain som
+  // satts för hand återskapas inte av `wrangler deploy`; försvinner posten går
+  // sajten ner utan att något i repot ändrats. Exakt det hände klarsprak
+  // 2026-08-17: workern var deployad och frisk, men domänen saknade DNS-post.
+  //
+  // Posten nedan flyttar ägarskapet hit, men går inte att aktivera förrän
+  // API-token PRODUCT_DESCRIBER får "Zone -> Workers Routes -> Edit" på
+  // denied.se (den har idag bara Account -> Workers Scripts -> Edit plus D1,
+  // KV, R2 och Queues). Utan den behörigheten faller deployen på sista steget:
+  //
+  //   /zones/.../workers/routes failed. Authentication error [code: 10000]
+  //
+  // Samma sak gäller klarsprak/wrangler.jsonc för IDN-aliaset. När tokenen är
+  // utökad: avkommentera, så äger repot både routen och DNS-posten.
+  //
+  // "routes": [{ "pattern": "product-describer.denied.se", "custom_domain": true }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
