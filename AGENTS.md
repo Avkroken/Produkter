@@ -47,7 +47,7 @@ auth.py             # Account signup/login (SQLite), legacy-data migration for t
 main.py             # CLI (run / sync subcommands) — env-var keys, not account-scoped
 providers.py        # Provider abstraction + ProviderChain failover engine
 provider_config.py  # Per-account API key storage (config/accounts/<id>/credentials/) + failover order
-prompts.py          # Builds the system prompt from tone/length/audience/custom options
+prompts.py           # Builds the system prompt from tone/length/audience/custom options
 extractors.py       # Turns an uploaded file into product rows (AI-assisted for unstructured formats)
 templates/index.html, login.html, signup.html
 ```
@@ -130,29 +130,63 @@ som väntar.
   leverantörskedjekontroll, inte versionshantering, och Dependabot bumpar dem
   ändå automatiskt.
 
+## Arbetsflöde: exakt en uppgift åt gången
+
+Repositoryt har exakt två arbetsgrenar: `dev` och `main`. Skapa aldrig en tredje
+gren, inte ens tillfälligt. Allt utvecklingsarbete görs direkt på `dev` och går
+via ett ändringsförslag från `dev` till `main`.
+
+En agent får ha exakt en aktiv koduppgift åt gången. Börja inte analysera,
+implementera eller committa nästa uppgift innan den aktuella uppgiften har gått
+hela vägen genom leveranskedjan nedan, eller uttryckligen har blockerats av något
+som agenten inte kan lösa själv.
+
+För varje uppgift, i denna ordning:
+
+1. Synka `dev` med `main` innan arbetet börjar. Om `dev` innehåller ofärdigt arbete, slutför det först i stället för att börja något nytt.
+2. Implementera endast den aktuella uppgiften på `dev`, kör relevanta tester och rätta fel innan leverans.
+3. Commit och push till `dev`. Lämna inte färdig eller halvfärdig kod ocommittad för att börja med nästa uppgift.
+4. Skapa eller uppdatera exakt ett PR från `dev` till `main`, lös relevanta review-kommentarer och CI-fel, och aktivera auto-merge.
+5. Vänta tills PR:n är mergad. Synka därefter `dev` fram till `main`. Först då får nästa uppgift påbörjas.
+
+Om PR:n eller uppgiften blockeras av en extern åtgärd som agenten faktiskt inte
+kan utföra, dokumentera den exakta blockeraren och stanna. Börja inte en annan
+koduppgift som en genväg runt blockeraren utan uttrycklig instruktion från
+användaren.
+
+Flera uppgifter i samma användarmeddelande är en kö, inte parallellt arbete.
+Behandla dem i given eller logisk ordning och slutför hela kedjan ovan för varje
+uppgift innan nästa tas från kön.
+
 ## Tillåtet
-- Ändra kod
+- Ändra kod på `dev`
 - Köra tester
-- Öppna ändringsförslag från `dev` till standardgrenen
+- Öppna ändringsförslag endast från `dev` till `main`
+- Rätta CI- och reviewproblem för den aktiva uppgiften tills PR:n kan mergas
 
 ## Förbjudet
+- Skapa andra grenar än `dev` och `main`
+- Arbeta parallellt på flera koduppgifter
+- Börja nästa uppgift medan den aktuella PR:n fortfarande är öppen eller blockerad
 - Skicka ändringar direkt till `main` eller `master`
 - Radera grenar
 - Stänga av arbetsflöden
 - Ändra hemligheter
 - Ändra inställningar för GitHub-organisationen
+- Tvinga igenom en push eller kringgå branch protection/rulesets
 
 ## Krav
 - Överlämna kodändringar endast på `dev`
-- Alla tester måste godkännas
+- Alla relevanta tester måste godkännas
 - Håll varje ändringsförslag avgränsat till en uppgift
 - Ta aldrig med orelaterade ändringar
 - Överlämna aldrig inloggningsuppgifter eller andra hemligheter till versionshistoriken
-- Tvinga aldrig igenom en skickning
 - Skapa ändringsförslag som klara för granskning, aldrig som utkast
-- Aktivera automatisk sammanfogning med en sammanfogningsöverlämning direkt efter att ändringsförslaget skapats
+- Aktivera automatisk sammanfogning direkt efter att ändringsförslaget skapats
 - Automatisk sammanfogning får slutföras först när alla regelkrav och kontrollkörningar har godkänts
+- Om CI, review eller auto-merge blockerar leveransen: försök lösa blockeraren innan något annat kodarbete påbörjas
 - Om automatisk sammanfogning inte kan aktiveras: rapportera det exakta felet
+- Efter merge: synka `dev` till `main` innan nästa uppgift
 
 ## Svarsformat
 
