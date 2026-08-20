@@ -1,0 +1,14 @@
+.env
+.env.*
+*.env
+.git/
+.github/
+__pycache__/
+*.pyc
+*.pyo
+tests/
+*.md
+.gitignore
+AGENTS.md
+CLAUDE.md
+CHANGELOG.md

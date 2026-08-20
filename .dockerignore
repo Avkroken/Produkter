@@ -10,5 +10,12 @@ __pycache__/
 .git/
 .github/
 tests/
+cloudflare/
+scraper/
+docs/
+scripts/
 *.md
 LICENSE
+docker-compose*.yml
+docker-compose*.yaml
+.gitignore
