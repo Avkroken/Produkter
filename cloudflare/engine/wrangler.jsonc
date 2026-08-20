@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "product-describer-engine",
+  "name": "produkter-motor",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   // nodejs_compat: behövs av beroenden som använder node:-API:er.
@@ -21,15 +21,15 @@
     "DESCRIBE_WORKERS": "2" // parallella AI-anrop
   },
   // Custom domain — kontots workers.dev blockeras (403/1050); övriga Workers
-  // använder också custom domains (product-describer.denied.se, politiker.denied.se).
+  // använder också custom domains (produkter.denied.se, politiker.denied.se).
   // Skyddas av X-API-Key i koden (ingen Cloudflare Access), som dagens scraper-API.
   "routes": [
-    { "pattern": "engine.denied.se", "custom_domain": true }
+    { "pattern": "motor.denied.se", "custom_domain": true }
   ],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "product_describer",
+      "database_name": "produkter",
       "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
     }
   ]

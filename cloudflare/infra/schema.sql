@@ -1,4 +1,4 @@
--- product-describer D1-schema. Motsvarar SQLite-databasen (accounts.db)
+-- produkter D1-schema. Motsvarar SQLite-databasen (accounts.db)
 -- och filsystem-lagringen (config/accounts/<id>/credentials/,
 -- provider_order.json) i den befintliga Flask-versionen.
 

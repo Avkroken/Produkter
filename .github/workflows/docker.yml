@@ -28,10 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: product-describer
+          - image: produkter
             context: .
+            trivy-category: trivy-product-describer
           - image: scraper
             context: scraper
+            trivy-category: trivy-scraper
     permissions:
       contents: read
       packages: write
@@ -59,14 +61,14 @@ jobs:
             ghcr.io/blixten85/${{ matrix.image }}:latest
             ghcr.io/blixten85/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
 
-      # Skanningen bor i .github/actions/trivy, en fil per verktyg. Imagen
-      # byggs lokalt (load: true) så den finns att skanna även på PR:er, där
-      # inget publiceras.
+      # Trivy-kategorin är ett stabilt Code Scanning-ID och ska inte följa
+      # produkt-/imagenamn. Annars tolkar GitHub ett namnbyte som att en
+      # säkerhetskonfiguration har försvunnit från PR:n.
       - name: Trivy
         uses: ./.github/actions/trivy
         with:
           image-ref: ghcr.io/blixten85/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
-          category: trivy-${{ matrix.image }}
+          category: ${{ matrix.trivy-category }}
 
       - name: Publicera imagen
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'

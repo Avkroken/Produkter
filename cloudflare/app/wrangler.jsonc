@@ -1,26 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "product-describer-app",
+  "name": "produkter",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
-  // product-describer.denied.se serveras av den här workern, men domänen är
-  // inte konfigurerad här — den ligger bara i dashboarden. En custom domain som
-  // satts för hand återskapas inte av `wrangler deploy`; försvinner posten går
-  // sajten ner utan att något i repot ändrats. Exakt det hände klarsprak
-  // 2026-08-17: workern var deployad och frisk, men domänen saknade DNS-post.
-  //
-  // Posten nedan flyttar ägarskapet hit, men går inte att aktivera förrän
-  // API-token PRODUCT_DESCRIBER får "Zone -> Workers Routes -> Edit" på
-  // denied.se (den har idag bara Account -> Workers Scripts -> Edit plus D1,
-  // KV, R2 och Queues). Utan den behörigheten faller deployen på sista steget:
-  //
-  //   /zones/.../workers/routes failed. Authentication error [code: 10000]
-  //
-  // Samma sak gäller klarsprak/wrangler.jsonc för IDN-aliaset. När tokenen är
-  // utökad: avkommentera, så äger repot både routen och DNS-posten.
-  //
-  // "routes": [{ "pattern": "product-describer.denied.se", "custom_domain": true }],
+  // Huvuddomänen för tjänsten.
+  "routes": [{ "pattern": "produkter.denied.se", "custom_domain": true }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -34,14 +19,14 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "product_describer",
+      "database_name": "produkter",
       "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
     }
   ],
   "r2_buckets": [
     {
       "binding": "UPLOADS",
-      "bucket_name": "product-describer-uploads"
+      "bucket_name": "produkter-uppladdningar"
     }
   ],
   "kv_namespaces": [
@@ -53,17 +38,17 @@
   "queues": {
     "producers": [
       {
-        "queue": "product-describer-jobs",
+        "queue": "produkter-jobb",
         "binding": "JOB_QUEUE"
       }
     ]
   },
   "vars": {
     // On-demand-beskrivning (Avd. B) proxas hit. INGEST_API_KEY sätts som secret.
-    "ENGINE_URL": "https://engine.denied.se",
-    // OAuth-inloggning — egna appar för product-describer. Microsoft client_id
+    "ENGINE_URL": "https://motor.denied.se",
+    // OAuth-inloggning — egna appar för produkter. Microsoft client_id
     // och båda client_secret sätts som wrangler secrets. Callback-URL:er registrerade i
-    // respektive OAuth-app: product-describer.denied.se/api/oauth/<provider>/callback.
+    // respektive OAuth-app: produkter.denied.se/api/oauth/<provider>/callback.
     "OAUTH_GOOGLE_CLIENT_ID": "551393755081-gtbd45b203icbbp0cu0q0p4meppli2fu.apps.googleusercontent.com",
     "MAIL_FROM": "noreply@send.denied.se",
     "ADMIN_EMAIL": "anders.eriksson@denied.se"

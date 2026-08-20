@@ -1,6 +1,6 @@
 """Statslös Playwright-fetcher — "muskeln" i den enhetliga arkitekturen.
 
-Se product-describer-cloudflare/DESIGN.md. Den här processen är allt som blir
+Se cloudflare/DESIGN.md. Den här processen är allt som blir
 kvar på servern: den håller ingen data, har ingen inkommande port, ingen DB.
 Den gör bara utgående HTTPS mot `engine`-Workern på Cloudflare:
 
@@ -16,7 +16,7 @@ upptäckta produkter med titel/pris). Lease-svaret bär list-selektorerna för
 list-jobb.
 
 Miljövariabler:
-    ENGINE_URL           t.ex. https://product-describer-engine.<subdomän>.workers.dev
+    ENGINE_URL           t.ex. https://motor.denied.se
     INGEST_API_KEY       operatörsnyckeln (X-API-Key)
     FETCHER_CONCURRENCY  parallella renderingar (default 3)
     LEASE_BATCH          jobb per lease (default 10)

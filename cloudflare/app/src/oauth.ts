@@ -1,6 +1,6 @@
 // OAuth-inloggning (authorization code). Portad från politiker-webapp — SAMMA
 // OAuth-appar (Google/Microsoft) återanvänds; bara redirect_uri skiljer, så
-// product-describers callback-URL måste läggas till i respektive OAuth-apps
+// produkters callback-URL måste läggas till i respektive OAuth-apps
 // redirect-lista. Apple ej stött (kräver roterande ES256-JWT-secret).
 import { randomId, hashPassword } from "../../shared/crypto";
 import { getAccountByEmail, type Env } from "./db";
@@ -33,7 +33,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
 };
 
-const REDIRECT_BASE = "https://product-describer.denied.se/api/oauth";
+const REDIRECT_BASE = "https://produkter.denied.se/api/oauth";
 
 export function isKnownProvider(provider: string): boolean {
   return provider in PROVIDERS;
@@ -84,7 +84,7 @@ async function exchangeCodeForUserInfo(
   const tokenData = await tokenResp.json<{ access_token: string }>();
 
   const userResp = await fetch(cfg.userinfoUrl, {
-    headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "product-describer" },
+    headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "produkter" },
   });
   if (!userResp.ok) throw new Error(`Kunde inte hämta användarinfo från ${provider}`);
   const userData = await userResp.json<Record<string, unknown>>();

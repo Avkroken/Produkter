@@ -1,4 +1,4 @@
-# Design: enhetlig product-describer (scraper + describer)
+# Design: enhetlig produkter (scraper + describer)
 
 Status: **förslag** · 2026-06-30 · författare: Claude (arkitekt på uppdrag av operatören)
 
@@ -8,7 +8,7 @@ Idag är systemet uppdelat på två ben med olika pålitlighet:
 
 - **scraper** (egen server): Playwright-crawl + postgres som **sanningskälla** för
   hela produktkatalogen (titel, pris, `source_text`, beskrivningar, prishistorik).
-- **product-describer-cloudflare**: beskriv-motorn (filuppladdning + en `sync`-cron
+- **cloudflare**: beskriv-motorn (filuppladdning + en `sync`-cron
   som pollar scraperns API).
 
 Problemet visade sig 2026-06-29: en USB-disk dog och tog hela postgres med sig —
@@ -17,7 +17,7 @@ Problemet visade sig 2026-06-29: en USB-disk dog och tog hela postgres med sig �
 
 Operatörens direktiv: *flytta så mycket som möjligt till Cloudflare; det som måste
 köras på servern (Playwright — för dyrt att migrera till Browser Rendering) får göra
-det; product-describer ska bli "allt scraper är + product-describer". Noll ny
+det; produkter ska bli "allt scraper är + produkter". Noll ny
 löpande kostnad.*
 
 ## 2. Bärande princip

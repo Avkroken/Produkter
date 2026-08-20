@@ -1,6 +1,6 @@
 # scraper/ — AI Agent Guide
 
-The part of product-describer that produces the product data. Repo-wide rules
+The part of produkter that produces the product data. Repo-wide rules
 live in the root `CLAUDE.md`; this document covers `scraper/` and every path
 below is relative to it.
 

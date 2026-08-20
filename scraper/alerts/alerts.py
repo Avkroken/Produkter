@@ -192,7 +192,7 @@ async def alerts_loop():
                 logger.info(f"Sent {sent} alerts")
         except (psycopg2.Error, requests.exceptions.RequestException, OSError) as e:
             logger.error(f"Error: {e}")
-            report_error_to_github("blixten85/product-describer", "Alerts check failed", e)
+            report_error_to_github("blixten85/produkter", "Alerts check failed", e)
 
         check_interval = get_setting('check_interval')
         logger.info(f"Next check in {check_interval}s")

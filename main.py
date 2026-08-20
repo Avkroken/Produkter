@@ -211,7 +211,7 @@ def cmd_sync(args) -> None:
         except Exception as e:
             log.error("Kunde inte hämta från scrapern: %s", e)
             report_error_to_github(
-                "blixten85/product-describer", "Sync: kunde inte hämta från scrapern", e
+                "blixten85/produkter", "Sync: kunde inte hämta från scrapern", e
             )
             products = []
 
@@ -238,7 +238,7 @@ def cmd_sync(args) -> None:
                     except Exception as e:
                         log.error("Kunde inte spara beskrivning för %s: %s", pid, e)
                         report_error_to_github(
-                            "blixten85/product-describer",
+                            "blixten85/produkter",
                             "Sync: kunde inte spara beskrivning",
                             e,
                             context={"product_id": str(pid)},

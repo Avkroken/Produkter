@@ -1,7 +1,7 @@
 # fetcher — statslös Playwright-muskel
 
 Allt som blir kvar på servern i den enhetliga arkitekturen
-(se `product-describer-cloudflare/DESIGN.md`). Håller ingen data, ingen
+(se `cloudflare/DESIGN.md`). Håller ingen data, ingen
 inkommande port, ingen DB — bara utgående HTTPS mot `engine`-Workern:
 
 ```
@@ -17,7 +17,7 @@ All durabel data ligger i D1 på Cloudflare.
 pip install -r requirements.txt
 playwright install chromium
 
-export ENGINE_URL="https://product-describer-engine.<subdomän>.workers.dev"
+export ENGINE_URL="https://motor.denied.se"
 export INGEST_API_KEY="<operatörsnyckeln>"
 python fetcher/fetcher.py
 ```

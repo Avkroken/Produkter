@@ -1,4 +1,4 @@
-// product-describer-engine — hjärnan i den enhetliga arkitekturen (se DESIGN.md).
+// produkter-motor — hjärnan i den enhetliga arkitekturen (se DESIGN.md).
 //
 // Cloudflare blir sanningskälla; servern krymps till en statslös Playwright-
 // fetcher som BARA gör utgående HTTPS. Den här Workern gör två saker:
@@ -48,7 +48,7 @@ interface Env extends GitHubReportEnv {
   ALERT_COOLDOWN_HOURS?: string; // cooldown per bevakning (default 24)
 }
 
-const REPO = "blixten85/product-describer";
+const REPO = "blixten85/produkter";
 
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter

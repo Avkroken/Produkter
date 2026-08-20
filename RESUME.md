@@ -30,7 +30,7 @@ ${DOCKER}=/home/berduf/.appdata (nu på frisk /home, samma sökväg).
 
 ## SCRAPER ÅTERSTÄLLD (2026-06-30) — var INTE migrerbar
 Misstag rättat: scrapern (Playwright) är hård lokal beroende av CF-sync-Workern (README rad 81). Återställde scraper+postgres i compose + scraper-api.denied.se i tunneln (ingress+DNS verifierat, /health -> 200 genom tunneln). webui-routen scraper.denied.se förblir borttagen (bara mänskligt UI, ingen Worker rör den). postgres TOM -> re-scrape krävs för data.
-Arkitektur: server kör scraper.py (crawl) + enrich.py (backlog category/source_text) + api:8765 + webui:3000 + alerts + postgres. CF kör product-describer app/processor (filuppladdning) + sync (cron 5 min pollar scraper-api). Enda krävda route: scraper-api.denied.se.
+Arkitektur: server kör scraper.py (crawl) + enrich.py (backlog category/source_text) + api:8765 + webui:3000 + alerts + postgres. CF kör produkter app/processor (filuppladdning) + sync (cron 5 min pollar scraper-api). Enda krävda route: scraper-api.denied.se.
 NÄSTA: kostnadsanalys CF (Browser Rendering + D1 + Workers) vs egen server.
 
 ## ENRICH-FIX (2026-06-30) — B.2 implementerad
@@ -56,14 +56,14 @@ KVAR:
 3. Fyndvara (~2607) får boilerplate (saknar Product-JSON-LD) — ev. ärva beskrivning från moderprodukt senare.
 
 ## ENHETLIG ARKITEKTUR (2026-06-30) — pågår
-DESIGN.md i product-describer-cloudflare. CF=hjärna+minne (D1), server=statslös Playwright-fetcher (pull). Noll kostnad (render_jobs-tabell, inte Queues; Playwright lokalt).
-- Fas 1 KLAR (#16 mergad + DEPLOYAD): D1 katalog-schema applicerat på live product_describer-DB; engine-Worker på **engine.denied.se** (workers.dev blockerat -> custom domain, #17). Secret INGEST_API_KEY satt + sparad i /home/berduf/.appdata/.config/.env.
-- Fas 2 KLAR (#220): fetcher/fetcher.py (scraper-repot). VERIFIERAD end-to-end mot live D1 (lease->render->result, titel/pris/source_text/prishistorik). Kör via scraper-imagen: docker run -e ENGINE_URL=https://engine.denied.se -e INGEST_API_KEY=... python /app/fetcher/fetcher.py
+DESIGN.md i cloudflare. CF=hjärna+minne (D1), server=statslös Playwright-fetcher (pull). Noll kostnad (render_jobs-tabell, inte Queues; Playwright lokalt).
+- Fas 1 KLAR (#16 mergad + DEPLOYAD): D1 katalog-schema applicerat på live produkter-DB; engine-Worker på **motor.denied.se** (workers.dev blockerat -> custom domain, #17). Secret INGEST_API_KEY satt + sparad i /home/berduf/.appdata/.config/.env.
+- Fas 2 KLAR (#220): fetcher/fetcher.py (scraper-repot). VERIFIERAD end-to-end mot live D1 (lease->render->result, titel/pris/source_text/prishistorik). Kör via scraper-imagen: docker run -e ENGINE_URL=https://motor.denied.se -e INGEST_API_KEY=... python /app/fetcher/fetcher.py
 - Engine-endpoints: POST /jobs/lease, POST /jobs/:id/result, POST /ingest, GET /health (X-API-Key).
-- Deploy engine: cd product-describer-cloudflare/engine; CLOUDFLARE_API_TOKEN=<politiker-deploy ur file-history v11>; npx wrangler deploy. D1: npx wrangler d1 execute product_describer --remote ...
+- Deploy engine: cd cloudflare/engine; npx wrangler deploy. D1: npx wrangler d1 execute produkter --remote ...
 KVAR:
 - Fas 3 migrering: när lokal-postgres-backloggen är klar -> exportera products/source_text/price_history -> D1 (POST /ingest eller wrangler d1). Test-rader (Deltaco id1) finns redan i D1.
-- Fas 4 KLAR (#18, DEPLOYAD): EN cron (*/5) i engine — reclaimLeases / scheduleDetailJobs / describeMissing. describe hoppas över tills GEMINI_API_KEY sätts (gratis): cd product-describer-cloudflare/engine && npx wrangler secret put GEMINI_API_KEY. GEMINI_API_KEY satt 2026-06-30 (free tier, projekt Product-describer). Cron körs live men ofarligt (få produkter i D1 tills migrering).
+- Fas 4 KLAR (#18, DEPLOYAD): EN cron (*/5) i engine — reclaimLeases / scheduleDetailJobs / describeMissing. describe hoppas över tills GEMINI_API_KEY sätts (gratis): cd cloudflare/engine && npx wrangler secret put GEMINI_API_KEY. GEMINI_API_KEY satt 2026-06-30 (free tier, projekt Produkter). Cron körs live men ofarligt (få produkter i D1 tills migrering).
 - list-jobb (discovery): lease måste returnera list-selektorer; fetchern utökas.
 - Fas 5 alerts+UI, Fas 6 riv lokal postgres/scraper-API.
 
