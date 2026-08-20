@@ -26,10 +26,20 @@ async function renameD1() {
   const id = "f1301925-95c3-47c7-b513-a25d4cfaf881";
   const current = await request(`/d1/database/${id}`);
   if (current.result?.name !== "produkter") {
+    // Cloudflare kräver numera read_replication även vid PUT som bara byter
+    // namn. Bevara därför databasens nuvarande läge i stället för att råka
+    // aktivera eller stänga av repliker som bieffekt av namnbytet.
+    const mode = current.result?.read_replication?.mode;
+    if (mode !== "auto" && mode !== "disabled") {
+      throw new Error(`Okänt D1 read_replication-läge: ${String(mode)}`);
+    }
     await request(`/d1/database/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "produkter" }),
+      body: JSON.stringify({
+        name: "produkter",
+        read_replication: { mode },
+      }),
     });
   }
   const verified = await request(`/d1/database/${id}`);
