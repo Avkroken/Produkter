@@ -85,7 +85,7 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credenti
 async def handle_unexpected_error(request: Request, exc: Exception):
     logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
     report_error_to_github(
-        "blixten85/product-describer",
+        "blixten85/produkter",
         f"Oväntat fel: {request.method} {request.url.path}",
         exc,
         context={"method": request.method, "path": request.url.path},

@@ -1,4 +1,4 @@
-# 🤝 Contributing to product-describer
+# 🤝 Contributing to produkter
 
 Thank you for considering contributing to this project!
 
@@ -30,8 +30,8 @@ build have their own instructions in `README.md` and `cloudflare/README.md`.
 
 - Fork and clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/product-describer.git
-cd product-describer/scraper
+git clone https://github.com/YOUR_USERNAME/produkter.git
+cd produkter/scraper
 ```
 
 - Configure environment

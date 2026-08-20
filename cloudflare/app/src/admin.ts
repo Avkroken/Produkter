@@ -1,5 +1,5 @@
 // Admin-panel: driftstatistik, kontolista och export. Samma funktioner som
-// politiker-webapps admin-vy men mot product-describers domän (katalog, jobb,
+// politiker-webapps admin-vy men mot produkters domän (katalog, jobb,
 // bevakning, underlag). Alla anrop gatas på role='admin' i index.ts.
 import type { Env } from "./db";
 

@@ -1,4 +1,4 @@
-# product-describer — AI Agent Guide
+# produkter — AI Agent Guide
 
 ## Repository layout
 

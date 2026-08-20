@@ -77,7 +77,7 @@ def handle_unexpected_error(exc):
         return exc
     log.exception("Unhandled error handling %s %s", request.method, request.path)
     report_error_to_github(
-        "blixten85/product-describer",
+        "blixten85/produkter",
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},

@@ -57,7 +57,7 @@ export async function reportErrorToGitHub(
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
-    "User-Agent": "product-describer",
+    "User-Agent": "produkter",
   };
 
   try {

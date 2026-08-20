@@ -1,9 +1,9 @@
-# product-describer
+# produkter
 
-[![CI](https://github.com/blixten85/product-describer/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/product-describer/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/blixten85/product-describer)](https://github.com/blixten85/product-describer/releases)
-[![Image](https://ghcr-badge.egpl.dev/blixten85/product-describer/size?color=blue&label=image)](https://github.com/blixten85/product-describer/pkgs/container/product-describer)
-[![License](https://img.shields.io/github/license/blixten85/product-describer)](LICENSE)
+[![CI](https://github.com/blixten85/produkter/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/produkter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/blixten85/produkter)](https://github.com/blixten85/produkter/releases)
+[![Image](https://ghcr-badge.egpl.dev/blixten85/produkter/size?color=blue&label=image)](https://github.com/blixten85/produkter/pkgs/container/produkter)
+[![License](https://img.shields.io/github/license/blixten85/produkter)](LICENSE)
 
 Generates Swedish product descriptions via your own Claude (Anthropic),
 ChatGPT (OpenAI), Gemini (Google) and/or Azure OpenAI Service API account.
@@ -16,9 +16,10 @@ ChatGPT (OpenAI), Gemini (Google) and/or Azure OpenAI Service API account.
 | `cloudflare/` | Samma produkt byggd på Cloudflare Workers (`app`, `engine`, `processor`) |
 | `scraper/` | Webshop-scrapern som matar produktdata in i kedjan |
 
-De låg tidigare i tre repon trots att de hör ihop: `github_report.py` fanns
-duplicerad (och divergerad) i roten och i scrapern, och scraperns
-`wrangler.jsonc` deployar en Worker som heter `product-describer-app`.
+De låg tidigare i tre repon trots att de hör ihop. `github_report.py` fanns
+duplicerad och hade börjat skilja sig mellan roten och scrapern. Cloudflare-
+resurserna förvaltas nu enbart från `cloudflare/`; scrapern har ingen egen
+Worker-konfiguration.
 
 These are developer API accounts, billed separately from any consumer
 subscription (ChatGPT Plus, Claude Pro, Gemini Advanced, GitHub/Microsoft
@@ -125,5 +126,5 @@ Set `SCRAPER_API_KEY=<your-key>` in `.env` (or point `SCRAPER_API_KEY_FILE` to t
 one-shot run from the CLI:
 
 ```bash
-docker compose exec product-describer python main.py sync --limit 50
+docker compose exec produkter python main.py sync --limit 50
 ```

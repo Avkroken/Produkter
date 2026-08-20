@@ -1,7 +1,7 @@
-# product-describer (Cloudflare-version)
+# produkter (Cloudflare-version)
 
 AI-genererade produktbeskrivningar på svenska — Cloudflare Workers-version
-av [product-describer](https://github.com/blixten85/product-describer)
+av [produkter](https://github.com/blixten85/produkter)
 (Flask/Docker). Samma funktionalitet, ny arkitektur:
 
 - Konton, leverantörsnycklar (krypterade), jobb → D1 istället för SQLite/disk
@@ -53,7 +53,7 @@ openssl rand -base64 32   # generera PROVIDER_CONFIG_KEY
 
 D1-schema (lokalt):
 ```bash
-cd app && npx wrangler d1 execute product_describer --local --file=../infra/schema.sql
+cd app && npx wrangler d1 execute produkter --local --file=../infra/schema.sql
 ```
 
 **Testa app+processor tillsammans lokalt** (kö-simuleringen delas INTE
