@@ -59,14 +59,11 @@ permissions:
 jobs:
   migrera-namn:
     environment: produktion
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
-        with:
-          node-version: 24
       - name: Migrera Cloudflare-resurser
         run: node scripts/migrera-produktnamn.mjs
         env:
@@ -76,7 +73,7 @@ jobs:
   # Vilka Workers ska deployas? Manuell körning -> den valda. Schema -> de vars
   # filer ändrats sedan `deployed`-taggen (shared/ -> alla som importerar den).
   select:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       workers: ${{ steps.pick.outputs.workers }}
       head: ${{ steps.pick.outputs.head }}
@@ -135,7 +132,7 @@ jobs:
     environment: produktion
     needs: [migrera-namn, select]
     if: needs.select.outputs.workers != '[]' && needs.select.outputs.workers != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -159,12 +156,28 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUKTER || secrets.PRODUCT_DESCRIBER }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
+  slutfor-dataflytt:
+    environment: produktion
+    needs: [migrera-namn, deploy]
+    if: needs.deploy.result == 'success'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+      - name: Kopiera sista R2-skillnaden och verifiera
+        run: node scripts/migrera-produktnamn.mjs
+        env:
+          MIGRATION_PHASE: finalize
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUKTER || secrets.PRODUCT_DESCRIBER }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
   # Flytta vattenmärket till deployad HEAD — bara vid schema och bara om ingen
   # deploy failade (skippad deploy = inga worker-ändringar = OK att avancera).
   mark:
-    needs: [migrera-namn, select, deploy]
-    if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.migrera-namn.result == 'success' && needs.deploy.result != 'failure'
-    runs-on: ubuntu-latest
+    needs: [migrera-namn, select, deploy, slutfor-dataflytt]
+    if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.migrera-namn.result == 'success' && needs.deploy.result != 'failure' && needs.slutfor-dataflytt.result == 'success'
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

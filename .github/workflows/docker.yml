@@ -23,7 +23,7 @@ jobs:
   # checken heter docker och sätts av aggregatet längst ned — ett namn som
   # inte ändras när en image läggs till eller tas bort.
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +79,7 @@ jobs:
   docker:
     if: always()
     needs: [image]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - run: |
           echo "image: ${{ needs.image.result }}"

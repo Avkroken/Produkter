@@ -1,5 +1,6 @@
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 const token = process.env.CLOUDFLARE_API_TOKEN;
+const phase = process.env.MIGRATION_PHASE || "prepare";
 
 if (!accountId || !token) {
   throw new Error("CLOUDFLARE_ACCOUNT_ID och CLOUDFLARE_API_TOKEN krävs");
@@ -66,30 +67,39 @@ async function ensureR2() {
     });
   }
 
-  let cursor = "";
-  let copied = 0;
-  do {
-    const query = new URLSearchParams({ per_page: "1000" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await request(`/r2/buckets/${oldBucket}/objects?${query}`, {}, true);
-    if (!page) break;
-    const objects = Array.isArray(page.result) ? page.result : page.result?.objects || [];
-    for (const object of objects) {
-      const source = await request(objectPath(oldBucket, object.key));
-      const uploadHeaders = {};
-      const contentType = source.headers.get("content-type");
-      if (contentType) uploadHeaders["content-type"] = contentType;
-      await request(objectPath(newBucket, object.key), {
-        method: "PUT",
-        headers: uploadHeaders,
-        body: source.body,
-        duplex: "half",
-      });
-      copied += 1;
-    }
-    cursor = page.result_info?.cursor || page.result?.cursor || "";
-  } while (cursor);
-  console.log(`R2: ${newBucket}; kopierade ${copied} objekt; gammal bucket behålls`);
+  async function listObjects(bucket) {
+    const objects = [];
+    let cursor = "";
+    do {
+      const query = new URLSearchParams({ per_page: "1000" });
+      if (cursor) query.set("cursor", cursor);
+      const page = await request(`/r2/buckets/${bucket}/objects?${query}`);
+      objects.push(...(Array.isArray(page.result) ? page.result : page.result?.objects || []));
+      cursor = page.result_info?.cursor || page.result?.cursor || "";
+    } while (cursor);
+    return objects;
+  }
+
+  const sourceObjects = await listObjects(oldBucket);
+  for (const object of sourceObjects) {
+    const source = await request(objectPath(oldBucket, object.key));
+    const uploadHeaders = {};
+    const contentType = source.headers.get("content-type");
+    if (contentType) uploadHeaders["content-type"] = contentType;
+    await request(objectPath(newBucket, object.key), {
+      method: "PUT",
+      headers: uploadHeaders,
+      body: source.body,
+      duplex: "half",
+    });
+  }
+
+  const destinationKeys = new Set((await listObjects(newBucket)).map((object) => object.key));
+  const missing = sourceObjects.filter((object) => !destinationKeys.has(object.key));
+  if (missing.length) {
+    throw new Error(`R2-verifieringen saknar ${missing.length} objekt i ${newBucket}`);
+  }
+  console.log(`R2: ${newBucket}; verifierade ${sourceObjects.length} objekt; gammal bucket behålls`);
 }
 
 async function ensureQueue() {
@@ -108,8 +118,13 @@ async function ensureQueue() {
   console.log("Kö: produkter-jobb");
 }
 
-await renameD1();
-await renameKv();
-await ensureR2();
-await ensureQueue();
-console.log("Första namnbytessteget är klart; gamla R2- och köresurser behålls tills trafiken verifierats.");
+if (phase === "finalize") {
+  await ensureR2();
+  console.log("Den avslutande R2-kopieringen är verifierad.");
+} else {
+  await renameD1();
+  await renameKv();
+  await ensureR2();
+  await ensureQueue();
+  console.log("Första namnbytessteget är klart; gamla R2- och köresurser behålls tills trafiken verifierats.");
+}
