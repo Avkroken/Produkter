@@ -29,7 +29,11 @@ RUN python3 -m venv --without-pip /opt/venv \
     && pip --python /opt/venv/bin/python install --no-cache-dir -r requirements.txt
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY . .
+# Kopiera bara runtime-koden. Det gör Docker-contextens beroenden explicita och
+# förhindrar att Cloudflare-, scraper-, test- eller dokumentationsändringar
+# råkar invalidiera eller förändra huvudimagen.
+COPY app.py auth.py csv_safety.py extractors.py github_report.py main.py prompts.py provider_config.py providers.py ./
+COPY templates ./templates
 
 RUN useradd -m appuser \
     && mkdir -p uploads outputs config \
