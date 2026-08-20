@@ -59,7 +59,7 @@ permissions:
 jobs:
   migrera-namn:
     environment: produktion
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -73,7 +73,7 @@ jobs:
   # Vilka Workers ska deployas? Manuell körning -> den valda. Schema -> de vars
   # filer ändrats sedan `deployed`-taggen (shared/ -> alla som importerar den).
   select:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     outputs:
       workers: ${{ steps.pick.outputs.workers }}
       head: ${{ steps.pick.outputs.head }}
@@ -132,7 +132,7 @@ jobs:
     environment: produktion
     needs: [migrera-namn, select]
     if: needs.select.outputs.workers != '[]' && needs.select.outputs.workers != ''
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -160,7 +160,7 @@ jobs:
     environment: produktion
     needs: [migrera-namn, deploy]
     if: needs.deploy.result == 'success'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -177,7 +177,7 @@ jobs:
   mark:
     needs: [migrera-namn, select, deploy, slutfor-dataflytt]
     if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.migrera-namn.result == 'success' && needs.deploy.result != 'failure' && needs.slutfor-dataflytt.result == 'success'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

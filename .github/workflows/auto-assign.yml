@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   assign:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       # --add-assignee är idempotent, så en redan tilldelad Dependabot-PR
       # ger ingen dubblett och inget fel.

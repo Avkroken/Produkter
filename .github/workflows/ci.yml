@@ -19,7 +19,7 @@ jobs:
   # checken heter python, och matrisjobb heter "python (scraper)" — namnet
   # skulle försvinna och checken bli gul för evigt.
   python:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -49,7 +49,7 @@ jobs:
           done
 
   node:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
