@@ -17,9 +17,9 @@ const ALLOWED = new Set([
 ]);
 
 async function authenticatedRepo(req: Request): Promise<string> {
-  const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.startsWith("Bearer ")) throw new Error("missing bearer token");
-  const { payload } = await jwtVerify(auth.slice(7), JWKS, {
+  const token = req.headers.get("X-GitHub-OIDC") ?? "";
+  if (!token) throw new Error("missing OIDC token");
+  const { payload } = await jwtVerify(token, JWKS, {
     issuer: "https://token.actions.githubusercontent.com",
     audience: AUD,
   });
