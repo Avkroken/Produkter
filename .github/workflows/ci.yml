@@ -15,13 +15,33 @@ permissions:
   contents: read
 
 jobs:
-  # Ett jobb för båda Python-projekten. Inte en matris: den obligatoriska
-  # checken heter python, och matrisjobb heter "python (scraper)" — namnet
-  # skulle försvinna och checken bli gul för evigt.
+  impact:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.impact.outputs.python }}
+      node: ${{ steps.impact.outputs.node }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bestäm språk-/komponentpåverkan
+        id: impact
+        env:
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: bash .github/scripts/ci-impact.sh
+
+  # Ett jobb för båda Python-projekten. Jobbnamnet `python` är stabilt och
+  # kan fortsätta vara required även när jobbet hoppas över via job-level if.
   python:
+    needs: impact
+    if: ${{ needs.impact.outputs.python == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -49,6 +69,8 @@ jobs:
           done
 
   node:
+    needs: impact
+    if: ${{ needs.impact.outputs.node == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -59,6 +81,8 @@ jobs:
         working-directory: cloudflare/${{ matrix.worker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
