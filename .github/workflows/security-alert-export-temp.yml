@@ -30,13 +30,13 @@ jobs:
           set -euo pipefail
           cat > public.pem <<'EOF'
           -----BEGIN PUBLIC KEY-----
-          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6UdfrQ6b9OSQ2XYjvo+1
-          CxKLdy4uGXYLa8MunQhF7wbeMuH0heL2cviAuSH9aLkRj8HHzJbl92cDHkEMBkwe
-          v9b0mHw42A+WVxt2wuopow5WYokrYf0KMeBnxrvalALrbEQGM/P9H5NhvcAj4GDb
-          a/TYOimDBINRhftS3+IfRau3/wKdZomvWpdI96jR3AtVa1V7d4RTSluwa0YNm6RY
-          9fzNHU+zAcebm+wsnZWrZMMLyHRFfW08x/I0qxENxQk11IjNlUnA4cgYR+KyPtOT
-          Yza44HuK6rjN10Qj/tlxkdXXvCDps3f4kAUARwOaF43vIklUQGN9ykYpVeUzSwb1
-          TwIDAQAB
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAydcLTCltb4sbl3Doydhf
+          NqPS0onTdL/ItYfFpr74KFv/uYpPH0AXClfSGD2wR+Qhmlv988jCxCJqfcO9uFUj
+          BmEbDjpCq5xj7yWGNQ+m02elRGzysS5VaCiYH951mjeoG2o0tRqXNeLNHKA+u2vp
+          UxZlB8iFxudA09ANJUOSkHOv2EaC8Nm5FC3llNq+i7In5afIaOeXUIR4+/lGYeB9
+          vFBNOAbF5n/y0nBbqUjZRgfOMv7P/ETe0aPhe8Tj6hP7U9b+Ne/N9ar92BC9Cg/j
+          FjURvj2XB1pPVHqFYKGB5FZ8qvUqOT+mp0f4eSrNrxd/COh3KhpN2jbYA0fJFSAk
+          XwIDAQAB
           -----END PUBLIC KEY-----
           EOF
           gzip -9 -c alerts.json > alerts.json.gz
