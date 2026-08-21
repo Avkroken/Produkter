@@ -30,7 +30,7 @@ jobs:
           | jq 'add | map({number, tool: .tool.name, rule_id: .rule.id, rule_name: .rule.name, severity: (.rule.security_severity_level // .rule.severity), created_at, updated_at, url: .html_url, ref: .most_recent_instance.ref, category: .most_recent_instance.category, file: .most_recent_instance.location.path, start_line: .most_recent_instance.location.start_line, end_line: .most_recent_instance.location.end_line})' > code-scanning-alerts.json
           echo "Öppna alerts: $(jq 'length' code-scanning-alerts.json)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Spara snapshot privat i D1
+      - name: Spara och verifiera snapshot privat i D1
         run: |
           set -euo pipefail
           oidc=$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -41,3 +41,9 @@ jobs:
               -H 'Content-Type: application/json' \
               --data-binary @- \
               https://security-alerts.denied.se/v1/code-scanning
+          stored=$(curl --fail-with-body -fsS \
+              -H "X-GitHub-OIDC: $oidc" \
+              https://security-alerts.denied.se/v1/code-scanning | jq '.alerts | length')
+          expected=$(jq 'length' code-scanning-alerts.json)
+          test "$stored" -eq "$expected"
+          echo "D1 verifierad: $stored alerts" >> "$GITHUB_STEP_SUMMARY"
