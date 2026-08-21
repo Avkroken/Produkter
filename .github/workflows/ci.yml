@@ -32,9 +32,7 @@ jobs:
           CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: bash .github/scripts/ci-impact.sh
 
-  # Ett jobb för båda Python-projekten. Jobbnamnet `python` är stabilt och
-  # kan fortsätta vara required även när jobbet hoppas över via job-level if.
-  python:
+  python-tests:
     needs: impact
     if: ${{ needs.impact.outputs.python == 'true' }}
     runs-on: ubuntu-latest
@@ -68,7 +66,28 @@ jobs:
             fi
           done
 
-  node:
+  python:
+    needs: [impact, python-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sammanfatta Python-CI
+        env:
+          IMPACT: ${{ needs.impact.outputs.python }}
+          RESULT: ${{ needs.python-tests.result }}
+        run: |
+          if [ "$IMPACT" != "true" ]; then
+            echo "Python är inte påverkad; ingen Python-körning behövdes."
+            exit 0
+          fi
+          if [ "$RESULT" = "success" ]; then
+            echo "Python-kontrollerna lyckades."
+            exit 0
+          fi
+          echo "Python-kontrollerna slutade med: $RESULT"
+          exit 1
+
+  node-workers:
     needs: impact
     if: ${{ needs.impact.outputs.node == 'true' }}
     runs-on: ubuntu-latest
@@ -93,3 +112,24 @@ jobs:
 
       - name: Typkontroll
         run: npx tsc --noEmit
+
+  node:
+    needs: [impact, node-workers]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sammanfatta Node-CI
+        env:
+          IMPACT: ${{ needs.impact.outputs.node }}
+          RESULT: ${{ needs.node-workers.result }}
+        run: |
+          if [ "$IMPACT" != "true" ]; then
+            echo "Node är inte påverkad; ingen Node-körning behövdes."
+            exit 0
+          fi
+          if [ "$RESULT" = "success" ]; then
+            echo "Alla Node-kontroller lyckades."
+            exit 0
+          fi
+          echo "Node-kontrollerna slutade med: $RESULT"
+          exit 1
