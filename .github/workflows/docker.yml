@@ -11,11 +11,6 @@ name: Docker build & Trivy
 # evigt trots grön CI. Tomt SARIF laddas ALDRIG upp på main, eftersom det då
 # skulle kunna stänga verkliga alerts för imagen.
 #
-# PR-imagejobben checkar uttryckligen ut PR-headen. upload-sarif använder SHA:n
-# i checkout-katalogen, och default-checkout av refs/pull/*/merge kan annars
-# koppla Trivy-resultatet till en kortlivad test-mergecommit som rulesetet inte
-# längre väntar på.
-#
 # En schemalagd körning bygger båda images på nytt så nya CVE:er upptäcks även
 # när repositoryt inte har ändrats.
 
@@ -63,9 +58,6 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         if: needs.impact.outputs.docker_app == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
@@ -77,9 +69,7 @@ jobs:
       - name: Short SHA
         id: sha
         if: needs.impact.outputs.docker_app == 'true'
-        env:
-          TARGET_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: echo "short=${TARGET_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         if: needs.impact.outputs.docker_app == 'true'
@@ -115,8 +105,6 @@ jobs:
         with:
           sarif_file: trivy-empty.sarif
           category: trivy-product-describer
-          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
-          sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Publicera imagen
         if: needs.impact.outputs.docker_app == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
@@ -134,9 +122,6 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         if: needs.impact.outputs.docker_scraper == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
@@ -148,9 +133,7 @@ jobs:
       - name: Short SHA
         id: sha
         if: needs.impact.outputs.docker_scraper == 'true'
-        env:
-          TARGET_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: echo "short=${TARGET_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         if: needs.impact.outputs.docker_scraper == 'true'
@@ -186,8 +169,6 @@ jobs:
         with:
           sarif_file: trivy-empty.sarif
           category: trivy-scraper
-          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
-          sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Publicera imagen
         if: needs.impact.outputs.docker_scraper == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
