@@ -1,4 +1,4 @@
-name: Docker
+name: Docker build & Trivy
 
 # Bygger och Trivy-skannar bara de images som faktiskt påverkas av diffen.
 # Huvudimagen och scrapern har separata Docker-contexts och stabila

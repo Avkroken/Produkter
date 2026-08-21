@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy Cloudflare Workers
 
 # Auto-deploy till Cloudflare. Repot har flera fristående Workers (var sin
 # wrangler.jsonc); bara de vars kod ändrats deployas. shared/ triggar de Workers
