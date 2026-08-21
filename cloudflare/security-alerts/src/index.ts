@@ -64,19 +64,31 @@ async function replaceSnapshot(db: D1Database, repo: string, alerts: Alert[]) {
   await db.batch(statements);
 }
 
+async function readSnapshot(db: D1Database, repo: string): Promise<Alert[]> {
+  await ensureSchema(db);
+  const result = await db.prepare(`SELECT
+    alert_number AS number, tool, rule_id, rule_name, severity, created_at, updated_at,
+    html_url AS url, git_ref AS ref, category, file_path AS file, start_line, end_line
+    FROM code_scanning_alerts WHERE repo = ? ORDER BY alert_number`).bind(repo).all<Alert>();
+  return result.results ?? [];
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && path === "/health") return Response.json({ ok: true });
-    if (req.method !== "POST" || path !== "/v1/code-scanning") return new Response("Not found", { status: 404 });
+    if (path !== "/v1/code-scanning" || (req.method !== "POST" && req.method !== "GET")) {
+      return new Response("Not found", { status: 404 });
+    }
     try {
       const repo = await authenticatedRepo(req);
+      if (req.method === "GET") return Response.json({ ok: true, repo, alerts: await readSnapshot(env.DB, repo) });
       const body = await req.json<{ alerts?: Alert[] }>();
       if (!Array.isArray(body.alerts) || body.alerts.length > 2000) return new Response("Invalid payload", { status: 400 });
       await replaceSnapshot(env.DB, repo, body.alerts);
       return Response.json({ ok: true, repo, alerts: body.alerts.length });
     } catch (err) {
-      console.error("security alert ingest rejected", err instanceof Error ? err.message : "unknown");
+      console.error("security alert request rejected", err instanceof Error ? err.message : "unknown");
       return new Response("Unauthorized", { status: 401 });
     }
   },
