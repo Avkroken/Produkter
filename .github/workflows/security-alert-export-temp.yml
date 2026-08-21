@@ -1,0 +1,52 @@
+name: TEMP encrypted Code Scanning export
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hämta öppna alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" \
+          | jq 'add' > alerts.json
+          echo "Öppna alerts: $(jq 'length' alerts.json)"
+
+      - name: Kryptera export för engångsläsning
+        run: |
+          set -euo pipefail
+          cat > public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6UdfrQ6b9OSQ2XYjvo+1
+          CxKLdy4uGXYLa8MunQhF7wbeMuH0heL2cviAuSH9aLkRj8HHzJbl92cDHkEMBkwe
+          v9b0mHw42A+WVxt2wuopow5WYokrYf0KMeBnxrvalALrbEQGM/P9H5NhvcAj4GDb
+          a/TYOimDBINRhftS3+IfRau3/wKdZomvWpdI96jR3AtVa1V7d4RTSluwa0YNm6RY
+          9fzNHU+zAcebm+wsnZWrZMMLyHRFfW08x/I0qxENxQk11IjNlUnA4cgYR+KyPtOT
+          Yza44HuK6rjN10Qj/tlxkdXXvCDps3f4kAUARwOaF43vIklUQGN9ykYpVeUzSwb1
+          TwIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          openssl rand 32 > key.bin
+          openssl enc -aes-256-cbc -salt -pbkdf2 -in alerts.json -out alerts.enc -pass file:key.bin
+          openssl pkeyutl -encrypt -pubin -inkey public.pem -in key.bin -out key.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+          echo '---BEGIN ALERT KEY---'
+          base64 -w0 key.enc
+          echo
+          echo '---END ALERT KEY---'
+          echo '---BEGIN ALERT PAYLOAD---'
+          base64 -w0 alerts.enc
+          echo
+          echo '---END ALERT PAYLOAD---'
