@@ -12,7 +12,7 @@ jobs:
   export:
     runs-on: ubuntu-latest
     steps:
-      - name: Hämta öppna alerts
+      - name: Hämta öppna alerts kompakt
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -21,7 +21,8 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "/repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" \
-          | jq 'add' > alerts.json
+          | jq -c 'add | map({number, rule: {id: .rule.id, name: .rule.name, severity: .rule.severity, security_severity_level: .rule.security_severity_level, description: .rule.description}, tool: .tool.name, created_at, instance: {ref: .most_recent_instance.ref, category: .most_recent_instance.category, path: .most_recent_instance.location.path, start_line: .most_recent_instance.location.start_line, end_line: .most_recent_instance.location.end_line}})' \
+          > alerts.json
           echo "Öppna alerts: $(jq 'length' alerts.json)"
 
       - name: Kryptera export för engångsläsning
@@ -38,8 +39,9 @@ jobs:
           TwIDAQAB
           -----END PUBLIC KEY-----
           EOF
+          gzip -9 -c alerts.json > alerts.json.gz
           openssl rand 32 > key.bin
-          openssl enc -aes-256-cbc -salt -pbkdf2 -in alerts.json -out alerts.enc -pass file:key.bin
+          openssl enc -aes-256-cbc -salt -pbkdf2 -in alerts.json.gz -out alerts.enc -pass file:key.bin
           openssl pkeyutl -encrypt -pubin -inkey public.pem -in key.bin -out key.enc \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
           echo '---BEGIN ALERT KEY---'
