@@ -1,203 +1,33 @@
 # produkter — AI Agent Guide
 
-## Repository layout
+Repot innehåller tre delar av samma produkt: Python-appen i roten, Cloudflare Workers under `cloudflare/` och scraper-kedjan under `scraper/`.
 
-Three parts of one product, previously three separate repositories:
+## Teknik och struktur
 
-| Directory | What |
-| --- | --- |
-| root | The Python app — web UI, extractors, provider failover (this document) |
-| `cloudflare/` | The same product on Cloudflare Workers (`app`, `engine`, `processor`) — see `cloudflare/README.md` |
-| `scraper/` | The webshop scraper that feeds product data into the chain — see `scraper/CLAUDE.md` |
+- Roten: Python, Flask, Gunicorn, provider-failover och filbearbetning.
+- `cloudflare/`: Workers-delarna `app`, `engine` och `processor`.
+- `scraper/`: webshop-scraper som matar produktdata till kedjan.
+- Användarnas provider-nycklar är kontoavgränsade och ska lagras krypterat; credentials får aldrig hårdkodas eller committas.
+- Jobb och filer ska alltid kontrolleras mot `account_id` innan åtkomst.
+- Partiella jobbresultat ska bevaras så paus/resume inte tappar färdigt arbete.
+- GitHub Actions pinnas till commit-SHA när praktiskt möjligt.
 
-The rest of this document covers the root Python app.
+## Versioner
 
-## The root app
+Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras med orsak och villkor för borttagning. Dependabot ska hantera normala dependency-uppdateringar via PR, inte auto-merge.
 
-Generates Swedish product descriptions and "varför" justifications via the
-user's own Claude (Anthropic), ChatGPT (OpenAI), Gemini (Google) and/or
-Azure OpenAI Service API accounts, with automatic failover between
-providers on rate limits/quota errors and automatic resume once a quota
-resets. Accepts CSV, Excel, `.txt`, `.docx`, or `.pdf` and outputs a CSV
-with added `Beskrivning` and `Varför` columns.
+## GitHub-arbetsflöde
 
-Multi-tenant: each account signs up with email+password and configures its
-own provider keys — the operator never becomes financially responsible for
-another account's API usage (jobs, keys, and failover order are fully
-isolated per account_id). CLI mode (`main.py run`/`sync`) is unrelated to
-accounts — it reads keys directly from environment variables instead.
+`main` är den enda långlivade arbetsgrenen. `dev` används inte.
 
-Note: none of the supported providers can be authenticated via a consumer
-subscription (ChatGPT Plus, Claude Pro, Gemini Advanced, Copilot) — those
-are billed and authenticated completely separately from the developer
-API tier, by design on the providers' end. Gemini's API has a free tier;
-the others are pay-per-use regardless of any subscription also held.
+1. Skapa en kortlivad branch från aktuell `main` för varje uppgift.
+2. Kör relevanta Python-tester, Node-typechecks och andra komponentkontroller innan push.
+3. Öppna PR från arbetsbranchen till `main` som klar för granskning. Aktivera inte auto-merge.
+4. Lös CI- och reviewproblem på samma branch tills required checks är gröna och review-trådar lösta.
+5. Merge sker med **squash merge**. Använd inte merge commits eller rebase merge. Head-branchen får raderas efter merge.
 
-## Tech Stack
-
-- Python 3, Flask (web UI), Gunicorn
-- Anthropic, OpenAI and Google Gen AI SDKs (no local/self-hosted model)
-- Docker / Docker Compose
-
-## File Overview
-
-```
-app.py              # Flask web UI + job runner with pause/auto-resume
-auth.py             # Account signup/login (SQLite), legacy-data migration for the first account
-main.py             # CLI (run / sync subcommands) — env-var keys, not account-scoped
-providers.py        # Provider abstraction + ProviderChain failover engine
-provider_config.py  # Per-account API key storage (config/accounts/<id>/credentials/) + failover order
-prompts.py           # Builds the system prompt from tone/length/audience/custom options
-extractors.py       # Turns an uploaded file into product rows (AI-assisted for unstructured formats)
-templates/index.html, login.html, signup.html
-```
-
-## Dev Commands
-
-```bash
-pip install -r requirements.txt
-python app.py               # Start Flask dev server (web UI)
-python main.py run products.csv   # CLI batch mode
-pytest                       # Run tests
-```
-
-## Docker
-
-```bash
-docker compose up -d
-# Open http://your-server:5050 and add an API key under Inställningar
-```
-
-## Modes
-
-- **File upload** — drag-and-drop CSV/Excel/txt/docx/pdf in the web UI, or `python main.py run <file>`
-- **Sync mode** — pull from scraper API, generate descriptions, write back; started via Docker Compose profile
-
-## Conventions
-
-- All config (API keys, scraper API URL) via environment variables or the
-  `config/accounts/<account_id>/credentials/` volume — never hardcoded, never committed
-- API keys (and, for Azure OpenAI, the endpoint/deployment that go with one)
-  are saved via the web UI as a single encrypted-at-rest (Fernet) JSON blob
-  per provider, using `PROVIDER_CONFIG_MASTER_KEY`; without it, saving a new
-  key returns a clear error but reading a pre-existing legacy plaintext key
-  file still works
-- Adding a provider: a `Provider` subclass in `providers.py`, an entry in
-  `PROVIDER_CLASSES`/`DEFAULT_MODELS` in `provider_config.py`, and a label
-  in `PROVIDER_LABELS` — the settings UI picks it up with no HTML changes.
-  If it needs config beyond an api_key (like Azure's endpoint/deployment),
-  add it to `EXTRA_FIELDS` too
-- Keep prompts in `prompts.py` so they're easy to tune in one place
-- Provider failover order lives in `config/accounts/<account_id>/provider_order.json`,
-  filtered server-side to providers that currently have a key configured
-- Every route except `/login`/`/signup` requires `@login_required`
-  (`app.py`); `session["account_id"]` scopes provider config, jobs, and
-  uploaded/output files — never read another account's job by guessing its
-  id, ownership is checked on every job lookup
-- The first account ever created automatically inherits any pre-existing
-  global config/jobs from before the account system existed (`auth.py`'s
-  `_migrate_legacy_data`) — only runs once, when the accounts table is empty
-- A job's extracted rows and partial per-row results are cached to disk
-  (`outputs/{job_id}_rows.json` / `_partial.json`) so a pause (provider
-  exhaustion) never loses completed work, even across restarts
-- Unexpected exceptions (Flask error handler, sync loop) call
-  `report_error_to_github()` (`github_report.py`) — best-effort, opens a
-  `@claude`-tagged GitHub issue with secrets/emails/paths redacted if
-  `GITHUB_ERROR_REPORT_TOKEN` is set, no-ops otherwise. The root image and
-  the scraper image are built from different contexts, so each carries its
-  own copy of `github_report.py`; keep them identical — `scraper/` has the
-  same file and the same tests
-
-## Versioner: flytande som standard
-
-Pinna aldrig ett versionsnummer, en release-flavor eller en digest om det inte
-är ett absolut måste. En pinne som ingen revideras sitter kvar långt efter att
-den blivit fel: `debian:trixie-slim` följer inte Debians nästa stable, och en
-basimage vars OS-generation ligger i taggnamnet kan Dependabot aldrig flytta —
-den bumpar bara siffran inom samma taggfamilj.
-
-Gäller basimager, pip- och npm-beroenden, och allt annat med en version.
-
-**Om en pinne ändå är nödvändig** ska den dokumenteras på plats, i den här
-filen och i README — med vad som är pinnat, varför, och vad som måste
-kontrolleras för att kunna släppa den igen. En odokumenterad pinne är en bugg
-som väntar.
-
-### Nuvarande undantag
-
-- **GitHub Actions pinnas till commit-SHA.** En tagg som `@v4` är föränderlig
-  och kan pekas om till annan kod; en SHA kan den inte. Det är en
-  leverantörskedjekontroll, inte versionshantering, och Dependabot bumpar dem
-  ändå automatiskt.
-
-## Arbetsflöde: exakt en uppgift åt gången
-
-Repositoryt har exakt två arbetsgrenar: `dev` och `main`. Skapa aldrig en tredje gren, inte ens tillfälligt. Allt utvecklingsarbete görs på `dev` och går via ett ändringsförslag från `dev` till `main`.
-
-En agent får ha exakt en aktiv koduppgift åt gången. Flera uppgifter är en kö, inte parallellt arbete. Nästa uppgift får inte påbörjas förrän den aktuella uppgiften är mergad eller uttryckligen blockerad av något agenten inte kan lösa själv.
-
-Arbeta lokalt så långt det är praktiskt innan du pushar. Samla sammanhängande ändringar, testfixar och följdjusteringar i meningsfulla batcher i stället för att pusha varje liten edit och därmed starta om CI i onödan. När en PR redan kör CI får du fortsätta analysera, testa och förbättra samma uppgift lokalt. Push endast när du har en ny sammanhängande batch som faktiskt behöver valideras. CI-väntan är aldrig ett skäl att börja på nästa uppgift.
-
-För varje uppgift:
-
-1. Synka `dev` med `main`. Om `dev` redan innehåller ofärdigt arbete, slutför det först.
-2. Implementera och testa den aktuella uppgiften lokalt på `dev`; samla ändringar i så stora sammanhängande batcher som är rimliga.
-3. Commit och push till `dev`, skapa eller uppdatera exakt ett PR `dev` → `main`, och aktivera auto-merge.
-4. Medan CI/review pågår: fortsätt endast lokalt med samma uppgift. Lös relevanta fel och kommentarer och pusha dem samlat, inte en i taget. Efter varje push som ändrar PR-headen, och särskilt efter den sista pushen, verifiera uttryckligen att auto-merge fortfarande är aktiverad; återaktivera den om head-ändringen slog av den.
-5. När PR:n är mergad, synka `dev` till `main`. Först därefter får nästa uppgift börja.
-
-Om uppgiften blockeras av en extern åtgärd som agenten faktiskt inte kan utföra, dokumentera den exakta blockeraren och stanna. Börja inte en annan koduppgift utan uttrycklig instruktion från användaren.
-
-## Tillåtet
-- Ändra kod på `dev`
-- Köra lokala tester och analyser
-- Öppna ändringsförslag endast från `dev` till `main`
-- Rätta CI- och reviewproblem för den aktiva uppgiften tills PR:n kan mergas
-
-## Förbjudet
-- Skapa andra grenar än `dev` och `main`
-- Arbeta parallellt på flera koduppgifter
-- Börja nästa uppgift medan den aktuella PR:n fortfarande är öppen eller blockerad
-- Skicka ändringar direkt till `main` eller `master`
-- Radera grenar
-- Stänga av arbetsflöden
-- Ändra hemligheter
-- Ändra inställningar för GitHub-organisationen
-- Tvinga igenom en push eller kringgå branch protection/rulesets
-
-## Krav
-- Överlämna kodändringar endast på `dev`
-- Alla relevanta tester måste godkännas
-- Håll varje ändringsförslag avgränsat till en uppgift
-- Arbeta lokalt så mycket som möjligt och undvik onödigt täta pushar som startar om CI
-- Ta aldrig med orelaterade ändringar
-- Överlämna aldrig inloggningsuppgifter eller andra hemligheter till versionshistoriken
-- Skapa ändringsförslag som klara för granskning, aldrig som utkast
-- Aktivera automatisk sammanfogning med en metod som tillåts av förrådets regler direkt efter att ändringsförslaget skapats
-- Efter varje push som ändrar PR-headen: verifiera att automatisk sammanfogning fortfarande är aktiv och återaktivera den vid behov
-- Automatisk sammanfogning får slutföras först när alla regelkrav och kontrollkörningar har godkänts
-- Om CI, review eller auto-merge blockerar leveransen: lös blockeraren för den aktiva uppgiften innan annat kodarbete påbörjas
-- Om automatisk sammanfogning inte kan aktiveras: rapportera det exakta felet
-- Efter merge: synka `dev` till `main` innan nästa uppgift
+Skicka aldrig direkt till `main`, kringgå inte branch protection/rulesets och ändra inte hemligheter eller organisationsinställningar utan uttrycklig instruktion.
 
 ## Svarsformat
 
-Regeluppsättningen kommer från plugin:et `i-have-adhd`. Den laddas inte i
-alla sessioner (t.ex. inte i Claude Code på webben), så den står här —
-det här är källan som gäller oavsett var agenten kör.
-
-Form:
-
-- Led med åtgärden eller kommandot, inte med bakgrunden
-- Numrera flerstegsprocesser, ett avgränsat steg per rad
-- Max fem punkter per lista
-- Hoppa över inledningar, sammanfattningar och avslutningsfraser
-- Långa förklaringar bara på begäran
-
-Innehåll:
-
-- Säg uttryckligen vad som är gjort och vad som återstår
-- Ange konkreta tidsuppskattningar
-- Visa vad som fungerar efter en ändring, inte bara att den är gjord
-- Vid fel: var, varför och hur det åtgärdas — kortfattat
-- Avsluta med ett nästa steg som tar under två minuter
+Led med nästa åtgärd eller resultat. Numrera flerstegsarbete, håll listor korta och ange konkret orsak/fix vid fel.
