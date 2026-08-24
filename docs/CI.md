@@ -2,22 +2,25 @@
 
 ## Grundmodell
 
-`dev` är den enda skrivbara grenen. `main` tar bara emot squash-mergade PR:er som
-passerat gröna checkar. Inga kortlivade grenar per uppgift — de blev liggande
-halvfärdiga, vilket är skälet till modellen.
+Arbete sker i en sluten pool av tre grenar: `dev/1`, `dev/2`, `dev/3`. Rulesetet
+blockerar skapande av allt utanför poolen, så antalet arbetsgrenar kan inte växa.
+Kortlivade grenar per uppgift användes tidigare och blev liggande halvfärdiga.
 
-1. Arbetet sker på `dev`.
-2. PR öppnas från `dev` till `main`.
+1. En bot tar en ledig slot. Finns omergat arbete i en slot slutförs det först.
+2. PR öppnas från sloten till `main`.
 3. PR-CI verifierar ändringen.
 4. Auto-merge aktiveras; merge-kön tar PR:n när required checks är gröna och
    mergar en i taget mot aktuell `main`.
 5. **Squash merge är den enda tillåtna merge-metoden.**
-6. `sync-dev.yml` återställer `dev` till `main` efter varje merge.
+6. `sync-pool.yml` rebasar varje slot på `main` efter varje merge.
 
-Punkt 6 är inte kosmetika. Squash-merge ger `main` en enda ny commit medan `dev`
-behåller sina ursprungliga — utan återställning divergerar grenarna och nästa PR
-fylls av konflikter. Workflowen hoppar över återställningen om `dev` har commits
-som inte finns i `main`, så inget osynkat arbete kastas.
+Punkt 6 är inte kosmetika. Squash-merge ger `main` en enda ny commit medan sloten
+behåller sina ursprungliga — utan rebase divergerar de och nästa PR fylls av
+konflikter. `--empty=drop` tar bort de commits vars innehåll redan finns i main
+och replayar resten, så arbete som tillkommit under en öppen PR överlever.
+
+Tre slots ger parallellt arbete utan grenkaos, och gör merge-kön meningsfull:
+den serialiserar upp till tre strömmar mot `main`.
 
 CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av
 `pull_request`, av `merge_group` (merge-kön) och av `push` till `main` där
@@ -30,8 +33,9 @@ jobb är en required check har därför `merge_group:` i sin `on:` — utan den 
 kön `merge_group.checks_requested`, ingen svarar, och PR:n kastas ut efter
 `check_response_timeout_minutes`.
 
-Kön är satt till en post i taget (`max_entries_to_build`, `max_entries_to_merge`
-och `min_entries_to_merge_wait_minutes`), så varje merge byggs mot aktuell `main`.
+`CodeQL` är medvetet **inte** en required status check. Code scanning default setup
+rapporterar inte på merge-grupper, så kravet hade låst kön permanent. Skyddet ligger
+i stället i `code_scanning`-regeln, som verkar på PR-nivå före kön.
 
 ## Selektiv CI
 
