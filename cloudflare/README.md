@@ -1,7 +1,7 @@
 # produkter (Cloudflare-version)
 
 AI-genererade produktbeskrivningar på svenska — Cloudflare Workers-version
-av [produkter](https://github.com/blixten85/produkter)
+av [produkter](https://github.com/Avkroken/produkter)
 (Flask/Docker). Samma funktionalitet, ny arkitektur:
 
 - Konton, leverantörsnycklar (krypterade), jobb → D1 istället för SQLite/disk
@@ -64,8 +64,9 @@ cd app && npx wrangler dev --local --persist-to /tmp/pd-state -c wrangler.jsonc 
 
 ## Deploy
 
-Kräver riktiga D1-/R2-/KV-/Queue-resurser provisionerade (database_id/kv id
-är `"TBD"`-platshållare i wrangler.jsonc-filerna just nu) samt:
+`main` deployas automatiskt av Cloudflare Workers Builds, en anslutning per
+Worker (root directories i `docs/CI.md`). Manuell deploy behövs bara för
+engångskörningar och för att sätta secrets:
 
 ```bash
 cd app && npx wrangler secret put PROVIDER_CONFIG_KEY && npx wrangler deploy
@@ -90,6 +91,7 @@ från `engine/` och postar tillbaka resultat (skyddat av `X-API-Key`). Se
   ogiltig API-nyckel — bekräftade att 401-fel hanteras korrekt utan att
   fastna eller krascha)
 - PDF-extraktion (`unpdf`) mot riktiga flersidiga PDF-filer
-- **Inte** verifierat: en riktig, fungerande AI-nyckel end-to-end (testades
-  bara med en avsiktligt ogiltig nyckel), produktionsdeploy, `engine`-Workerns
-  Cron Trigger i verklig drift
+
+Sedan dess verifierat i produktion: deploy, `engine`-Workerns Cron Trigger och
+beskriv-steget mot en riktig AI-nyckel. Beskrivningstakten begränsas i praktiken
+av Gemini-gratisnivåns dygnskvot, som bränns i ett svep när den återställs.

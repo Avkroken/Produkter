@@ -31,7 +31,7 @@ class TestRedact:
 class TestReportErrorToGithub:
     def test_returns_none_without_token(self, monkeypatch):
         monkeypatch.delenv("GITHUB_ERROR_REPORT_TOKEN", raising=False)
-        result = report_error_to_github("blixten85/test", "title", ValueError("x"))
+        result = report_error_to_github("Avkroken/test", "title", ValueError("x"))
         assert result is None
 
     def test_never_raises_on_network_failure(self, monkeypatch):
@@ -43,7 +43,7 @@ class TestReportErrorToGithub:
 
         monkeypatch.setattr(github_report.requests, "get", boom)
         monkeypatch.setattr(github_report.requests, "post", boom)
-        result = report_error_to_github("blixten85/test", "title", ValueError("x"))
+        result = report_error_to_github("Avkroken/test", "title", ValueError("x"))
         assert result is None
 
     def test_throttles_after_max_per_window(self, monkeypatch):
@@ -60,7 +60,7 @@ class TestReportErrorToGithub:
             lambda *a, **k: (_ for _ in ()).throw(github_report.requests.RequestException()),
         )
         # De första två släpps igenom (och försöker nätverk), den tredje stoppas av spärren.
-        report_error_to_github("blixten85/test", "t", ValueError("x"))
-        report_error_to_github("blixten85/test", "t", ValueError("y"))
-        report_error_to_github("blixten85/test", "t", ValueError("z"))
+        report_error_to_github("Avkroken/test", "t", ValueError("x"))
+        report_error_to_github("Avkroken/test", "t", ValueError("y"))
+        report_error_to_github("Avkroken/test", "t", ValueError("z"))
         assert len(calls) == 2

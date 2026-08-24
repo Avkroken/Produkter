@@ -41,7 +41,7 @@ def handle_unexpected_error(exc):
         return exc
     logger.exception("Unhandled error handling %s %s", request.method, request.path)
     report_error_to_github(
-        "blixten85/produkter",
+        "Avkroken/produkter",
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},
@@ -861,7 +861,7 @@ async def scraper_loop():
             await run_scraper()
         except (PlaywrightError, psycopg2.Error, OSError) as e:
             logger.error(f"Scraping failed: {e}")
-            report_error_to_github("blixten85/produkter", "Scraping failed", e)
+            report_error_to_github("Avkroken/produkter", "Scraping failed", e)
         finally:
             scraping_active = False
         

@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/blixten85/produkter:latest
+    image: ghcr.io/avkroken/produkter:latest
     container_name: produkter
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
       - config:/app/config
 
   sync:
-    image: ghcr.io/blixten85/produkter:latest
+    image: ghcr.io/avkroken/produkter:latest
     container_name: produkter-synk
     restart: unless-stopped
     profiles: [sync]

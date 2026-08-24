@@ -11,9 +11,9 @@ interface Alert {
 const AUD = "politiker-security-alerts";
 const JWKS = createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"));
 const ALLOWED = new Set([
-  "blixten85/produkter", "blixten85/politiker", "blixten85/bastion",
-  "blixten85/klarsprak", "blixten85/pastebinit", "blixten85/docker-idempotent-update",
-  "blixten85/routines-relay",
+  "avkroken/produkter", "avkroken/politiker", "avkroken/bastion",
+  "avkroken/klarsprak", "avkroken/pastebinit", "avkroken/docker-idempotent-update",
+  "avkroken/routines-relay",
 ]);
 
 async function authenticatedRepo(req: Request): Promise<string> {
@@ -24,8 +24,11 @@ async function authenticatedRepo(req: Request): Promise<string> {
     audience: AUD,
   });
   const repo = typeof payload.repository === "string" ? payload.repository : "";
-  if (!ALLOWED.has(repo)) throw new Error("repo not allowed");
-  if (payload.repository_owner !== "blixten85") throw new Error("owner not allowed");
+  if (!ALLOWED.has(repo.toLowerCase())) throw new Error("repo not allowed");
+  // Jämför skiftlägesokänsligt: GitHub bevarar kontots skiftläge i OIDC-claimen,
+  // och ett kontonamnbyte får inte tysta ingesten igen.
+  const owner = typeof payload.repository_owner === "string" ? payload.repository_owner : "";
+  if (owner.toLowerCase() !== "avkroken") throw new Error("owner not allowed");
   if (payload.ref !== "refs/heads/main") throw new Error("main required");
   if (payload.workflow_ref !== `${repo}/.github/workflows/security-alert-snapshot.yml@refs/heads/main`) {
     throw new Error("unexpected workflow");

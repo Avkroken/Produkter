@@ -26,7 +26,7 @@ Eller via den befintliga scraper-imagen (har redan Playwright + requests):
 
 ```bash
 docker run --rm -e ENGINE_URL=... -e INGEST_API_KEY=... \
-  ghcr.io/blixten85/scraper:latest python /app/fetcher/fetcher.py
+  ghcr.io/avkroken/scraper:latest python /app/fetcher/fetcher.py
 ```
 
 ## Miljövariabler

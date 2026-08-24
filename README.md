@@ -1,9 +1,9 @@
 # produkter
 
-[![CI](https://github.com/blixten85/produkter/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/produkter/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/blixten85/produkter)](https://github.com/blixten85/produkter/releases)
-[![Image](https://ghcr-badge.egpl.dev/blixten85/produkter/size?color=blue&label=image)](https://github.com/blixten85/produkter/pkgs/container/produkter)
-[![License](https://img.shields.io/github/license/blixten85/produkter)](LICENSE)
+[![CI](https://github.com/Avkroken/produkter/actions/workflows/ci.yml/badge.svg)](https://github.com/Avkroken/produkter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Avkroken/produkter)](https://github.com/Avkroken/produkter/releases)
+[![Image](https://ghcr-badge.egpl.dev/avkroken/produkter/size?color=blue&label=image)](https://github.com/Avkroken/produkter/pkgs/container/produkter)
+[![License](https://img.shields.io/github/license/Avkroken/produkter)](LICENSE)
 
 Generates Swedish product descriptions via your own Claude (Anthropic),
 ChatGPT (OpenAI), Gemini (Google) and/or Azure OpenAI Service API account.

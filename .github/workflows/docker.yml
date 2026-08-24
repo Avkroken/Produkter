@@ -78,14 +78,14 @@ jobs:
           push: false
           load: true
           tags: |
-            ghcr.io/blixten85/produkter:latest
-            ghcr.io/blixten85/produkter:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/avkroken/produkter:latest
+            ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
 
       - name: Trivy
         if: needs.impact.outputs.docker_app == 'true'
         uses: ./.github/actions/trivy
         with:
-          image-ref: ghcr.io/blixten85/produkter:sha-${{ steps.sha.outputs.short }}
+          image-ref: ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
           category: trivy-product-describer
 
       - name: Rapportera opåverkad image till Code Scanning
@@ -109,8 +109,8 @@ jobs:
       - name: Publicera imagen
         if: needs.impact.outputs.docker_app == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
         run: |
-          docker push ghcr.io/blixten85/produkter:latest
-          docker push ghcr.io/blixten85/produkter:sha-${{ steps.sha.outputs.short }}
+          docker push ghcr.io/avkroken/produkter:latest
+          docker push ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
 
   scraper-image:
     needs: impact
@@ -142,14 +142,14 @@ jobs:
           push: false
           load: true
           tags: |
-            ghcr.io/blixten85/scraper:latest
-            ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/avkroken/scraper:latest
+            ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
 
       - name: Trivy
         if: needs.impact.outputs.docker_scraper == 'true'
         uses: ./.github/actions/trivy
         with:
-          image-ref: ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+          image-ref: ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
           category: trivy-scraper
 
       - name: Rapportera opåverkad image till Code Scanning
@@ -173,8 +173,8 @@ jobs:
       - name: Publicera imagen
         if: needs.impact.outputs.docker_scraper == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
         run: |
-          docker push ghcr.io/blixten85/scraper:latest
-          docker push ghcr.io/blixten85/scraper:sha-${{ steps.sha.outputs.short }}
+          docker push ghcr.io/avkroken/scraper:latest
+          docker push ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
 
   docker:
     if: always()
