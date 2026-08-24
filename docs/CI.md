@@ -2,16 +2,36 @@
 
 ## Grundmodell
 
-`main` är den enda långlivade arbetsgrenen. Varje ändring görs på en kortlivad branch och går via PR till `main`.
+`dev` är den enda skrivbara grenen. `main` tar bara emot squash-mergade PR:er som
+passerat gröna checkar. Inga kortlivade grenar per uppgift — de blev liggande
+halvfärdiga, vilket är skälet till modellen.
 
-1. Skapa en kortlivad branch från aktuell `main`.
-2. Öppna PR från arbetsbranchen till `main`.
-3. PR-CI verifierar den faktiska ändringen.
-4. Auto-merge får aktiveras på PR:n; när required checks och eventuella reviewkrav är uppfyllda mergar GitHub automatiskt.
-5. **Squash merge är den enda tillåtna merge-metoden.** Merge commit och rebase merge används inte.
-6. Head-branchen raderas automatiskt efter merge.
+1. Arbetet sker på `dev`.
+2. PR öppnas från `dev` till `main`.
+3. PR-CI verifierar ändringen.
+4. Auto-merge aktiveras; merge-kön tar PR:n när required checks är gröna och
+   mergar en i taget mot aktuell `main`.
+5. **Squash merge är den enda tillåtna merge-metoden.**
+6. `sync-dev.yml` återställer `dev` till `main` efter varje merge.
 
-CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av `pull_request` och av `push` till `main` där efter-merge-verifiering behövs; kortlivade arbetsbrancher behöver ingen separat push-CI när samma commit redan verifieras genom PR:n.
+Punkt 6 är inte kosmetika. Squash-merge ger `main` en enda ny commit medan `dev`
+behåller sina ursprungliga — utan återställning divergerar grenarna och nästa PR
+fylls av konflikter. Workflowen hoppar över återställningen om `dev` har commits
+som inte finns i `main`, så inget osynkat arbete kastas.
+
+CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av
+`pull_request`, av `merge_group` (merge-kön) och av `push` till `main` där
+efter-merge-verifiering behövs.
+
+## Merge-kön
+
+Kön kräver att required checks svarar på `merge_group`-eventet. Varje workflow vars
+jobb är en required check har därför `merge_group:` i sin `on:` — utan den skickar
+kön `merge_group.checks_requested`, ingen svarar, och PR:n kastas ut efter
+`check_response_timeout_minutes`.
+
+Kön är satt till en post i taget (`max_entries_to_build`, `max_entries_to_merge`
+och `min_entries_to_merge_wait_minutes`), så varje merge byggs mot aktuell `main`.
 
 ## Selektiv CI
 

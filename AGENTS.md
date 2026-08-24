@@ -18,15 +18,24 @@ Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras m
 
 ## GitHub-arbetsflöde
 
-`main` är den enda långlivade arbetsgrenen. `dev` används inte.
+`dev` är den enda skrivbara grenen. `main` tar bara emot squash-mergade PR:er
+som passerat gröna checkar.
 
-1. Skapa en kortlivad branch från aktuell `main` för varje uppgift.
+**Skapa aldrig egna grenar.** Allt arbete sker på `dev`. Det är en hård regel, inte
+en rekommendation: grenar som skapas per uppgift blir liggande halvfärdiga, och det
+är hela anledningen till att modellen ser ut så här.
+
+1. Utgå från aktuell `dev`. Ligger det osynkat arbete där, bygg vidare på det i
+   stället för att börja om någon annanstans.
 2. Kör relevanta Python-tester, Node-typechecks och andra komponentkontroller innan push.
-3. Öppna PR från arbetsbranchen till `main` som klar för granskning. Auto-merge är tillåtet och får aktiveras när PR:n är redo; GitHub mergar först när alla ruleset-krav är uppfyllda.
-4. Lös CI- och reviewproblem på samma branch tills required checks är gröna och review-trådar lösta.
-5. **Squash merge är den enda tillåtna merge-metoden.** Använd inte merge commits eller rebase merge. Repot är konfigurerat att automatiskt radera head-branchen efter merge.
+3. Pusha till `dev` och öppna PR från `dev` till `main` som klar för granskning.
+   Aktivera auto-merge — merge-kön tar PR:n så snart required checks är gröna.
+4. Lös CI- och reviewproblem på `dev`; PR:n uppdateras automatiskt av varje push.
+5. **Squash merge är den enda tillåtna merge-metoden.** Efter merge återställs `dev` till
+   `main` automatiskt av `.github/workflows/sync-dev.yml`.
 
-Skicka aldrig direkt till `main`, kringgå inte branch protection/rulesets och ändra inte hemligheter eller organisationsinställningar utan uttrycklig instruktion.
+Skicka aldrig direkt till `main`, kringgå inte branch protection/rulesets och ändra
+inte hemligheter eller organisationsinställningar utan uttrycklig instruktion.
 
 ## Svarsformat
 
