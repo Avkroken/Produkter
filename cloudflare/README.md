@@ -22,7 +22,7 @@ Workers:
 - `app/` — webb-UI + API (auth, inställningar, filuppladdning, jobblista/nedladdning, katalog, prisbevakning, bistånds-underlag, admin-panel). Lägger en `extract`-kö-post per uppladdning, gör inget extraktions-/AI-arbete själv.
 - `processor/` — kö-konsument. Extraherar produktrader ur uppladdade filer (CSV/XLSX/TXT/DOCX/PDF) och genererar en beskrivning per rad. Paus/återupptagning vid leverantörskvot hanteras via `queueMsg.retry({delaySeconds})`, inte en persisterad bakgrundstråd.
 - `engine/` — katalog-motorn. En Cron Trigger var 5:e minut driver crawl/discovery, schemaläggning av detaljjobb och prisbevakning mot D1, plus HTTP-endpoints som den serverbundna Playwright-fetchern anropar (lease/ack). On-demand-beskrivning via `POST /describe`. Använder operatörens egna miljövariabel-nycklar, inte kontobundna.
-- `token-rotator/` — Cron som förlänger Cloudflare API-tokens nära utgång så token-hygienen blir självgående.
+- `security-alerts/` — tar emot Code Scanning-alerts från GitHub Actions via OIDC-verifierad ingest och skriver dem till `politiker`-D1. Deployas från det här repot men hör datamässigt till politiker-projektet.
 
 `shared/` — kod gemensam för flera Workers (kryptering, AI-providers, prompts, kontoinställningar). OBS: `extractors.ts` ligger i `processor/src/` istället för `shared/` trots att den konceptuellt är delad logik — TypeScripts modulupplösning för tredjepartsbibliotek (xlsx/mammoth/unpdf) söker bara uppåt i katalogträdet, så filer i `shared/` (ett syskon till `processor/`) kan inte hitta paket som bara finns i `processor/node_modules`.
 
