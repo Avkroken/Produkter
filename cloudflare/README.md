@@ -1,7 +1,7 @@
 # produkter (Cloudflare-version)
 
 AI-genererade produktbeskrivningar på svenska — Cloudflare Workers-version
-av [produkter](https://github.com/blixten85/produkter)
+av [produkter](https://github.com/Avkroken/produkter)
 (Flask/Docker). Samma funktionalitet, ny arkitektur:
 
 - Konton, leverantörsnycklar (krypterade), jobb → D1 istället för SQLite/disk
@@ -22,7 +22,7 @@ Workers:
 - `app/` — webb-UI + API (auth, inställningar, filuppladdning, jobblista/nedladdning, katalog, prisbevakning, bistånds-underlag, admin-panel). Lägger en `extract`-kö-post per uppladdning, gör inget extraktions-/AI-arbete själv.
 - `processor/` — kö-konsument. Extraherar produktrader ur uppladdade filer (CSV/XLSX/TXT/DOCX/PDF) och genererar en beskrivning per rad. Paus/återupptagning vid leverantörskvot hanteras via `queueMsg.retry({delaySeconds})`, inte en persisterad bakgrundstråd.
 - `engine/` — katalog-motorn. En Cron Trigger var 5:e minut driver crawl/discovery, schemaläggning av detaljjobb och prisbevakning mot D1, plus HTTP-endpoints som den serverbundna Playwright-fetchern anropar (lease/ack). On-demand-beskrivning via `POST /describe`. Använder operatörens egna miljövariabel-nycklar, inte kontobundna.
-- `token-rotator/` — Cron som förlänger Cloudflare API-tokens nära utgång så token-hygienen blir självgående.
+- `security-alerts/` — tar emot Code Scanning-alerts från GitHub Actions via OIDC-verifierad ingest och skriver dem till `politiker`-D1. Deployas från det här repot men hör datamässigt till politiker-projektet.
 
 `shared/` — kod gemensam för flera Workers (kryptering, AI-providers, prompts, kontoinställningar). OBS: `extractors.ts` ligger i `processor/src/` istället för `shared/` trots att den konceptuellt är delad logik — TypeScripts modulupplösning för tredjepartsbibliotek (xlsx/mammoth/unpdf) söker bara uppåt i katalogträdet, så filer i `shared/` (ett syskon till `processor/`) kan inte hitta paket som bara finns i `processor/node_modules`.
 
@@ -64,8 +64,9 @@ cd app && npx wrangler dev --local --persist-to /tmp/pd-state -c wrangler.jsonc 
 
 ## Deploy
 
-Kräver riktiga D1-/R2-/KV-/Queue-resurser provisionerade (database_id/kv id
-är `"TBD"`-platshållare i wrangler.jsonc-filerna just nu) samt:
+`main` deployas automatiskt av Cloudflare Workers Builds, en anslutning per
+Worker (root directories i `docs/CI.md`). Manuell deploy behövs bara för
+engångskörningar och för att sätta secrets:
 
 ```bash
 cd app && npx wrangler secret put PROVIDER_CONFIG_KEY && npx wrangler deploy
@@ -90,6 +91,7 @@ från `engine/` och postar tillbaka resultat (skyddat av `X-API-Key`). Se
   ogiltig API-nyckel — bekräftade att 401-fel hanteras korrekt utan att
   fastna eller krascha)
 - PDF-extraktion (`unpdf`) mot riktiga flersidiga PDF-filer
-- **Inte** verifierat: en riktig, fungerande AI-nyckel end-to-end (testades
-  bara med en avsiktligt ogiltig nyckel), produktionsdeploy, `engine`-Workerns
-  Cron Trigger i verklig drift
+
+Sedan dess verifierat i produktion: deploy, `engine`-Workerns Cron Trigger och
+beskriv-steget mot en riktig AI-nyckel. Beskrivningstakten begränsas i praktiken
+av Gemini-gratisnivåns dygnskvot, som bränns i ett svep när den återställs.

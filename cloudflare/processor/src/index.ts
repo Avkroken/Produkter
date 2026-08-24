@@ -51,7 +51,7 @@ export default {
         // oväntat fel ska inte kunna fastna i en oändlig kö-retry-loop.
         console.error(`jobId=${msg.body.jobId} type=${msg.body.type} misslyckades:`, err);
         await reportErrorToGitHub(
-          "blixten85/produkter",
+          "Avkroken/produkter",
           `Processor: ${msg.body.type} misslyckades`,
           err,
           env,

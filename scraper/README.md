@@ -1,8 +1,8 @@
 # Web Scraper Platform
 
-[![CI](https://github.com/blixten85/produkter/actions/workflows/ci.yml/badge.svg)](https://github.com/blixten85/produkter/actions/workflows/ci.yml)
-[![Image](https://ghcr-badge.egpl.dev/blixten85/scraper/size?color=blue&label=image)](https://github.com/users/blixten85/packages/container/package/scraper)
-[![License](https://img.shields.io/github/license/blixten85/produkter)](../LICENSE)
+[![CI](https://github.com/Avkroken/produkter/actions/workflows/ci.yml/badge.svg)](https://github.com/Avkroken/produkter/actions/workflows/ci.yml)
+[![Image](https://ghcr-badge.egpl.dev/avkroken/scraper/size?color=blue&label=image)](https://github.com/users/avkroken/packages/container/package/scraper)
+[![License](https://img.shields.io/github/license/Avkroken/produkter)](../LICENSE)
 
 **Production-ready web scraping platform with PostgreSQL, WebUI, REST API, and price monitoring.**
 

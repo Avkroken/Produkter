@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directory: "/"
     schedule:
       interval: "weekly"
@@ -16,7 +16,7 @@ updates:
   # basimage aldrig bumpades — och det är basimagen nästan alla Trivy-fynd
   # kommer från, så utan den här raden rapporteras fynd som ingen åtgärdar.
   - package-ecosystem: "docker"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directories:
       - "/"
       - "/scraper"
@@ -27,7 +27,7 @@ updates:
       timezone: "Europe/Stockholm"
 
   - package-ecosystem: "github-actions"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directory: "/"
     schedule:
       interval: "weekly"
@@ -39,7 +39,7 @@ updates:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "docker-compose"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directories:
       - "/"
       - "/scraper"
@@ -55,7 +55,7 @@ updates:
   # Scrapern som flyttade hit. Egen Dockerfile och requirements.txt per
   # deltjänst (api, webui, fetcher, alerts, scraper).
   - package-ecosystem: "pip"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directories:
       - "/scraper"
       - "/scraper/*"
@@ -70,7 +70,7 @@ updates:
 
   # Workers-versionen som flyttade hit.
   - package-ecosystem: "npm"
-    assignees: ["blixten85"]
+    assignees: ["Avkroken"]
     directories:
       - "/cloudflare/app"
       - "/cloudflare/engine"

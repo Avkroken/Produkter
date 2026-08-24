@@ -2,16 +2,42 @@
 
 ## Grundmodell
 
-`main` är den enda långlivade arbetsgrenen. Varje ändring görs på en kortlivad branch och går via PR till `main`.
+Arbete sker i en sluten pool av tre grenar, en per arbetstyp — `work/feature`,
+`work/fix` och `work/chore`. Namnen gör PR-listan självbeskrivande. Rulesetet
+blockerar skapande av allt utanför poolen, så antalet arbetsgrenar kan inte växa.
+Kortlivade grenar per uppgift användes tidigare och blev liggande halvfärdiga.
 
-1. Skapa en kortlivad branch från aktuell `main`.
-2. Öppna PR från arbetsbranchen till `main`.
-3. PR-CI verifierar den faktiska ändringen.
-4. Auto-merge får aktiveras på PR:n; när required checks och eventuella reviewkrav är uppfyllda mergar GitHub automatiskt.
-5. **Squash merge är den enda tillåtna merge-metoden.** Merge commit och rebase merge används inte.
-6. Head-branchen raderas automatiskt efter merge.
+1. En bot tar sloten som matchar arbetet, eller vilken ledig som helst om den är
+   upptagen. Finns omergat arbete i en slot slutförs det först.
+2. PR öppnas från sloten till `main`.
+3. PR-CI verifierar ändringen.
+4. Auto-merge aktiveras; merge-kön tar PR:n när required checks är gröna och
+   mergar en i taget mot aktuell `main`.
+5. **Squash merge är den enda tillåtna merge-metoden.**
+6. `sync-pool.yml` rebasar varje slot på `main` efter varje merge.
 
-CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av `pull_request` och av `push` till `main` där efter-merge-verifiering behövs; kortlivade arbetsbrancher behöver ingen separat push-CI när samma commit redan verifieras genom PR:n.
+Punkt 6 är inte kosmetika. Squash-merge ger `main` en enda ny commit medan sloten
+behåller sina ursprungliga — utan rebase divergerar de och nästa PR fylls av
+konflikter. `--empty=drop` tar bort de commits vars innehåll redan finns i main
+och replayar resten, så arbete som tillkommit under en öppen PR överlever.
+
+Tre slots ger parallellt arbete utan grenkaos, och gör merge-kön meningsfull:
+den serialiserar upp till tre strömmar mot `main`.
+
+CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av
+`pull_request`, av `merge_group` (merge-kön) och av `push` till `main` där
+efter-merge-verifiering behövs.
+
+## Merge-kön
+
+Kön kräver att required checks svarar på `merge_group`-eventet. Varje workflow vars
+jobb är en required check har därför `merge_group:` i sin `on:` — utan den skickar
+kön `merge_group.checks_requested`, ingen svarar, och PR:n kastas ut efter
+`check_response_timeout_minutes`.
+
+`CodeQL` är medvetet **inte** en required status check. Code scanning default setup
+rapporterar inte på merge-grupper, så kravet hade låst kön permanent. Skyddet ligger
+i stället i `code_scanning`-regeln, som verkar på PR-nivå före kön.
 
 ## Selektiv CI
 
@@ -39,7 +65,34 @@ Docker-images routas separat från språk-CI.
 
 Required checken `docker` är ett stabilt aggregatorjobb. Image-jobb får hoppas över med job-level `if:` utan att rulesetet tappar sitt required check-namn.
 
-Docker-, deploy- och security-workflows får egna filter när det är säkert, men stabila Code Scanning-kategorier och required check-namn får inte ändras bara för att komponenter byter namn.
+Docker- och security-workflows får egna filter när det är säkert, men stabila Code Scanning-kategorier och required check-namn får inte ändras bara för att komponenter byter namn.
+
+## Deploy
+
+Cloudflare Workers deployas av **Workers Builds**, inte av GitHub Actions. Varje
+Worker är kopplad mot det här repot och bygger från `main` vid push, med en egen
+root directory:
+
+| Worker | Root directory |
+| --- | --- |
+| `produkter` | `cloudflare/app` |
+| `produkter-motor` | `cloudflare/engine` |
+| `produkter-bearbetare` | `cloudflare/processor` |
+| `security-alert-ingest` | `cloudflare/security-alerts` |
+
+`wrangler.jsonc` i respektive katalog är sanningskällan för namn, bindings,
+routes och cron-triggers. Worker-namnet i dashboarden måste matcha `name` i
+configen, annars failar bygget. Bindings som ändras i dashboarden skrivs över
+vid nästa deploy från `main`.
+
+`shared/` ligger utanför alla root directories men bundlas in i tre av dem.
+Build watch paths måste därför inkludera både worker-katalogen och
+`cloudflare/shared/*`, annars deployas inte en ändring i delad kod.
+
+Secrets (`PROVIDER_CONFIG_KEY`, `INGEST_API_KEY`, `GEMINI_API_KEY`,
+`GITHUB_ERROR_REPORT_TOKEN`) sätts med `wrangler secret put` och rörs inte av
+bygget. `PROVIDER_CONFIG_KEY` måste ha samma värde i `produkter` och
+`produkter-bearbetare` — appen krypterar, bearbetaren dekrypterar.
 
 ## Princip
 
