@@ -14,7 +14,7 @@ Repot innehåller tre delar av samma produkt: Python-appen i roten, Cloudflare W
 
 ## Versioner
 
-Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras med orsak och villkor för borttagning. Dependabot ska hantera normala dependency-uppdateringar via PR, inte auto-merge.
+Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras med orsak och villkor för borttagning. Dependabot ska hantera normala dependency-uppdateringar via PR; auto-merge får användas enligt repots regler när alla krav är uppfyllda.
 
 ## GitHub-arbetsflöde
 
@@ -22,9 +22,9 @@ Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras m
 
 1. Skapa en kortlivad branch från aktuell `main` för varje uppgift.
 2. Kör relevanta Python-tester, Node-typechecks och andra komponentkontroller innan push.
-3. Öppna PR från arbetsbranchen till `main` som klar för granskning. Aktivera inte auto-merge.
+3. Öppna PR från arbetsbranchen till `main` som klar för granskning. Auto-merge är tillåtet och får aktiveras när PR:n är redo; GitHub mergar först när alla ruleset-krav är uppfyllda.
 4. Lös CI- och reviewproblem på samma branch tills required checks är gröna och review-trådar lösta.
-5. Merge sker med **squash merge**. Använd inte merge commits eller rebase merge. Head-branchen får raderas efter merge.
+5. **Squash merge är den enda tillåtna merge-metoden.** Använd inte merge commits eller rebase merge. Repot är konfigurerat att automatiskt radera head-branchen efter merge.
 
 Skicka aldrig direkt till `main`, kringgå inte branch protection/rulesets och ändra inte hemligheter eller organisationsinställningar utan uttrycklig instruktion.
 
