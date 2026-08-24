@@ -22,19 +22,6 @@ permissions:
   contents: write
 
 jobs:
-  migrera-namn:
-    environment: produktion
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: main
-      - name: Migrera Cloudflare-resurser
-        run: node scripts/migrera-produktnamn.mjs
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUKTER || secrets.PRODUCT_DESCRIBER }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-
   select:
     runs-on: ubuntu-latest
     outputs:
@@ -89,7 +76,7 @@ jobs:
 
   deploy:
     environment: produktion
-    needs: [migrera-namn, select]
+    needs: [select]
     if: needs.select.outputs.workers != '[]' && needs.select.outputs.workers != ''
     runs-on: ubuntu-latest
     strategy:
@@ -115,25 +102,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUKTER || secrets.PRODUCT_DESCRIBER }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
-  slutfor-dataflytt:
-    environment: produktion
-    needs: [migrera-namn, deploy]
-    if: needs.deploy.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: main
-      - name: Kopiera sista R2-skillnaden och verifiera
-        run: node scripts/migrera-produktnamn.mjs
-        env:
-          MIGRATION_PHASE: finalize
-          CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUKTER || secrets.PRODUCT_DESCRIBER }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-
   mark:
-    needs: [migrera-namn, select, deploy, slutfor-dataflytt]
-    if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.migrera-namn.result == 'success' && needs.deploy.result != 'failure' && needs.slutfor-dataflytt.result == 'success'
+    needs: [select, deploy]
+    if: always() && github.event_name != 'workflow_dispatch' && needs.select.result == 'success' && needs.deploy.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
