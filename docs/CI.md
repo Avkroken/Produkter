@@ -39,7 +39,34 @@ Docker-images routas separat från språk-CI.
 
 Required checken `docker` är ett stabilt aggregatorjobb. Image-jobb får hoppas över med job-level `if:` utan att rulesetet tappar sitt required check-namn.
 
-Docker-, deploy- och security-workflows får egna filter när det är säkert, men stabila Code Scanning-kategorier och required check-namn får inte ändras bara för att komponenter byter namn.
+Docker- och security-workflows får egna filter när det är säkert, men stabila Code Scanning-kategorier och required check-namn får inte ändras bara för att komponenter byter namn.
+
+## Deploy
+
+Cloudflare Workers deployas av **Workers Builds**, inte av GitHub Actions. Varje
+Worker är kopplad mot det här repot och bygger från `main` vid push, med en egen
+root directory:
+
+| Worker | Root directory |
+| --- | --- |
+| `produkter` | `cloudflare/app` |
+| `produkter-motor` | `cloudflare/engine` |
+| `produkter-bearbetare` | `cloudflare/processor` |
+| `security-alert-ingest` | `cloudflare/security-alerts` |
+
+`wrangler.jsonc` i respektive katalog är sanningskällan för namn, bindings,
+routes och cron-triggers. Worker-namnet i dashboarden måste matcha `name` i
+configen, annars failar bygget. Bindings som ändras i dashboarden skrivs över
+vid nästa deploy från `main`.
+
+`shared/` ligger utanför alla root directories men bundlas in i tre av dem.
+Build watch paths måste därför inkludera både worker-katalogen och
+`cloudflare/shared/*`, annars deployas inte en ändring i delad kod.
+
+Secrets (`PROVIDER_CONFIG_KEY`, `INGEST_API_KEY`, `GEMINI_API_KEY`,
+`GITHUB_ERROR_REPORT_TOKEN`) sätts med `wrangler secret put` och rörs inte av
+bygget. `PROVIDER_CONFIG_KEY` måste ha samma värde i `produkter` och
+`produkter-bearbetare` — appen krypterar, bearbetaren dekrypterar.
 
 ## Princip
 
