@@ -2,11 +2,13 @@
 
 ## Grundmodell
 
-Arbete sker i en sluten pool av tre grenar: `dev/1`, `dev/2`, `dev/3`. Rulesetet
+Arbete sker i en sluten pool av tre grenar, en per arbetstyp — `work/feature`,
+`work/fix` och `work/chore`. Namnen gör PR-listan självbeskrivande. Rulesetet
 blockerar skapande av allt utanför poolen, så antalet arbetsgrenar kan inte växa.
 Kortlivade grenar per uppgift användes tidigare och blev liggande halvfärdiga.
 
-1. En bot tar en ledig slot. Finns omergat arbete i en slot slutförs det först.
+1. En bot tar sloten som matchar arbetet, eller vilken ledig som helst om den är
+   upptagen. Finns omergat arbete i en slot slutförs det först.
 2. PR öppnas från sloten till `main`.
 3. PR-CI verifierar ändringen.
 4. Auto-merge aktiveras; merge-kön tar PR:n när required checks är gröna och
