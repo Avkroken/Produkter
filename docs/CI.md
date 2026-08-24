@@ -2,16 +2,16 @@
 
 ## Grundmodell
 
-Repositoryt använder endast `dev` och `main`.
+`main` är den enda långlivade arbetsgrenen. Varje ändring görs på en kortlivad branch och går via PR till `main`.
 
-1. Arbete görs på `dev`.
-2. PR öppnas från `dev` till `main`.
-3. PR-CI kör verifiering mot den faktiska ändringen.
-4. Auto-merge får merga när required checks är gröna.
-5. Efter push/merge till `main` fast-forwardar `.github/workflows/sync-dev.yml` automatiskt `dev` till `main`.
-6. Sync-workflowen force-pushar aldrig. Om `dev` innehåller omergat arbete avbryts synken i stället.
+1. Skapa en kortlivad branch från aktuell `main`.
+2. Öppna PR från arbetsbranchen till `main`.
+3. PR-CI verifierar den faktiska ändringen.
+4. Auto-merge får aktiveras på PR:n; när required checks och eventuella reviewkrav är uppfyllda mergar GitHub automatiskt.
+5. **Squash merge är den enda tillåtna merge-metoden.** Merge commit och rebase merge används inte.
+6. Head-branchen raderas automatiskt efter merge.
 
-CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av `pull_request` och av `push` till `main`, inte av separat `push` till `dev` när samma commit redan verifieras genom PR:n.
+CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av `pull_request` och av `push` till `main` där efter-merge-verifiering behövs; kortlivade arbetsbrancher behöver ingen separat push-CI när samma commit redan verifieras genom PR:n.
 
 ## Selektiv CI
 
