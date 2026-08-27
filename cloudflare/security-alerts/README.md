@@ -27,7 +27,7 @@ Repository permissions:
 Webhook:
 
 - URL: `https://security-alerts.denied.se/webhook`
-- Secret: a random secret shared with `GITHUB_WEBHOOK_SECRET`
+- Secret: a random secret shared with `SECURITY_ISSUE_WEBHOOK_SECRET`
 - Active: enabled
 - Events: `Code scanning alerts`, `Dependabot alerts`, and `Secret scanning alerts`
 
@@ -37,9 +37,9 @@ The webhook payload supplies the installation ID, so no installation ID is store
 
 Set these on the existing Worker `security-alert-ingest`:
 
-- `GITHUB_WEBHOOK_SECRET` — Secret; same value as the GitHub App webhook secret.
-- `GITHUB_APP_ID` — the GitHub App ID.
-- `GITHUB_APP_PRIVATE_KEY` — Secret; the app private key in unencrypted PKCS#8 PEM format.
+- `SECURITY_ISSUE_WEBHOOK_SECRET` — Secret; same value as the GitHub App webhook secret.
+- `SECURITY_ISSUE_APP_ID` — the GitHub App ID.
+- `SECURITY_ISSUE_APP_PRIVATE_KEY` — Secret; the app private key in unencrypted PKCS#8 PEM format.
 
 GitHub downloads new App private keys as PKCS#1 PEM. Convert it locally before storing it in Cloudflare:
 
@@ -47,7 +47,7 @@ GitHub downloads new App private keys as PKCS#1 PEM. Convert it locally before s
 openssl pkcs8 -topk8 -nocrypt -in downloaded-app-key.pem -out github-app-key-pkcs8.pem
 ```
 
-Store the complete contents of `github-app-key-pkcs8.pem` as `GITHUB_APP_PRIVATE_KEY`. Never commit either private-key file.
+Store the complete contents of `github-app-key-pkcs8.pem` as `SECURITY_ISSUE_APP_PRIVATE_KEY`. Never commit either private-key file.
 
 `GITHUB_TOKEN` is no longer used and should be removed from the Worker after the GitHub App deployment is working.
 
