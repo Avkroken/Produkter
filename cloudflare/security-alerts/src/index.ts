@@ -1,7 +1,7 @@
 interface Env {
-  GITHUB_WEBHOOK_SECRET: string;
-  GITHUB_APP_ID: string;
-  GITHUB_APP_PRIVATE_KEY: string;
+  SECURITY_ISSUE_WEBHOOK_SECRET: string;
+  SECURITY_ISSUE_APP_ID: string;
+  SECURITY_ISSUE_APP_PRIVATE_KEY: string;
 }
 
 const ORG = "Avkroken";
@@ -43,9 +43,9 @@ async function verifySignature(raw: string, signature: string | null, secret: st
 async function appJwt(env: Env): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = base64url(JSON.stringify({ iat: now - 60, exp: now + 540, iss: env.GITHUB_APP_ID }));
+  const payload = base64url(JSON.stringify({ iat: now - 60, exp: now + 540, iss: env.SECURITY_ISSUE_APP_ID }));
   const unsigned = `${header}.${payload}`;
-  const key = await crypto.subtle.importKey("pkcs8", pemBytes(env.GITHUB_APP_PRIVATE_KEY), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const key = await crypto.subtle.importKey("pkcs8", pemBytes(env.SECURITY_ISSUE_APP_PRIVATE_KEY), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(unsigned));
   return `${unsigned}.${base64url(signature)}`;
 }
@@ -134,7 +134,7 @@ export default {
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && (path === "/" || path === "/health")) return Response.json({ ok: true, service: "security-alerts" });
     if (req.method !== "POST" || path !== "/webhook") return new Response("Not found", { status: 404 });
-    if (!env.GITHUB_WEBHOOK_SECRET || !env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) {
+    if (!env.SECURITY_ISSUE_WEBHOOK_SECRET || !env.SECURITY_ISSUE_APP_ID || !env.SECURITY_ISSUE_APP_PRIVATE_KEY) {
       console.error("security webhook not configured");
       return new Response("Not configured", { status: 503 });
     }
@@ -143,7 +143,7 @@ export default {
     const delivery = req.headers.get("x-github-delivery") ?? "";
     const event = req.headers.get("x-github-event") ?? "";
 
-    if (!(await verifySignature(raw, req.headers.get("x-hub-signature-256"), env.GITHUB_WEBHOOK_SECRET))) {
+    if (!(await verifySignature(raw, req.headers.get("x-hub-signature-256"), env.SECURITY_ISSUE_WEBHOOK_SECRET))) {
       console.warn("security webhook bad signature", { delivery, event });
       return new Response("Bad signature", { status: 401 });
     }
