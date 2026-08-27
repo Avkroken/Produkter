@@ -15,6 +15,20 @@
       "allowed_sender_addresses": ["noreply@denied.se"]
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SECURITY_ALERT_ISSUE_LOCK",
+        "class_name": "SecurityAlertIssueLock"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SecurityAlertIssueLock"]
+    }
+  ],
   "routes": [
     {
       "pattern": "security-alerts.denied.se",
