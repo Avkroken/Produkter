@@ -17,6 +17,14 @@ The Worker also reconciles all currently open security alerts across every repos
 
 The backfill uses the same Issue markers as webhook delivery, so it is safe to run repeatedly. Alerts that already have their corresponding Issue are skipped.
 
+## Automatic Codex remediation
+
+Every five minutes, the Worker scans open security Issues and dispatches at most one Codex remediation per repository. Critical and malware findings are prioritized before high, Secret Scanning, and medium findings. A newly created webhook Issue also requests a queue pass immediately.
+
+The Worker posts the request as Gamnacken so the `@codex` mention can start downstream automation. Requests are deduplicated with `codex-security-remediation:<security marker>`, and an open `codex-security-remediation:active` Issue keeps later findings in that repository queued until the active Issue is closed by its merged PR.
+
+Codex is instructed to use the repository's existing branch pool, open a squash PR with `Fixes #<issue>`, enable auto-merge immediately, and continue handling CI and trusted automated review feedback. Required checks, branch protection, review resolution, and the merge queue remain authoritative; the Worker never changes the underlying security alert state.
+
 A valid GitHub organization-webhook `ping` also starts the same backfill asynchronously after the signed ping has been verified. This provides a safe way to request an immediate reconciliation from GitHub's webhook delivery UI without exposing a public backfill endpoint.
 
 ## Organization webhook

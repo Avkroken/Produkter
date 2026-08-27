@@ -6,11 +6,13 @@ interface Env {
 
 type IssueSpec = { marker: string; title: string; body: string };
 type BackfillStats = { scanned: number; eligible: number; created: number; exists: number; errors: number };
+type SecurityIssue = { body?: string; number: number; repository_url: string; title?: string };
 
 const ORG = "Avkroken";
 const API_VERSION = "2022-11-28";
 const ISSUE_SEVERITIES = new Set(["medium", "high", "critical"]);
 const SUPPORTED_EVENTS = new Set(["code_scanning_alert", "dependabot_alert", "secret_scanning_alert"]);
+const CODEX_ACTIVE_MARKER = "codex-security-remediation:active";
 
 function hex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -114,6 +116,83 @@ async function createIssue(token: string, repo: string, issue: IssueSpec): Promi
   return "created";
 }
 
+function repoFromApiUrl(repositoryUrl: string): string {
+  const prefix = "https://api.github.com/repos/";
+  return repositoryUrl.startsWith(prefix) ? repositoryUrl.slice(prefix.length) : "";
+}
+
+function securityMarker(body: string): string | null {
+  return body.match(/security-alert:(code-scanning|dependabot|secret-scanning):\d+/)?.[0] ?? null;
+}
+
+function codexPriority(title: string): number {
+  if (/\[(CRITICAL|MALWARE)\]/i.test(title)) return 0;
+  if (/\[HIGH\]/i.test(title)) return 1;
+  if (/\[Secret scanning\]/i.test(title)) return 2;
+  return 3;
+}
+
+async function issueComments(token: string, repo: string, issueNumber: number): Promise<Array<{ body?: string }>> {
+  return listAll(token, `/repos/${repo}/issues/${issueNumber}/comments?per_page=100`);
+}
+
+async function repoHasActiveCodexRemediation(token: string, repo: string): Promise<boolean> {
+  const query = `repo:${repo} is:issue is:open in:comments \"${CODEX_ACTIVE_MARKER}\"`;
+  const data = await (await github(token, `/search/issues?q=${encodeURIComponent(query)}&per_page=1`)).json<{ total_count?: number }>();
+  return (data.total_count ?? 0) > 0;
+}
+
+async function requestCodexRemediation(token: string, repo: string, issueNumber: number, marker: string): Promise<"dispatched" | "exists" | "busy"> {
+  const requestMarker = `codex-security-remediation:${marker}`;
+  const comments = await issueComments(token, repo, issueNumber);
+  if (comments.some((comment) => (comment.body ?? "").includes(requestMarker))) return "exists";
+  if (await repoHasActiveCodexRemediation(token, repo)) return "busy";
+
+  const body = [
+    `<!-- ${CODEX_ACTIVE_MARKER} -->`,
+    `<!-- ${requestMarker} -->`,
+    "@codex implement this security issue autonomously.",
+    "",
+    "Requirements:",
+    "- Verify the finding and make the smallest safe fix without changing the security alert state.",
+    "- Follow the repository AGENTS.md and use an available work/feature, work/fix, or work/chore pool branch; never push directly to main.",
+    `- Open a squash PR that includes \`Fixes #${issueNumber}\` and \`<!-- codex-security-remediation -->\` in its body.`,
+    "- Immediately enable auto-merge for the PR when it is opened. Do not wait for checks before enabling it; branch protection, required checks, review resolution, and the merge queue remain authoritative.",
+    "- Resolve CI and trusted automated review feedback on the same PR until it merges. Do not bypass or weaken any protection.",
+  ].join("\n");
+
+  await github(token, `/repos/${repo}/issues/${issueNumber}/comments`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  return "dispatched";
+}
+
+async function runCodexQueue(token: string): Promise<void> {
+  const query = `org:${ORG} is:issue is:open in:body \"security-alert:\"`;
+  const data = await (await github(token, `/search/issues?q=${encodeURIComponent(query)}&sort=created&order=asc&per_page=100`)).json<{ items?: SecurityIssue[] }>();
+  const issues = (data.items ?? []).sort((a, b) => codexPriority(a.title ?? "") - codexPriority(b.title ?? ""));
+  const handledRepos = new Set<string>();
+  const stats = { candidates: issues.length, dispatched: 0, exists: 0, busy: 0, errors: 0 };
+
+  for (const issue of issues) {
+    const repo = repoFromApiUrl(issue.repository_url);
+    const marker = securityMarker(issue.body ?? "");
+    if (!validOrgRepo(repo) || !marker || handledRepos.has(repo)) continue;
+    try {
+      const result = await requestCodexRemediation(token, repo, issue.number, marker);
+      stats[result] += 1;
+      handledRepos.add(repo);
+    } catch (error) {
+      stats.errors += 1;
+      console.error("security Codex dispatch failed", { repo, issueNumber: issue.number, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  console.log("security Codex queue complete", stats);
+}
+
 async function isMalware(token: string, repo: string, alertNumber: number): Promise<boolean> {
   const alerts = await listAll<{ number: number }>(token, `/repos/${repo}/dependabot/alerts?state=open&classification=malware&per_page=100`);
   return alerts.some((alert) => alert.number === alertNumber);
@@ -214,6 +293,12 @@ async function runBackfill(env: Env): Promise<void> {
     async (_repo, alert) => secretScanningIssue(alert),
   );
   console.log("security backfill complete", { code, dependabot, secret });
+  await runCodexQueue(token);
+}
+
+async function runQueueOnly(env: Env): Promise<void> {
+  if (!configured(env)) throw new Error("Security alerts Worker is not configured");
+  await runCodexQueue(await installationToken(env));
 }
 
 export default {
@@ -275,6 +360,7 @@ export default {
 
       const result = await createIssue(token, repo, issue);
       console.log("security webhook issue result", { delivery, event, action, repo, alertNumber: alert.number ?? null, result });
+      ctx.waitUntil(runCodexQueue(token).catch((error) => console.error("security webhook Codex queue failed", error instanceof Error ? error.message : String(error))));
       return new Response(`${result}\n`, { status: result === "created" ? 201 : 200 });
     } catch (error) {
       console.error("security webhook failed", { delivery, event, action, repo, error: error instanceof Error ? error.message : String(error) });
@@ -282,7 +368,8 @@ export default {
     }
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runBackfill(env).catch((error) => console.error("security scheduled backfill failed", error instanceof Error ? error.message : String(error))));
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const task = event.cron === "*/5 * * * *" ? runQueueOnly(env) : runBackfill(env);
+    ctx.waitUntil(task.catch((error) => console.error("security scheduled automation failed", { cron: event.cron, error: error instanceof Error ? error.message : String(error) })));
   },
 } satisfies ExportedHandler<Env>;
