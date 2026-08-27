@@ -7,6 +7,7 @@ interface Env {
 const ORG = "Avkroken";
 const API_VERSION = "2022-11-28";
 const ISSUE_SEVERITIES = new Set(["medium", "high", "critical"]);
+const SUPPORTED_EVENTS = new Set(["code_scanning_alert", "dependabot_alert", "secret_scanning_alert"]);
 
 function hex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -116,35 +117,81 @@ async function dependabotIssue(token: string, repo: string, payload: any) {
   return { marker: `security-alert:dependabot:${alert.number}`, title: `[Security][Dependabot][${level}] ${pkg}: ${summary}`, body: `Automatiskt skapat från ett öppet GitHub Dependabot-alert. Malware inkluderas alltid; övriga alerts kräver Medium eller högre.\n\n- **Severity/class:** ${level}\n- **Package:** ${pkg}\n- **Summary:** ${summary}\n- **Alert:** ${alert.html_url ?? ""}` };
 }
 
+function secretScanningIssue(payload: any) {
+  const alert = payload.alert ?? {};
+  const action = String(payload.action ?? "");
+  if (!Number.isSafeInteger(alert.number) || (action !== "created" && action !== "reopened")) return null;
+  const secretType = alert.secret_type_display_name ?? alert.secret_type ?? "Secret detected";
+  return {
+    marker: `security-alert:secret-scanning:${alert.number}`,
+    title: `[Security][Secret scanning] ${secretType}`,
+    body: `Automatiskt skapat från ett GitHub Secret Scanning-alert. Själva hemligheten inkluderas avsiktligt inte i issuet.\n\n- **Type:** ${secretType}\n- **Validity:** ${alert.validity ?? "unknown"}\n- **Alert:** ${alert.html_url ?? ""}`,
+  };
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && (path === "/" || path === "/health")) return Response.json({ ok: true, service: "security-alerts" });
     if (req.method !== "POST" || path !== "/webhook") return new Response("Not found", { status: 404 });
-    if (!env.GITHUB_WEBHOOK_SECRET || !env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return new Response("Not configured", { status: 503 });
+    if (!env.GITHUB_WEBHOOK_SECRET || !env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) {
+      console.error("security webhook not configured");
+      return new Response("Not configured", { status: 503 });
+    }
 
     const raw = await req.text();
-    if (!(await verifySignature(raw, req.headers.get("x-hub-signature-256"), env.GITHUB_WEBHOOK_SECRET))) return new Response("Bad signature", { status: 401 });
-
+    const delivery = req.headers.get("x-github-delivery") ?? "";
     const event = req.headers.get("x-github-event") ?? "";
-    if (event === "ping") return new Response("pong\n");
-    if (event !== "code_scanning_alert" && event !== "dependabot_alert") return new Response("ignored\n", { status: 202 });
+
+    if (!(await verifySignature(raw, req.headers.get("x-hub-signature-256"), env.GITHUB_WEBHOOK_SECRET))) {
+      console.warn("security webhook bad signature", { delivery, event });
+      return new Response("Bad signature", { status: 401 });
+    }
+
+    if (event === "ping") {
+      console.log("security webhook ping", { delivery });
+      return new Response("pong\n");
+    }
 
     let payload: any;
-    try { payload = JSON.parse(raw); } catch { return new Response("Bad JSON", { status: 400 }); }
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      console.warn("security webhook bad json", { delivery, event });
+      return new Response("Bad JSON", { status: 400 });
+    }
+
     const repo = String(payload.repository?.full_name ?? "");
+    const action = String(payload.action ?? "");
+    console.log("security webhook received", { delivery, event, action, repo });
+
+    if (!SUPPORTED_EVENTS.has(event)) {
+      console.log("security webhook ignored unsupported event", { delivery, event, action, repo });
+      return new Response("ignored\n", { status: 202 });
+    }
+
     if (!repo.toLowerCase().startsWith(`${ORG.toLowerCase()}/`)) return new Response("Wrong organization", { status: 403 });
     const installationId = Number(payload.installation?.id);
     if (!Number.isSafeInteger(installationId) || installationId <= 0) return new Response("Missing installation", { status: 400 });
 
     try {
       const token = await installationToken(env, installationId);
-      const issue = event === "code_scanning_alert" ? codeScanningIssue(payload) : await dependabotIssue(token, repo, payload);
-      if (!issue) return new Response("ignored\n", { status: 202 });
+      const issue = event === "code_scanning_alert"
+        ? codeScanningIssue(payload)
+        : event === "dependabot_alert"
+          ? await dependabotIssue(token, repo, payload)
+          : secretScanningIssue(payload);
+
+      if (!issue) {
+        console.log("security webhook ignored alert", { delivery, event, action, repo, alertNumber: payload.alert?.number ?? null });
+        return new Response("ignored\n", { status: 202 });
+      }
+
       const result = await createIssue(token, repo, issue.marker, issue.title, issue.body);
+      console.log("security webhook issue result", { delivery, event, action, repo, alertNumber: payload.alert?.number ?? null, result });
       return new Response(`${result}\n`, { status: result === "created" ? 201 : 200 });
     } catch (error) {
-      console.error("security webhook failed", error instanceof Error ? error.message : String(error));
+      console.error("security webhook failed", { delivery, event, action, repo, error: error instanceof Error ? error.message : String(error) });
       return new Response("Upstream error", { status: 502 });
     }
   },
