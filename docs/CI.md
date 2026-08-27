@@ -78,7 +78,6 @@ root directory:
 | `produkter` | `cloudflare/app` |
 | `produkter-motor` | `cloudflare/engine` |
 | `produkter-bearbetare` | `cloudflare/processor` |
-| `security-alert-ingest` | `cloudflare/security-alerts` |
 
 `wrangler.jsonc` i respektive katalog är sanningskällan för namn, bindings,
 routes och cron-triggers. Worker-namnet i dashboarden måste matcha `name` i
