@@ -4,6 +4,17 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
   "workers_dev": false,
+  "vars": {
+    "SECURITY_ALERT_EMAIL_TO": "anders.eriksson@denied.se",
+    "SECURITY_ALERT_EMAIL_FROM": "noreply@denied.se"
+  },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_destination_addresses": ["anders.eriksson@denied.se"],
+      "allowed_sender_addresses": ["noreply@denied.se"]
+    }
+  ],
   "routes": [
     {
       "pattern": "security-alerts.denied.se",
