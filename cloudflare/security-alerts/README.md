@@ -2,13 +2,16 @@
 
 Central event-driven receiver for the Avkroken GitHub App.
 
-`POST https://security-alerts.denied.se/webhook` accepts GitHub App `code_scanning_alert` and `dependabot_alert` events, verifies `X-Hub-Signature-256`, and creates an Issue in the affected Avkroken repository when:
+`POST https://security-alerts.denied.se/webhook` accepts GitHub App `code_scanning_alert`, `dependabot_alert`, and `secret_scanning_alert` events, verifies `X-Hub-Signature-256`, and creates an Issue in the affected Avkroken repository when:
 
 - Code Scanning severity is Medium, High, or Critical;
 - Dependabot vulnerability severity is Medium, High, or Critical;
-- Dependabot classification is malware, regardless of severity.
+- Dependabot classification is malware, regardless of severity;
+- a Secret Scanning alert is created or reopened. The detected secret itself is never copied into the Issue.
 
 Issues are deduplicated by alert type and alert number. No personal access token is used. The Worker authenticates as the GitHub App and exchanges a short-lived app JWT for an installation access token. GitHub installation access tokens expire after one hour.
+
+This receiver is event-driven. GitHub does not replay existing security alerts when the Worker is deployed or when a webhook subscription is enabled. Existing alerts therefore require a separate backfill/sync mechanism if they should also become Issues.
 
 ## GitHub App
 
@@ -18,14 +21,15 @@ Repository permissions:
 
 - `Issues`: Read & write
 - `Dependabot alerts`: Read-only
-- `Code scanning alerts`: Read-only (needed for the Code Scanning webhook subscription)
+- `Code scanning alerts`: Read-only
+- `Secret scanning alerts`: Read-only
 
 Webhook:
 
 - URL: `https://security-alerts.denied.se/webhook`
 - Secret: a random secret shared with `GITHUB_WEBHOOK_SECRET`
 - Active: enabled
-- Events: `Code scanning alerts` and `Dependabot alerts`
+- Events: `Code scanning alerts`, `Dependabot alerts`, and `Secret scanning alerts`
 
 The webhook payload supplies the installation ID, so no installation ID is stored in Cloudflare.
 
