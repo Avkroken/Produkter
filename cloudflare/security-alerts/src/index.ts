@@ -2,6 +2,9 @@ interface Env {
   SECURITY_ISSUE_WEBHOOK_SECRET: string;
   SECURITY_ISSUE_APP_ID: string;
   SECURITY_ISSUE_APP_PRIVATE_KEY: string;
+  SECURITY_ALERT_EMAIL_TO: string;
+  SECURITY_ALERT_EMAIL_FROM: string;
+  EMAIL: SendEmail;
 }
 
 type IssueSpec = { marker: string; title: string; body: string };
@@ -235,6 +238,59 @@ function secretScanningIssue(alert: any): IssueSpec | null {
   };
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] ?? character);
+}
+
+async function sendSecretScanningEmail(
+  env: Env,
+  repo: string,
+  alert: any,
+  action: string,
+  delivery: string,
+): Promise<void> {
+  const alertNumber = Number.isSafeInteger(alert.number) ? alert.number : "unknown";
+  const secretType = String(alert.secret_type_display_name ?? alert.secret_type ?? "Secret detected");
+  const validity = String(alert.validity ?? "unknown");
+  const alertUrl = String(alert.html_url ?? "");
+  const subject = `[Security][Secret scanning] ${repo} #${alertNumber}: ${secretType}`;
+  const text = [
+    `GitHub Secret Scanning reported a ${action} alert.`,
+    "",
+    `Repository: ${repo}`,
+    `Alert: #${alertNumber}`,
+    `Type: ${secretType}`,
+    `Validity: ${validity}`,
+    `URL: ${alertUrl}`,
+    "",
+    "The detected secret is intentionally not included in this email.",
+  ].join("\n");
+  const html = `<p>GitHub Secret Scanning reported a <strong>${escapeHtml(action)}</strong> alert.</p>
+<ul>
+  <li><strong>Repository:</strong> ${escapeHtml(repo)}</li>
+  <li><strong>Alert:</strong> #${escapeHtml(String(alertNumber))}</li>
+  <li><strong>Type:</strong> ${escapeHtml(secretType)}</li>
+  <li><strong>Validity:</strong> ${escapeHtml(validity)}</li>
+  <li><strong>URL:</strong> <a href="${escapeHtml(alertUrl)}">${escapeHtml(alertUrl)}</a></li>
+</ul>
+<p>The detected secret is intentionally not included in this email.</p>`;
+
+  await env.EMAIL.send({
+    to: env.SECURITY_ALERT_EMAIL_TO,
+    from: { email: env.SECURITY_ALERT_EMAIL_FROM, name: "Avkroken Security" },
+    subject,
+    text,
+    html,
+  });
+  console.log("security secret alert email sent", { delivery, action, repo, alertNumber });
+}
+
 function repoFromAlert(alert: any): string {
   return String(alert.repository?.full_name ?? "");
 }
@@ -344,9 +400,21 @@ export default {
     }
     if (!validOrgRepo(repo)) return new Response("Wrong organization", { status: 403 });
 
+    const alert = payload.alert ?? {};
+    if (event === "secret_scanning_alert" && (action === "created" || action === "reopened")) {
+      ctx.waitUntil(sendSecretScanningEmail(env, repo, alert, action, delivery).catch((error) => {
+        console.error("security secret alert email failed", {
+          delivery,
+          action,
+          repo,
+          alertNumber: alert.number ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }));
+    }
+
     try {
       const token = await installationToken(env);
-      const alert = payload.alert ?? {};
       const issue = event === "code_scanning_alert"
         ? codeScanningIssue(alert)
         : event === "dependabot_alert"
