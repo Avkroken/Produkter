@@ -50,9 +50,16 @@ async function appJwt(env: Env): Promise<string> {
   return `${unsigned}.${base64url(signature)}`;
 }
 
-async function installationToken(env: Env, installationId: number): Promise<string> {
+async function installationToken(env: Env): Promise<string> {
   const jwt = await appJwt(env);
-  const response = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+  const installationResponse = await fetch(`https://api.github.com/orgs/${encodeURIComponent(ORG)}/installation`, {
+    headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${jwt}`, "X-GitHub-Api-Version": API_VERSION, "User-Agent": "Avkroken-security-alerts" },
+  });
+  if (!installationResponse.ok) throw new Error(`GitHub installation lookup ${installationResponse.status}: ${(await installationResponse.text()).slice(0, 500)}`);
+  const installation = await installationResponse.json<{ id?: number }>();
+  if (!Number.isSafeInteger(installation.id) || Number(installation.id) <= 0) throw new Error("GitHub installation id missing");
+
+  const response = await fetch(`https://api.github.com/app/installations/${installation.id}/access_tokens`, {
     method: "POST",
     headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${jwt}`, "X-GitHub-Api-Version": API_VERSION, "User-Agent": "Avkroken-security-alerts" },
   });
@@ -171,11 +178,9 @@ export default {
     }
 
     if (!repo.toLowerCase().startsWith(`${ORG.toLowerCase()}/`)) return new Response("Wrong organization", { status: 403 });
-    const installationId = Number(payload.installation?.id);
-    if (!Number.isSafeInteger(installationId) || installationId <= 0) return new Response("Missing installation", { status: 400 });
 
     try {
-      const token = await installationToken(env, installationId);
+      const token = await installationToken(env);
       const issue = event === "code_scanning_alert"
         ? codeScanningIssue(payload)
         : event === "dependabot_alert"
