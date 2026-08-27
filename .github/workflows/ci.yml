@@ -97,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [app, engine, processor]
+        worker: [app, engine, processor, security-alerts]
     defaults:
       run:
         working-directory: cloudflare/${{ matrix.worker }}
