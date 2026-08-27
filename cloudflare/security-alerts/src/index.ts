@@ -1,3 +1,5 @@
+import { DurableObject } from "cloudflare:workers";
+
 interface Env {
   SECURITY_ISSUE_WEBHOOK_SECRET: string;
   SECURITY_ISSUE_APP_ID: string;
@@ -5,6 +7,7 @@ interface Env {
   SECURITY_ALERT_EMAIL_TO: string;
   SECURITY_ALERT_EMAIL_FROM: string;
   EMAIL: SendEmail;
+  SECURITY_ALERT_ISSUE_LOCK: DurableObjectNamespace<SecurityAlertIssueLock>;
 }
 
 type IssueSpec = { marker: string; title: string; body: string };
@@ -109,7 +112,7 @@ async function issueExists(token: string, repo: string, marker: string): Promise
   return (data.total_count ?? 0) > 0;
 }
 
-async function createIssue(token: string, repo: string, issue: IssueSpec): Promise<"created" | "exists"> {
+async function createIssueUnlocked(token: string, repo: string, issue: IssueSpec): Promise<"created" | "exists"> {
   if (await issueExists(token, repo, issue.marker)) return "exists";
   await github(token, `/repos/${repo}/issues`, {
     method: "POST",
@@ -117,6 +120,27 @@ async function createIssue(token: string, repo: string, issue: IssueSpec): Promi
     body: JSON.stringify({ title: issue.title, body: `<!-- ${issue.marker} -->\n${issue.body}` }),
   });
   return "created";
+}
+
+export class SecurityAlertIssueLock extends DurableObject<Env> {
+  private tail: Promise<void> = Promise.resolve();
+
+  async createIssue(token: string, repo: string, issue: IssueSpec): Promise<"created" | "exists"> {
+    const previous = this.tail;
+    let release = (): void => {};
+    this.tail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await createIssueUnlocked(token, repo, issue);
+    } finally {
+      release();
+    }
+  }
+}
+
+async function createIssue(env: Env, token: string, repo: string, issue: IssueSpec): Promise<"created" | "exists"> {
+  const lock = env.SECURITY_ALERT_ISSUE_LOCK.getByName(`${repo}:${issue.marker}`);
+  return lock.createIssue(token, repo, issue);
 }
 
 function repoFromApiUrl(repositoryUrl: string): string {
@@ -303,6 +327,7 @@ function validOrgRepo(repo: string): boolean {
 }
 
 async function backfillType(
+  env: Env,
   token: string,
   type: string,
   path: string,
@@ -319,7 +344,7 @@ async function backfillType(
       const issue = await makeIssue(repo, alert);
       if (!issue) continue;
       stats.eligible += 1;
-      const result = await createIssue(token, repo, issue);
+      const result = await createIssue(env, token, repo, issue);
       stats[result] += 1;
     } catch (error) {
       stats.errors += 1;
@@ -334,18 +359,21 @@ async function runBackfill(env: Env): Promise<void> {
   if (!configured(env)) throw new Error("Security alerts Worker is not configured");
   const token = await installationToken(env);
   const code = await backfillType(
+    env,
     token,
     "code_scanning",
     `/orgs/${encodeURIComponent(ORG)}/code-scanning/alerts?state=open&per_page=100`,
     async (_repo, alert) => codeScanningIssue(alert),
   );
   const dependabot = await backfillType(
+    env,
     token,
     "dependabot",
     `/orgs/${encodeURIComponent(ORG)}/dependabot/alerts?state=open&per_page=100`,
     async (repo, alert) => dependabotIssue(token, repo, alert),
   );
   const secret = await backfillType(
+    env,
     token,
     "secret_scanning",
     `/orgs/${encodeURIComponent(ORG)}/secret-scanning/alerts?state=open&per_page=100`,
@@ -429,7 +457,7 @@ export default {
         return new Response("ignored\n", { status: 202 });
       }
 
-      const result = await createIssue(token, repo, issue);
+      const result = await createIssue(env, token, repo, issue);
       console.log("security webhook issue result", { delivery, event, action, repo, alertNumber: alert.number ?? null, result });
       ctx.waitUntil(runCodexQueue(token).catch((error) => console.error("security webhook Codex queue failed", error instanceof Error ? error.message : String(error))));
       return new Response(`${result}\n`, { status: result === "created" ? 201 : 200 });
