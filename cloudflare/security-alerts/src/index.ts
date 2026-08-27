@@ -4,6 +4,9 @@ interface Env {
   SECURITY_ISSUE_APP_PRIVATE_KEY: string;
 }
 
+type IssueSpec = { marker: string; title: string; body: string };
+type BackfillStats = { scanned: number; eligible: number; created: number; exists: number; errors: number };
+
 const ORG = "Avkroken";
 const API_VERSION = "2022-11-28";
 const ISSUE_SEVERITIES = new Set(["medium", "high", "critical"]);
@@ -31,6 +34,10 @@ function pemBytes(pem: string): ArrayBuffer {
   const body = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
   const binary = atob(body);
   return Uint8Array.from(binary, (c) => c.charCodeAt(0)).buffer;
+}
+
+function configured(env: Env): boolean {
+  return Boolean(env.SECURITY_ISSUE_WEBHOOK_SECRET && env.SECURITY_ISSUE_APP_ID && env.SECURITY_ISSUE_APP_PRIVATE_KEY);
 }
 
 async function verifySignature(raw: string, signature: string | null, secret: string): Promise<boolean> {
@@ -78,42 +85,53 @@ async function github(token: string, path: string, init: RequestInit = {}): Prom
   return response;
 }
 
+async function listAll<T>(token: string, initialPath: string): Promise<T[]> {
+  const all: T[] = [];
+  let path: string | null = initialPath;
+  while (path) {
+    const response = await github(token, path);
+    all.push(...await response.json<T[]>());
+    const next = (response.headers.get("link") ?? "").split(",").find((part) => part.includes('rel="next"'));
+    const match = next?.match(/<https:\/\/api\.github\.com([^>]+)>/);
+    path = match?.[1] ?? null;
+  }
+  return all;
+}
+
 async function issueExists(token: string, repo: string, marker: string): Promise<boolean> {
   const query = `repo:${repo} \"${marker}\" in:body`;
   const data = await (await github(token, `/search/issues?q=${encodeURIComponent(query)}&per_page=1`)).json<{ total_count?: number }>();
   return (data.total_count ?? 0) > 0;
 }
 
-async function createIssue(token: string, repo: string, marker: string, title: string, body: string): Promise<"created" | "exists"> {
-  if (await issueExists(token, repo, marker)) return "exists";
-  await github(token, `/repos/${repo}/issues`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, body: `<!-- ${marker} -->\n${body}` }) });
+async function createIssue(token: string, repo: string, issue: IssueSpec): Promise<"created" | "exists"> {
+  if (await issueExists(token, repo, issue.marker)) return "exists";
+  await github(token, `/repos/${repo}/issues`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: issue.title, body: `<!-- ${issue.marker} -->\n${issue.body}` }),
+  });
   return "created";
 }
 
 async function isMalware(token: string, repo: string, alertNumber: number): Promise<boolean> {
-  let path: string | null = `/repos/${repo}/dependabot/alerts?state=open&classification=malware&per_page=100`;
-  while (path) {
-    const response = await github(token, path);
-    const alerts = await response.json<Array<{ number: number }>>();
-    if (alerts.some((alert) => alert.number === alertNumber)) return true;
-    const next = (response.headers.get("link") ?? "").split(",").find((part) => part.includes('rel="next"'));
-    const match = next?.match(/<https:\/\/api\.github\.com([^>]+)>/);
-    path = match?.[1] ?? null;
-  }
-  return false;
+  const alerts = await listAll<{ number: number }>(token, `/repos/${repo}/dependabot/alerts?state=open&classification=malware&per_page=100`);
+  return alerts.some((alert) => alert.number === alertNumber);
 }
 
-function codeScanningIssue(payload: any) {
-  const alert = payload.alert ?? {};
+function codeScanningIssue(alert: any): IssueSpec | null {
   if (alert.state !== "open" || !Number.isSafeInteger(alert.number)) return null;
   const severity = String(alert.rule?.security_severity_level ?? "").toLowerCase();
   if (!ISSUE_SEVERITIES.has(severity)) return null;
   const rule = alert.rule?.name ?? alert.rule?.id ?? "Code scanning alert";
-  return { marker: `security-alert:code-scanning:${alert.number}`, title: `[Security][Code scanning][${severity.toUpperCase()}] ${rule}`, body: `Automatiskt skapat från ett öppet GitHub Code Scanning-alert.\n\n- **Severity:** ${severity.toUpperCase()}\n- **Rule:** ${rule}\n- **Alert:** ${alert.html_url ?? ""}` };
+  return {
+    marker: `security-alert:code-scanning:${alert.number}`,
+    title: `[Security][Code scanning][${severity.toUpperCase()}] ${rule}`,
+    body: `Automatiskt skapat från ett öppet GitHub Code Scanning-alert.\n\n- **Severity:** ${severity.toUpperCase()}\n- **Rule:** ${rule}\n- **Alert:** ${alert.html_url ?? ""}`,
+  };
 }
 
-async function dependabotIssue(token: string, repo: string, payload: any) {
-  const alert = payload.alert ?? {};
+async function dependabotIssue(token: string, repo: string, alert: any): Promise<IssueSpec | null> {
   if (alert.state !== "open" || !Number.isSafeInteger(alert.number)) return null;
   const malware = await isMalware(token, repo, alert.number);
   const severity = String(alert.security_advisory?.severity ?? alert.security_vulnerability?.severity ?? "unknown").toLowerCase();
@@ -121,27 +139,89 @@ async function dependabotIssue(token: string, repo: string, payload: any) {
   const level = malware ? "MALWARE" : severity.toUpperCase();
   const pkg = alert.dependency?.package?.name ?? "unknown package";
   const summary = alert.security_advisory?.summary ?? (malware ? "Malicious dependency detected" : "Dependabot alert");
-  return { marker: `security-alert:dependabot:${alert.number}`, title: `[Security][Dependabot][${level}] ${pkg}: ${summary}`, body: `Automatiskt skapat från ett öppet GitHub Dependabot-alert. Malware inkluderas alltid; övriga alerts kräver Medium eller högre.\n\n- **Severity/class:** ${level}\n- **Package:** ${pkg}\n- **Summary:** ${summary}\n- **Alert:** ${alert.html_url ?? ""}` };
+  return {
+    marker: `security-alert:dependabot:${alert.number}`,
+    title: `[Security][Dependabot][${level}] ${pkg}: ${summary}`,
+    body: `Automatiskt skapat från ett öppet GitHub Dependabot-alert. Malware inkluderas alltid; övriga alerts kräver Medium eller högre.\n\n- **Severity/class:** ${level}\n- **Package:** ${pkg}\n- **Summary:** ${summary}\n- **Alert:** ${alert.html_url ?? ""}`,
+  };
 }
 
-function secretScanningIssue(payload: any) {
-  const alert = payload.alert ?? {};
-  const action = String(payload.action ?? "");
-  if (!Number.isSafeInteger(alert.number) || (action !== "created" && action !== "reopened")) return null;
+function secretScanningIssue(alert: any): IssueSpec | null {
+  if (alert.state !== "open" || !Number.isSafeInteger(alert.number)) return null;
   const secretType = alert.secret_type_display_name ?? alert.secret_type ?? "Secret detected";
   return {
     marker: `security-alert:secret-scanning:${alert.number}`,
     title: `[Security][Secret scanning] ${secretType}`,
-    body: `Automatiskt skapat från ett GitHub Secret Scanning-alert. Själva hemligheten inkluderas avsiktligt inte i issuet.\n\n- **Type:** ${secretType}\n- **Validity:** ${alert.validity ?? "unknown"}\n- **Alert:** ${alert.html_url ?? ""}`,
+    body: `Automatiskt skapat från ett öppet GitHub Secret Scanning-alert. Själva hemligheten inkluderas avsiktligt inte i issuet.\n\n- **Type:** ${secretType}\n- **Validity:** ${alert.validity ?? "unknown"}\n- **Alert:** ${alert.html_url ?? ""}`,
   };
 }
 
+function repoFromAlert(alert: any): string {
+  return String(alert.repository?.full_name ?? "");
+}
+
+function validOrgRepo(repo: string): boolean {
+  return repo.toLowerCase().startsWith(`${ORG.toLowerCase()}/`);
+}
+
+async function backfillType(
+  token: string,
+  type: string,
+  path: string,
+  makeIssue: (repo: string, alert: any) => Promise<IssueSpec | null>,
+): Promise<BackfillStats> {
+  const stats: BackfillStats = { scanned: 0, eligible: 0, created: 0, exists: 0, errors: 0 };
+  const alerts = await listAll<any>(token, path);
+  stats.scanned = alerts.length;
+
+  for (const alert of alerts) {
+    const repo = repoFromAlert(alert);
+    if (!validOrgRepo(repo)) continue;
+    try {
+      const issue = await makeIssue(repo, alert);
+      if (!issue) continue;
+      stats.eligible += 1;
+      const result = await createIssue(token, repo, issue);
+      stats[result] += 1;
+    } catch (error) {
+      stats.errors += 1;
+      console.error("security backfill alert failed", { type, repo, alertNumber: alert.number ?? null, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return stats;
+}
+
+async function runBackfill(env: Env): Promise<void> {
+  if (!configured(env)) throw new Error("Security alerts Worker is not configured");
+  const token = await installationToken(env);
+  const code = await backfillType(
+    token,
+    "code_scanning",
+    `/orgs/${encodeURIComponent(ORG)}/code-scanning/alerts?state=open&per_page=100`,
+    async (_repo, alert) => codeScanningIssue(alert),
+  );
+  const dependabot = await backfillType(
+    token,
+    "dependabot",
+    `/orgs/${encodeURIComponent(ORG)}/dependabot/alerts?state=open&per_page=100`,
+    async (repo, alert) => dependabotIssue(token, repo, alert),
+  );
+  const secret = await backfillType(
+    token,
+    "secret_scanning",
+    `/orgs/${encodeURIComponent(ORG)}/secret-scanning/alerts?state=open&per_page=100`,
+    async (_repo, alert) => secretScanningIssue(alert),
+  );
+  console.log("security backfill complete", { code, dependabot, secret });
+}
+
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && (path === "/" || path === "/health")) return Response.json({ ok: true, service: "security-alerts" });
     if (req.method !== "POST" || path !== "/webhook") return new Response("Not found", { status: 404 });
-    if (!env.SECURITY_ISSUE_WEBHOOK_SECRET || !env.SECURITY_ISSUE_APP_ID || !env.SECURITY_ISSUE_APP_PRIVATE_KEY) {
+    if (!configured(env)) {
       console.error("security webhook not configured");
       return new Response("Not configured", { status: 503 });
     }
@@ -157,6 +237,7 @@ export default {
 
     if (event === "ping") {
       console.log("security webhook ping", { delivery });
+      ctx.waitUntil(runBackfill(env).catch((error) => console.error("security ping backfill failed", error instanceof Error ? error.message : String(error))));
       return new Response("pong\n");
     }
 
@@ -176,28 +257,32 @@ export default {
       console.log("security webhook ignored unsupported event", { delivery, event, action, repo });
       return new Response("ignored\n", { status: 202 });
     }
-
-    if (!repo.toLowerCase().startsWith(`${ORG.toLowerCase()}/`)) return new Response("Wrong organization", { status: 403 });
+    if (!validOrgRepo(repo)) return new Response("Wrong organization", { status: 403 });
 
     try {
       const token = await installationToken(env);
+      const alert = payload.alert ?? {};
       const issue = event === "code_scanning_alert"
-        ? codeScanningIssue(payload)
+        ? codeScanningIssue(alert)
         : event === "dependabot_alert"
-          ? await dependabotIssue(token, repo, payload)
-          : secretScanningIssue(payload);
+          ? await dependabotIssue(token, repo, alert)
+          : (action === "created" || action === "reopened") ? secretScanningIssue({ ...alert, state: "open" }) : null;
 
       if (!issue) {
-        console.log("security webhook ignored alert", { delivery, event, action, repo, alertNumber: payload.alert?.number ?? null });
+        console.log("security webhook ignored alert", { delivery, event, action, repo, alertNumber: alert.number ?? null });
         return new Response("ignored\n", { status: 202 });
       }
 
-      const result = await createIssue(token, repo, issue.marker, issue.title, issue.body);
-      console.log("security webhook issue result", { delivery, event, action, repo, alertNumber: payload.alert?.number ?? null, result });
+      const result = await createIssue(token, repo, issue);
+      console.log("security webhook issue result", { delivery, event, action, repo, alertNumber: alert.number ?? null, result });
       return new Response(`${result}\n`, { status: result === "created" ? 201 : 200 });
     } catch (error) {
       console.error("security webhook failed", { delivery, event, action, repo, error: error instanceof Error ? error.message : String(error) });
       return new Response("Upstream error", { status: 502 });
     }
+  },
+
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runBackfill(env).catch((error) => console.error("security scheduled backfill failed", error instanceof Error ? error.message : String(error))));
   },
 } satisfies ExportedHandler<Env>;
