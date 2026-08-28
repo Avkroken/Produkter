@@ -16,6 +16,12 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*", "/signup", "/login", "/logout", "/underlag"]
   },
+  "services": [
+    {
+      "binding": "ENGINE",
+      "service": "produkter-motor"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -44,8 +50,7 @@
     ]
   },
   "vars": {
-    // On-demand-beskrivning (Avd. B) proxas hit. INGEST_API_KEY sätts som secret.
-    "ENGINE_URL": "https://motor.denied.se",
+    // INGEST_API_KEY sätts som secret och används även på interna engine-anrop.
     // OAuth-inloggning — egna appar för produkter. Microsoft client_id
     // och båda client_secret sätts som wrangler secrets. Callback-URL:er registrerade i
     // respektive OAuth-app: produkter.denied.se/api/oauth/<provider>/callback.
