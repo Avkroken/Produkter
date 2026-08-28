@@ -202,6 +202,18 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
 
   const stmts: D1PreparedStatement[] = [];
 
+  // AI-beskrivningen bygger på source_text. Invalidera bara om en detail-render
+  // faktiskt ändrar underlaget; samma text ska behålla den befintliga cachen.
+  if (body.source_text != null) {
+    stmts.push(
+      env.DB.prepare(
+        `UPDATE products
+         SET description = NULL, description_why = NULL, description_updated_at = NULL
+         WHERE url = ?1 AND source_text IS NOT ?2`,
+      ).bind(job.url, body.source_text),
+    );
+  }
+
   // Upsert av produkten som jobbet gäller (matchas på url).
   if (body.title != null || body.price != null || body.source_text != null || body.category != null) {
     stmts.push(
