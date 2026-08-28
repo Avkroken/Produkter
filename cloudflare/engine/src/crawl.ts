@@ -22,13 +22,13 @@ type CrawlRun = {
   status: string;
   started_at: number;
   updated_at: number;
+  mode?: string;
 };
 
 type CrawlRecord = {
   url?: string;
   status?: string;
   json?: unknown;
-  markdown?: string;
   metadata?: { status?: number; title?: string; url?: string };
 };
 
@@ -54,6 +54,8 @@ type ProduktData = {
   description?: string;
   category?: string;
 };
+
+type CrawlLage = "static" | "rendered";
 
 const MAX_KALLTEXT_LANGD = 1200;
 const STANDARD_SAJTER_PER_TICK = 2;
@@ -81,11 +83,17 @@ async function sakerstallTabell(env: CrawlEnv): Promise<void> {
        site_id INTEGER PRIMARY KEY,
        crawl_id TEXT NOT NULL,
        status TEXT NOT NULL,
+       mode TEXT NOT NULL DEFAULT 'static',
        started_at INTEGER NOT NULL,
        updated_at INTEGER NOT NULL,
        last_error TEXT
      )`,
   ).run();
+  try {
+    await env.DB.prepare("ALTER TABLE crawl_runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'static'").run();
+  } catch {
+    // Kolumnen finns redan på uppgraderade databaser.
+  }
 }
 
 function sidtak(env: CrawlEnv, site: CrawlSite): number {
@@ -110,13 +118,13 @@ function excludeMonster(site: CrawlSite): string[] | undefined {
   return pattern ? [`**${pattern}**`] : undefined;
 }
 
-async function startaCrawl(env: CrawlEnv, site: CrawlSite): Promise<string> {
-  const body = {
+function crawlBody(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Record<string, unknown> {
+  const body: Record<string, unknown> = {
     url: site.base_url || site.url,
     crawlPurposes: ["search"],
     limit: sidtak(env, site),
     source: "all",
-    render: true,
+    render: mode === "rendered",
     formats: ["json"],
     jsonOptions: {
       prompt:
@@ -136,7 +144,6 @@ async function startaCrawl(env: CrawlEnv, site: CrawlSite): Promise<string> {
         },
       },
     },
-    rejectResourceTypes: ["image", "media", "font"],
     options: {
       includeExternalLinks: false,
       includeSubdomains: false,
@@ -144,11 +151,17 @@ async function startaCrawl(env: CrawlEnv, site: CrawlSite): Promise<string> {
       excludePatterns: excludeMonster(site),
     },
   };
+  if (mode === "rendered") {
+    body.rejectResourceTypes = ["image", "media", "font", "stylesheet"];
+  }
+  return body;
+}
 
+async function startaCrawl(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Promise<string> {
   const response = await fetch(apiBas(env), {
     method: "POST",
     headers: authHeaders(env),
-    body: JSON.stringify(body),
+    body: JSON.stringify(crawlBody(env, site, mode)),
   });
   const data = (await response.json().catch(() => ({}))) as CrawlSvar;
   const id = typeof data.result === "string" ? data.result : data.result?.id;
@@ -176,7 +189,7 @@ function produktFranRecord(record: CrawlRecord): ProduktData | null {
   const raw = record.json;
   if (!raw || typeof raw !== "object") return null;
   const data = raw as Record<string, unknown>;
-  const product: ProduktData = {
+  return {
     isProduct: data.isProduct === true,
     name: typeof data.name === "string" ? data.name.trim() : undefined,
     price: typeof data.price === "number" && Number.isFinite(data.price) ? data.price : undefined,
@@ -184,7 +197,6 @@ function produktFranRecord(record: CrawlRecord): ProduktData | null {
     description: typeof data.description === "string" ? data.description.trim() : undefined,
     category: typeof data.category === "string" ? data.category.trim() : undefined,
   };
-  return product;
 }
 
 function normaliseraPris(product: ProduktData): number | null {
@@ -202,9 +214,7 @@ async function skapaDetailFallback(env: CrawlEnv, url: string, siteId: number, n
        SELECT 1 FROM render_jobs
        WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased')
      )`,
-  )
-    .bind(url, siteId, now)
-    .run();
+  ).bind(url, siteId, now).run();
 }
 
 async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, error: string): Promise<void> {
@@ -217,31 +227,20 @@ async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, err
        SELECT 1 FROM render_jobs
        WHERE site_id=?2 AND type='list' AND status IN ('pending','leased')
      )`,
-  )
-    .bind(site.base_url, siteId, error.slice(0, 500), now)
-    .run();
+  ).bind(site.base_url, siteId, error.slice(0, 500), now).run();
 }
 
 async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecord, now: number): Promise<boolean> {
   const url = record.url || record.metadata?.url;
   if (!url) return false;
-
-  if (record.status === "errored") {
-    await skapaDetailFallback(env, url, siteId, now);
-    console.warn("crawl_fallback", { siteId, url, orsak: "errored" });
-    return false;
-  }
+  if (record.status === "errored") return false;
   if (record.status !== "completed") return false;
 
   const product = produktFranRecord(record);
   if (!product?.isProduct) return false;
   const title = product.name?.slice(0, 500) || null;
   const price = normaliseraPris(product);
-  if (!title || price == null) {
-    await skapaDetailFallback(env, url, siteId, now);
-    console.warn("crawl_fallback", { siteId, url, orsak: "ofullstandig-produkt" });
-    return false;
-  }
+  if (!title || price == null) return false;
 
   const sourceText = product.description?.slice(0, MAX_KALLTEXT_LANGD) || null;
   const category = product.category?.slice(0, 200) || null;
@@ -253,12 +252,8 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
          site_id = COALESCE(products.site_id, excluded.site_id),
          title = excluded.title,
          current_price = excluded.current_price,
-         description = CASE
-           WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL
-           ELSE products.description END,
-         description_why = CASE
-           WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL
-           ELSE products.description_why END,
+         description = CASE WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL ELSE products.description END,
+         description_why = CASE WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL ELSE products.description_why END,
          source_text = COALESCE(excluded.source_text, products.source_text),
          category = COALESCE(excluded.category, products.category),
          source_text_updated_at = CASE WHEN excluded.source_text IS NOT NULL THEN excluded.source_text_updated_at ELSE products.source_text_updated_at END,
@@ -269,8 +264,7 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
        SELECT p.id, ?1, ?2 FROM products p
        WHERE p.url=?3 AND NOT EXISTS (
          SELECT 1 FROM price_history ph
-         WHERE ph.product_id=p.id
-           AND ph.price=?1
+         WHERE ph.product_id=p.id AND ph.price=?1
            AND ph.ts=(SELECT MAX(ts) FROM price_history ph2 WHERE ph2.product_id=p.id)
        )`,
     ).bind(price, now, url),
@@ -283,7 +277,6 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
   let importerade = 0;
   let fel = 0;
   const now = Date.now();
-
   do {
     const params = new URLSearchParams({ limit: "100" });
     if (cursor != null) params.set("cursor", String(cursor));
@@ -294,22 +287,47 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
         if (await importeraRecord(env, run.site_id, record, now)) importerade++;
       } catch (err) {
         fel++;
-        console.error("crawl_record_fel", {
-          siteId: run.site_id,
-          url: record.url,
-          fel: err instanceof Error ? err.message : String(err),
-        });
+        console.error("crawl_record_fel", { siteId: run.site_id, url: record.url, fel: err instanceof Error ? err.message : String(err) });
       }
     }
     cursor = result?.cursor;
   } while (cursor != null && cursor !== "");
-
   return { importerade, fel };
+}
+
+async function hamtaSiteForFallback(env: CrawlEnv, siteId: number): Promise<CrawlSite | null> {
+  return env.DB.prepare(
+    `SELECT 0 AS job_id, s.id AS site_id, s.base_url AS url, s.base_url, s.max_pages, s.url_scope, s.exclude_link_pattern
+     FROM sites s WHERE s.id=?1 AND s.enabled=1`,
+  ).bind(siteId).first<CrawlSite>();
+}
+
+async function sparaRun(env: CrawlEnv, siteId: number, crawlId: string, mode: CrawlLage, now: number): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO crawl_runs (site_id, crawl_id, status, mode, started_at, updated_at, last_error)
+     VALUES (?1, ?2, 'running', ?3, ?4, ?4, NULL)
+     ON CONFLICT(site_id) DO UPDATE SET crawl_id=excluded.crawl_id, status=excluded.status, mode=excluded.mode,
+       started_at=excluded.started_at, updated_at=excluded.updated_at, last_error=NULL`,
+  ).bind(siteId, crawlId, mode, now).run();
+}
+
+async function startaRenderadReserv(env: CrawlEnv, run: CrawlRun, orsak: string): Promise<boolean> {
+  const site = await hamtaSiteForFallback(env, run.site_id);
+  if (!site) return false;
+  try {
+    const crawlId = await startaCrawl(env, site, "rendered");
+    await sparaRun(env, run.site_id, crawlId, "rendered", Date.now());
+    console.warn("crawl_renderad_reserv", { siteId: run.site_id, crawlId, orsak });
+    return true;
+  } catch (err) {
+    console.error("crawl_renderad_start_fel", { siteId: run.site_id, orsak, fel: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
 }
 
 async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
   const runs = await env.DB.prepare(
-    "SELECT site_id, crawl_id, status, started_at, updated_at FROM crawl_runs ORDER BY updated_at LIMIT 20",
+    "SELECT site_id, crawl_id, status, mode, started_at, updated_at FROM crawl_runs ORDER BY updated_at LIMIT 20",
   ).all<CrawlRun>();
   let klara = 0;
 
@@ -317,19 +335,22 @@ async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
     try {
       const result = await hamtaCrawl(env, run.crawl_id, "limit=1");
       const status = result?.status ?? "unknown";
-      await env.DB.prepare("UPDATE crawl_runs SET status=?1, updated_at=?2 WHERE site_id=?3")
-        .bind(status, Date.now(), run.site_id)
-        .run();
-      console.log("crawl_status", { siteId: run.site_id, crawlId: run.crawl_id, status });
+      await env.DB.prepare("UPDATE crawl_runs SET status=?1, updated_at=?2 WHERE site_id=?3").bind(status, Date.now(), run.site_id).run();
+      console.log("crawl_status", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", status, total: result?.total, finished: result?.finished, browserSecondsUsed: result?.browserSecondsUsed });
       if (status === "running" || status === "queued") continue;
 
       if (status === "completed") {
         const summary = await importeraFardigCrawl(env, run);
-        console.log("crawl_import_klar", { siteId: run.site_id, crawlId: run.crawl_id, ...summary });
+        console.log("crawl_import_klar", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", ...summary });
+        if (summary.importerade === 0 && (run.mode ?? "static") === "static") {
+          if (await startaRenderadReserv(env, run, "statisk-crawl-gav-inga-produkter")) continue;
+        }
         if (summary.importerade === 0) {
           await skapaListFallback(env, run.site_id, Date.now(), "crawl gav inga kompletta produkter");
           console.warn("crawl_fallback", { siteId: run.site_id, orsak: "inga-produkter" });
         }
+      } else if ((run.mode ?? "static") === "static") {
+        if (await startaRenderadReserv(env, run, `statisk-crawl-${status}`)) continue;
       } else {
         await skapaListFallback(env, run.site_id, Date.now(), `crawl avslutades med status ${status}`);
         console.warn("crawl_fallback", { siteId: run.site_id, orsak: status });
@@ -338,10 +359,8 @@ async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
       klara++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await env.DB.prepare("UPDATE crawl_runs SET last_error=?1, updated_at=?2 WHERE site_id=?3")
-        .bind(message.slice(0, 500), Date.now(), run.site_id)
-        .run();
-      console.error("crawl_fel", { siteId: run.site_id, crawlId: run.crawl_id, fel: message });
+      await env.DB.prepare("UPDATE crawl_runs SET last_error=?1, updated_at=?2 WHERE site_id=?3").bind(message.slice(0, 500), Date.now(), run.site_id).run();
+      console.error("crawl_fel", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", fel: message });
     }
   }
   return klara;
@@ -358,43 +377,31 @@ async function delegeraListJobb(env: CrawlEnv): Promise<number> {
      FROM render_jobs r JOIN sites s ON s.id=r.site_id
      WHERE r.type='list' AND r.status='pending' AND s.enabled=1
      ORDER BY r.id LIMIT ?1`,
-  )
-    .bind(antal)
-    .all<CrawlSite>();
+  ).bind(antal).all<CrawlSite>();
 
   let startade = 0;
   for (const site of pending.results ?? []) {
-    const active = await env.DB.prepare("SELECT crawl_id FROM crawl_runs WHERE site_id=?1")
-      .bind(site.site_id)
-      .first<{ crawl_id: string }>();
+    const active = await env.DB.prepare("SELECT crawl_id FROM crawl_runs WHERE site_id=?1").bind(site.site_id).first<{ crawl_id: string }>();
     if (active) {
-      await env.DB.prepare("UPDATE render_jobs SET status='done', updated_at=?1 WHERE id=?2")
-        .bind(Date.now(), site.job_id)
-        .run();
+      await env.DB.prepare("UPDATE render_jobs SET status='done', updated_at=?1 WHERE id=?2").bind(Date.now(), site.job_id).run();
       continue;
     }
     try {
-      const crawlId = await startaCrawl(env, site);
+      const crawlId = await startaCrawl(env, site, "static");
       const now = Date.now();
       await env.DB.batch([
         env.DB.prepare(
-          `INSERT INTO crawl_runs (site_id, crawl_id, status, started_at, updated_at, last_error)
-           VALUES (?1, ?2, 'running', ?3, ?3, NULL)
-           ON CONFLICT(site_id) DO UPDATE SET
-             crawl_id=excluded.crawl_id, status=excluded.status, started_at=excluded.started_at,
-             updated_at=excluded.updated_at, last_error=NULL`,
+          `INSERT INTO crawl_runs (site_id, crawl_id, status, mode, started_at, updated_at, last_error)
+           VALUES (?1, ?2, 'running', 'static', ?3, ?3, NULL)
+           ON CONFLICT(site_id) DO UPDATE SET crawl_id=excluded.crawl_id, status=excluded.status, mode='static',
+             started_at=excluded.started_at, updated_at=excluded.updated_at, last_error=NULL`,
         ).bind(site.site_id, crawlId, now),
         env.DB.prepare("UPDATE render_jobs SET status='done', last_error=NULL, updated_at=?1 WHERE id=?2").bind(now, site.job_id),
       ]);
       startade++;
-      console.log("crawl_startad", { siteId: site.site_id, crawlId, sidtak: sidtak(env, site) });
+      console.log("crawl_startad", { siteId: site.site_id, crawlId, mode: "static", sidtak: sidtak(env, site) });
     } catch (err) {
-      // Lämna list-jobbet pending. Den befintliga Playwright-kön körs efter
-      // crawl-steget och blir därmed automatisk fallback för just den sajten.
-      console.error("crawl_start_fel", {
-        siteId: site.site_id,
-        fel: err instanceof Error ? err.message : String(err),
-      });
+      console.error("crawl_start_fel", { siteId: site.site_id, mode: "static", fel: err instanceof Error ? err.message : String(err) });
     }
   }
   return startade;
