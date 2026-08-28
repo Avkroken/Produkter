@@ -91,20 +91,22 @@ interface ProductRow {
   description_why: string | null;
 }
 
-// Beskriv on-demand via engine. Returnerar {beskrivning, varför} eller {error}.
+// Beskriv on-demand via engine. Service Binding gör att anropet inte passerar
+// publik DNS/WAF/Managed Challenge; API-nyckeln behålls som extra auth-lager.
 export async function describeViaEngine(
   env: Env,
   id: number,
 ): Promise<{ beskrivning?: string; varför?: string; error?: string; status: number }> {
-  if (!env.ENGINE_URL || !env.INGEST_API_KEY) {
+  if (!env.INGEST_API_KEY) {
     return { error: "beskrivningstjänst ej konfigurerad", status: 503 };
   }
   try {
-    const resp = await fetch(`${env.ENGINE_URL}/describe`, {
+    const req = new Request("https://produkter-motor.internal/describe", {
       method: "POST",
       headers: { "content-type": "application/json", "X-API-Key": env.INGEST_API_KEY },
       body: JSON.stringify({ id }),
     });
+    const resp = await env.ENGINE.fetch(req);
     const data = (await resp.json().catch(() => ({}))) as { beskrivning?: string; varför?: string; error?: string };
     return { ...data, status: resp.status };
   } catch (err) {
