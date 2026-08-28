@@ -30,18 +30,22 @@ import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-r
 interface Env extends GitHubReportEnv {
   DB: D1Database;
   INGEST_API_KEY: string;
+  // AI-leverantörer (Wrangler secrets) — samma som sync-Workern. Operatörens
+  // egna nycklar, inte kontobaserat.
   ANTHROPIC_API_KEY?: string;
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
   AZURE_OPENAI_API_KEY?: string;
   AZURE_OPENAI_ENDPOINT?: string;
   AZURE_OPENAI_DEPLOYMENT?: string;
-  SCHEDULE_LIMIT?: string;
-  DESCRIBE_LIMIT?: string;
-  DESCRIBE_WORKERS?: string;
-  ALERT_MIN_DROP_PCT?: string;
-  ALERT_MIN_DROP_KR?: string;
-  ALERT_COOLDOWN_HOURS?: string;
+  // Cron-tak per tick (vars i wrangler.jsonc).
+  SCHEDULE_LIMIT?: string; // max detail-jobb att skapa per tick (default 200)
+  DESCRIBE_LIMIT?: string; // max produkter att beskriva per tick (default 10)
+  DESCRIBE_WORKERS?: string; // parallella AI-anrop (default 2)
+  // Prisbevaknings-trösklar (vars).
+  ALERT_MIN_DROP_PCT?: string; // minsta prisfall i % (default 5)
+  ALERT_MIN_DROP_KR?: string; // minsta prisfall i kr (default 100)
+  ALERT_COOLDOWN_HOURS?: string; // cooldown per bevakning (default 24)
 }
 
 export interface RenderKoEnv {
@@ -49,10 +53,11 @@ export interface RenderKoEnv {
 }
 
 const REPO = "Avkroken/produkter";
-const LEASE_MS = 120_000;
-const LIST_LEASE_MS = 900_000;
-const MAX_ATTEMPTS = 5;
-const MAX_LEASE = 50;
+
+const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
+const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
+const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
+const MAX_LEASE = 50; // tak per lease-anrop
 
 export interface LeasedJob {
   id: number;
@@ -61,6 +66,7 @@ export interface LeasedJob {
   site_id: number | null;
   detail_selector: string;
   use_stealth: number;
+  // Endast för list-jobb (crawl av listningssida).
   base_url?: string;
   product_selector?: string;
   title_selector?: string;
@@ -80,9 +86,14 @@ function authorized(req: Request, env: Env): boolean {
   return !!env.INGEST_API_KEY && key === env.INGEST_API_KEY;
 }
 
+// POST /jobs/lease  { n?: number }
 export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<LeasedJob[]> {
   const n = Math.min(Math.max(1, antal), MAX_LEASE);
   const now = Date.now();
+
+  // Atomiskt: markera de N äldsta leasbara jobben som leased och returnera dem.
+  // Leasbar = pending, eller leased vars lease gått ut (självläkande). List-jobb
+  // (crawl) får längre lease då de kan ta många minuter.
   const leased = await env.DB.prepare(
     `UPDATE render_jobs
        SET status = 'leased',
@@ -91,6 +102,8 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
      WHERE id IN (
        SELECT id FROM render_jobs
        WHERE status = 'pending' OR (status = 'leased' AND lease_until < ?2)
+       -- List-jobb (crawl) prioriteras: de är få och tidskänsliga (färska priser/
+       -- upptäckt) och ska inte svältas bakom en lång detail-backlog.
        ORDER BY CASE type WHEN 'list' THEN 0 ELSE 1 END, id LIMIT ?3
      )
      RETURNING id, url, type, site_id`,
@@ -101,6 +114,9 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
   const rows = leased.results ?? [];
   if (rows.length === 0) return [];
 
+  // Berika med per-sajt-inställningar. Få sajter -> hämta alla och slå upp i
+  // minnet. Detail-jobb behöver detail_selector/use_stealth; list-jobb behöver
+  // dessutom hela crawl-konfigen (list-selektorer + paginering).
   const sites = await env.DB.prepare(
     `SELECT id, base_url, detail_selector, product_selector, title_selector, price_selector,
             link_selector, pagination_type, max_pages, exclude_link_pattern, url_scope, use_stealth
@@ -120,7 +136,8 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
     use_stealth: number;
   }>();
   const siteMap = new Map((sites.results ?? []).map((s) => [s.id, s]));
-  return rows.map((r) => {
+
+  const jobs: LeasedJob[] = rows.map((r) => {
     const site = r.site_id != null ? siteMap.get(r.site_id) : undefined;
     const base: LeasedJob = {
       id: r.id,
@@ -143,6 +160,7 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
     }
     return base;
   });
+  return jobs;
 }
 
 async function leaseJobs(req: Request, env: Env): Promise<Response> {
@@ -156,12 +174,14 @@ export interface ResultBody {
   price?: number | null;
   source_text?: string;
   category?: string | null;
-  links?: string[];
-  items?: { url: string; title?: string | null; price?: number | null; category?: string | null }[];
+  links?: string[]; // för list-jobb: upptäckta produkt-URL:er (bakåtkompat)
+  items?: { url: string; title?: string | null; price?: number | null; category?: string | null }[]; // list-jobb: strukturerat
 }
 
+// POST /jobs/:id/result
 export async function rapporteraRenderResultat(id: number, body: ResultBody, env: RenderKoEnv): Promise<Response> {
   const now = Date.now();
+
   const job = await env.DB.prepare(
     "SELECT id, url, type, site_id, attempts FROM render_jobs WHERE id = ?1",
   )
@@ -169,6 +189,7 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     .first<{ id: number; url: string; type: string; site_id: number | null; attempts: number }>();
   if (!job) return json({ error: "okänt jobb" }, 404);
 
+  // Misslyckande: försök igen tills MAX_ATTEMPTS, sedan parkera som 'error'.
   if (body.error) {
     const dead = job.attempts >= MAX_ATTEMPTS;
     await env.DB.prepare(
@@ -181,8 +202,8 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
 
   const stmts: D1PreparedStatement[] = [];
 
-  // En AI-beskrivning är härledd från source_text. Om en ny detail-render ger
-  // annat underlag ska den gamla beskrivningen inte ligga kvar som giltig cache.
+  // AI-beskrivningen bygger på source_text. Invalidera bara om en detail-render
+  // faktiskt ändrar underlaget; samma text ska behålla den befintliga cachen.
   if (body.source_text != null) {
     stmts.push(
       env.DB.prepare(
@@ -193,6 +214,7 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
+  // Upsert av produkten som jobbet gäller (matchas på url).
   if (body.title != null || body.price != null || body.source_text != null || body.category != null) {
     stmts.push(
       env.DB.prepare(
@@ -219,6 +241,7 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
+  // Prishistorik: detail-resultat ska följa samma dedupe-regel som list/crawl.
   if (body.price != null) {
     stmts.push(
       env.DB.prepare(
@@ -233,6 +256,7 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
+  // List-jobb (bakåtkompat): bara URL:er -> produkt-stubbar + detail-jobb.
   for (const link of body.links ?? []) {
     stmts.push(
       env.DB.prepare(
@@ -251,6 +275,10 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
+  // List-jobb (strukturerat): varje item bär url + titel/pris från listkortet.
+  // Upserta produkten, spara prishistorik (dedupas mot senaste priset), och
+  // skapa ett detail-jobb bara om produkten ännu saknar source_text — så
+  // prisuppdateringar sker via list-crawl utan att re-rendera varje produktsida.
   for (const item of body.items ?? []) {
     if (!item.url) continue;
     stmts.push(
@@ -265,6 +293,8 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
       ).bind(item.url, job.site_id, item.title ?? null, item.price ?? null, item.category ?? null, now),
     );
     if (item.price != null) {
+      // Bara om priset skiljer sig från senast noterade (undviker att skriva en
+      // rad per crawl när priset är oförändrat).
       stmts.push(
         env.DB.prepare(
           `INSERT INTO price_history (product_id, price, ts)
@@ -289,9 +319,11 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
+  // Markera jobbet klart.
   stmts.push(
     env.DB.prepare("UPDATE render_jobs SET status = 'done', updated_at = ?1 WHERE id = ?2").bind(now, id),
   );
+
   await env.DB.batch(stmts);
   return json({ ok: true, links: body.links?.length ?? 0, items: body.items?.length ?? 0 });
 }
@@ -305,11 +337,13 @@ interface IngestBody {
   products?: { url: string; title?: string; price?: number; site_id?: number; source_text?: string }[];
 }
 
+// POST /ingest — bulk-upsert (migrering postgres->D1, samt list-resultat).
 async function ingest(req: Request, env: Env): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as IngestBody;
   const items = body.products ?? [];
   if (items.length === 0) return json({ upserted: 0 });
   const now = Date.now();
+
   const stmts = items
     .filter((p) => p.url)
     .map((p) =>
@@ -333,10 +367,14 @@ async function ingest(req: Request, env: Env): Promise<Response> {
         now,
       ),
     );
+
   await env.DB.batch(stmts);
   return json({ upserted: stmts.length });
 }
 
+// ── Cron-handlerns hjälpfunktioner ──────────────────────────────────────────
+
+// Bygger leverantörskedjan ur miljövariabler — samma som sync-Workern.
 function buildChainFromEnv(env: Env): ProviderChain | null {
   const specs: ProviderSpec[] = [];
   const keys: Record<ProviderName, string | undefined> = {
@@ -361,6 +399,7 @@ function buildChainFromEnv(env: Env): ProviderChain | null {
   return specs.length > 0 ? new ProviderChain(specs) : null;
 }
 
+// 1. Utgångna leases -> pending (självläkande om fetchern dog mitt i ett jobb).
 async function reclaimLeases(env: Env, now: number): Promise<number> {
   const r = await env.DB.prepare(
     "UPDATE render_jobs SET status='pending', updated_at=?1 WHERE status='leased' AND lease_until < ?1",
@@ -370,6 +409,8 @@ async function reclaimLeases(env: Env, now: number): Promise<number> {
   return r.meta.changes ?? 0;
 }
 
+// 2. Skapa detail-jobb för produkter som saknar source_text och inte redan har
+//    ett aktivt jobb. Cappat per tick.
 async function scheduleDetailJobs(env: Env, now: number, limit: number): Promise<number> {
   const r = await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, created_at, updated_at)
@@ -386,6 +427,9 @@ async function scheduleDetailJobs(env: Env, now: number, limit: number): Promise
   return r.meta.changes ?? 0;
 }
 
+// 2b. Schemalägg crawl (list-jobb) för sajter vars intervall löpt ut. En list-
+//     jobb per due sajt; hoppar sajter som redan har ett aktivt list-jobb.
+//     Sätter last_crawled direkt så nästa tick inte dubblar innan jobbet körts.
 async function scheduleDueCrawls(env: Env, now: number): Promise<number> {
   const due = await env.DB.prepare(
     `SELECT id, base_url FROM sites
@@ -400,6 +444,7 @@ async function scheduleDueCrawls(env: Env, now: number): Promise<number> {
     .all<{ id: number; base_url: string }>();
   const sites = due.results ?? [];
   if (sites.length === 0) return 0;
+
   const stmts = sites.flatMap((s) => [
     env.DB.prepare(
       `INSERT INTO render_jobs (url, site_id, type, status, created_at, updated_at)
@@ -411,6 +456,14 @@ async function scheduleDueCrawls(env: Env, now: number): Promise<number> {
   return sites.length;
 }
 
+// 2c. Beskriv N produkter i bakgrunden som saknar description (helst de med
+//     source_text att grunda sig på). Låg standardgräns (DESCRIBE_LIMIT) så
+//     gratis-kvoten räcker till många dagar — samexisterar med on-demand
+//     (POST /describe nedan): den här funktionen täcker katalogen gradvis över
+//     tid, on-demand ger ett enskilt svar direkt utan att vänta på turen här.
+//     Slutar tvärt vid första AllProvidersExhausted i tick:et — inget värde i
+//     att låta resten av batchen misslyckas på samma sätt (kvoten återhämtar
+//     sig inte inom samma tick).
 async function describeMissing(env: Env, chain: ProviderChain, now: number, limit: number, concurrency: number): Promise<number> {
   const sel = await env.DB.prepare(
     `SELECT p.id, p.title, p.category, p.source_text, p.current_price, s.name AS site_name
@@ -438,6 +491,9 @@ async function describeMissing(env: Env, chain: ProviderChain, now: number, limi
     const results = await Promise.all(
       batch.map(async (p) => {
         try {
+          // Riktig butik/pris istället för tomma strängar (CodeRabbit-fynd,
+          // PR #29) — userMessage genererade och cachade tidigare
+          // beskrivningar med tom "Butik:"/"Pris: kr"-kontext.
           const parts = await chain.generate(
             system,
             userMessage(
@@ -456,13 +512,13 @@ async function describeMissing(env: Env, chain: ProviderChain, now: number, limi
             .run();
           return true;
         } catch (err) {
-          if (err instanceof AllProvidersExhausted) throw err;
+          if (err instanceof AllProvidersExhausted) throw err; // avbryt hela tick:et, inte bara denna produkt
           console.warn(`Hoppar över produkt ${p.id}:`, err);
           return false;
         }
       }),
     ).catch((err) => {
-      if (err instanceof AllProvidersExhausted) return null;
+      if (err instanceof AllProvidersExhausted) return null; // kvot slut — sluta här, resten tas nästa tick
       throw err;
     });
     if (results === null) break;
@@ -471,6 +527,10 @@ async function describeMissing(env: Env, chain: ProviderChain, now: number, limi
   return done;
 }
 
+// On-demand-beskrivning (POST /describe). Katalogen har ~32k produkter; att
+// förbeskriva alla ryms inte i gratis-Geminis kvot. I stället beskrivs en
+// produkt först när den faktiskt visas/väljs (app-Workern anropar hit) och
+// cachas i D1. Redan cachad -> returneras direkt utan API-anrop.
 interface ProductRow {
   id: number;
   title: string | null;
@@ -484,12 +544,17 @@ interface ProductRow {
 
 async function describeProduct(req: Request, env: Env): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { url?: unknown; id?: unknown; refresh?: unknown };
+  // Validerar kontraktet innan SQL-predikatet väljs (CodeRabbit-fynd, PR #29)
+  // — den gamla koden kastade inte typ på url/id och lät url tyst vinna om
+  // båda skickades.
   const hasUrl = typeof body.url === "string" && body.url.trim() !== "";
   const hasId = Number.isInteger(body.id) && Number(body.id) > 0;
   if (hasUrl === hasId) return json({ error: "ange exakt en av url eller id" }, 400);
+
   const where = hasUrl ? "p.url = ?1" : "p.id = ?1";
   const key = hasUrl ? (body.url as string).trim() : body.id;
   const refresh = body.refresh === true;
+
   const p = await env.DB.prepare(
     `SELECT p.id, p.title, p.category, p.source_text, p.description, p.description_why,
             p.current_price, s.name AS site_name
@@ -499,9 +564,12 @@ async function describeProduct(req: Request, env: Env): Promise<Response> {
     .bind(key)
     .first<ProductRow>();
   if (!p) return json({ error: "produkt finns inte" }, 404);
+
+  // Cache-träff: returnera direkt (om inte refresh begärs).
   if (p.description && !refresh) {
     return json({ beskrivning: p.description, varför: p.description_why ?? "", cached: true });
   }
+
   const chain = buildChainFromEnv(env);
   if (!chain) return json({ error: "ingen AI-leverantör konfigurerad" }, 503);
 
@@ -519,6 +587,9 @@ async function describeProduct(req: Request, env: Env): Promise<Response> {
     );
   } catch (err) {
     if (err instanceof AllProvidersExhausted) {
+      // Bär med retry-timing (CodeRabbit-fynd, PR #29) — anroparen vet annars
+      // inte när det är värt att försöka igen och kan trumma på en redan
+      // uttömd kvot.
       const retryAfter = Math.max(1, Math.ceil((err.resumeAt.getTime() - Date.now()) / 1000));
       return new Response(
         JSON.stringify({ error: "AI-kvot tillfälligt slut, försök snart igen", retry_at: err.resumeAt.toISOString() }),
@@ -531,6 +602,7 @@ async function describeProduct(req: Request, env: Env): Promise<Response> {
     return json({ error: err instanceof Error ? err.message : "beskrivning misslyckades" }, 502);
   }
   if (!parts.beskrivning) return json({ error: "tomt svar från AI" }, 502);
+
   await env.DB.prepare(
     "UPDATE products SET description=?1, description_why=?2, description_updated_at=?3 WHERE id=?4",
   )
@@ -539,6 +611,7 @@ async function describeProduct(req: Request, env: Env): Promise<Response> {
   return json({ beskrivning: parts.beskrivning, varför: parts.varför, cached: false });
 }
 
+// Skicka ett larm till en kanal. Alla kanaler är enkla utgående HTTP-POST.
 async function sendAlert(kind: string, target: string, title: string, body: string, url: string): Promise<boolean> {
   try {
     if (kind === "ntfy") {
@@ -554,7 +627,7 @@ async function sendAlert(kind: string, target: string, title: string, body: stri
       return r.ok;
     }
     if (kind === "telegram") {
-      const sep = target.lastIndexOf(":");
+      const sep = target.lastIndexOf(":"); // target = "<bottoken>:<chatid>"
       const r = await fetch(`https://api.telegram.org/bot${target.slice(0, sep)}/sendMessage`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -586,10 +659,13 @@ interface DropRow {
   old_price: number;
 }
 
+// Prisbevakning: hitta bevakade produkter vars senaste pris fallit mot föregående,
+// över tröskel + utanför cooldown, och larma kontots aktiva kanaler.
 async function checkPriceDrops(env: Env, now: number): Promise<number> {
   const minPct = Number(env.ALERT_MIN_DROP_PCT) || 5;
   const minKr = Number(env.ALERT_MIN_DROP_KR) || 100;
   const cooldownMs = (Number(env.ALERT_COOLDOWN_HOURS) || 24) * 3_600_000;
+
   const drops = await env.DB.prepare(
     `WITH ranked AS (
        SELECT product_id, price, ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY ts DESC) rn
@@ -615,6 +691,7 @@ async function checkPriceDrops(env: Env, now: number): Promise<number> {
     const dropPct = (dropKr / d.old_price) * 100;
     if (dropPct < minPct || dropKr < minKr) continue;
     if (d.last_alert != null && d.last_alert + cooldownMs > now) continue;
+
     const channels = await env.DB.prepare(
       "SELECT kind, target FROM alert_channels WHERE account_id = ?1 AND enabled = 1",
     )
@@ -622,6 +699,7 @@ async function checkPriceDrops(env: Env, now: number): Promise<number> {
       .all<{ kind: string; target: string }>();
     const list = channels.results ?? [];
     if (list.length === 0) continue;
+
     const title = "💸 Prisfall";
     const body = `${d.title ?? "Produkt"}: ${d.old_price} kr → ${d.new_price} kr (-${dropKr} kr, ${dropPct.toFixed(0)} %)`;
     let anySent = false;
@@ -639,9 +717,16 @@ async function checkPriceDrops(env: Env, now: number): Promise<number> {
 }
 
 export default {
+  // EN cron-trigger (*/5), EN handler som gör allt sekventiellt och cappat per
+  // tick (DESIGN.md §4.4). Inga flera cronjobb att koordinera.
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const now = Date.now();
     try {
+      // Bakgrundsbeskrivning (låg DESCRIBE_LIMIT/tick) samexisterar med
+      // on-demand (POST /describe): täcker katalogen gradvis över tid utan
+      // att bränna kvoten på en dag — on-demand ger fortfarande ett svar
+      // direkt när en produkt faktiskt visas/väljs, oavsett var bakgrunds-
+      // loopen befinner sig.
       const reclaimed = await reclaimLeases(env, now);
       const crawls = await scheduleDueCrawls(env, now);
       const scheduled = await scheduleDetailJobs(env, now, Number(env.SCHEDULE_LIMIT) || 200);
@@ -661,18 +746,25 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
+
     if (req.method === "GET" && path === "/health") return json({ ok: true });
+
     if (!authorized(req, env)) return json({ error: "obehörig" }, 401);
+
     try {
       if (req.method === "POST" && path === "/jobs/lease") return await leaseJobs(req, env);
       if (req.method === "POST" && path === "/ingest") return await ingest(req, env);
       if (req.method === "POST" && path === "/describe") return await describeProduct(req, env);
+
       const m = path.match(/^\/jobs\/(\d+)\/result$/);
       if (req.method === "POST" && m) return await reportResult(Number(m[1]), req, env);
+
       return json({ error: "okänd route" }, 404);
     } catch (err) {
+      // Logga detaljen server-side men exponera aldrig råa felmeddelanden
+      // (kan läcka interna sökvägar/stacktrace) i svaret.
       console.error("engine fetch-fel:", err);
       return json({ error: "internt fel" }, 500);
     }
   },
-} satisfies ExportedHandler<Env>;
+  } satisfies ExportedHandler<Env>;
