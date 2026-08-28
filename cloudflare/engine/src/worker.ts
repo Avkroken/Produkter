@@ -24,11 +24,7 @@ export default {
 
     const limit = Math.min(Math.max(1, Number(env.BROWSER_RENDER_LIMIT) || 3), 10);
     try {
-      const renderade = await bearbetaRenderKo(
-        env,
-        (request) => coreHandler.fetch(request, env, ctx),
-        limit,
-      );
+      const renderade = await bearbetaRenderKo(env, limit);
       console.log("browser_run_cron_klar", { renderade });
     } catch (err) {
       console.error("browser_run_cron_fel", err);

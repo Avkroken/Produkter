@@ -48,6 +48,10 @@ interface Env extends GitHubReportEnv {
   ALERT_COOLDOWN_HOURS?: string; // cooldown per bevakning (default 24)
 }
 
+export interface RenderKoEnv {
+  DB: D1Database;
+}
+
 const REPO = "Avkroken/produkter";
 
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
@@ -55,7 +59,7 @@ const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många 
 const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
 const MAX_LEASE = 50; // tak per lease-anrop
 
-interface LeasedJob {
+export interface LeasedJob {
   id: number;
   url: string;
   type: string;
@@ -83,9 +87,8 @@ function authorized(req: Request, env: Env): boolean {
 }
 
 // POST /jobs/lease  { n?: number }
-async function leaseJobs(req: Request, env: Env): Promise<Response> {
-  const body = (await req.json().catch(() => ({}))) as { n?: number };
-  const n = Math.min(Math.max(1, body.n ?? 10), MAX_LEASE);
+export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<LeasedJob[]> {
+  const n = Math.min(Math.max(1, antal), MAX_LEASE);
   const now = Date.now();
 
   // Atomiskt: markera de N äldsta leasbara jobben som leased och returnera dem.
@@ -109,7 +112,7 @@ async function leaseJobs(req: Request, env: Env): Promise<Response> {
     .all<{ id: number; url: string; type: string; site_id: number | null }>();
 
   const rows = leased.results ?? [];
-  if (rows.length === 0) return json({ jobs: [] });
+  if (rows.length === 0) return [];
 
   // Berika med per-sajt-inställningar. Få sajter -> hämta alla och slå upp i
   // minnet. Detail-jobb behöver detail_selector/use_stealth; list-jobb behöver
@@ -157,22 +160,26 @@ async function leaseJobs(req: Request, env: Env): Promise<Response> {
     }
     return base;
   });
-  return json({ jobs });
+  return jobs;
 }
 
-interface ResultBody {
+async function leaseJobs(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as { n?: number };
+  return json({ jobs: await leasaRenderJobb(env, body.n ?? 10) });
+}
+
+export interface ResultBody {
   error?: string;
-  title?: string;
-  price?: number;
+  title?: string | null;
+  price?: number | null;
   source_text?: string;
-  category?: string;
+  category?: string | null;
   links?: string[]; // för list-jobb: upptäckta produkt-URL:er (bakåtkompat)
-  items?: { url: string; title?: string; price?: number; category?: string }[]; // list-jobb: strukturerat
+  items?: { url: string; title?: string | null; price?: number | null; category?: string | null }[]; // list-jobb: strukturerat
 }
 
 // POST /jobs/:id/result
-async function reportResult(id: number, req: Request, env: Env): Promise<Response> {
-  const body = (await req.json().catch(() => ({}))) as ResultBody;
+export async function rapporteraRenderResultat(id: number, body: ResultBody, env: RenderKoEnv): Promise<Response> {
   const now = Date.now();
 
   const job = await env.DB.prepare(
@@ -301,6 +308,11 @@ async function reportResult(id: number, req: Request, env: Env): Promise<Respons
 
   await env.DB.batch(stmts);
   return json({ ok: true, links: body.links?.length ?? 0, items: body.items?.length ?? 0 });
+}
+
+async function reportResult(id: number, req: Request, env: Env): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as ResultBody;
+  return rapporteraRenderResultat(id, body, env);
 }
 
 interface IngestBody {
