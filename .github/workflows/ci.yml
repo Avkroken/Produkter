@@ -1,9 +1,6 @@
-name: Python tests & Node typecheck
+name: CI
 
 on:
-  # Merge-kön skickar merge_group.checks_requested. Utan den här
-  # triggern svarar inget jobb och kön fastnar tills timeout.
-  merge_group:
   pull_request:
   push:
     branches:
@@ -70,6 +67,7 @@ jobs:
           done
 
   python:
+    name: CI / python
     needs: [impact, python-tests]
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -117,6 +115,7 @@ jobs:
         run: npx tsc --noEmit
 
   node:
+    name: CI / node
     needs: [impact, node-workers]
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -136,3 +135,17 @@ jobs:
           fi
           echo "Node-kontrollerna slutade med: $RESULT"
           exit 1
+
+  required:
+    name: CI / required
+    if: ${{ always() }}
+    needs: [python, node]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kontrollera required CI
+        env:
+          PYTHON_RESULT: ${{ needs.python.result }}
+          NODE_RESULT: ${{ needs.node.result }}
+        run: |
+          test "$PYTHON_RESULT" = "success"
+          test "$NODE_RESULT" = "success"
