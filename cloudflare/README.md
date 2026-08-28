@@ -14,6 +14,8 @@ av [produkter](https://github.com/Avkroken/produkter)
   invocation, så varje rad blir ett eget kö-meddelande istället
 - Katalog-/beskrivningsloopen (f.d. `sync --watch` mot scraper-API:et) → en
   **Cron Trigger** i `engine/` var 5:e minut, mot D1 istället för scraper-API:et
+- JavaScript-rendering och Playwright-skrapning → **Cloudflare Browser Run**
+  från `engine/`; ingen egen Chromium-server krävs i den primära driftvägen
 
 ## Struktur
 
@@ -21,7 +23,7 @@ Workers:
 
 - `app/` — webb-UI + API (auth, inställningar, filuppladdning, jobblista/nedladdning, katalog, prisbevakning, bistånds-underlag, admin-panel). Lägger en `extract`-kö-post per uppladdning, gör inget extraktions-/AI-arbete själv.
 - `processor/` — kö-konsument. Extraherar produktrader ur uppladdade filer (CSV/XLSX/TXT/DOCX/PDF) och genererar en beskrivning per rad. Paus/återupptagning vid leverantörskvot hanteras via `queueMsg.retry({delaySeconds})`, inte en persisterad bakgrundstråd.
-- `engine/` — katalog-motorn. En Cron Trigger var 5:e minut driver crawl/discovery, schemaläggning av detaljjobb och prisbevakning mot D1, plus HTTP-endpoints som den serverbundna Playwright-fetchern anropar (lease/ack). On-demand-beskrivning via `POST /describe`. Använder operatörens egna miljövariabel-nycklar, inte kontobundna.
+- `engine/` — katalogmotorn. En Cron Trigger var 5:e minut driver crawl/discovery, schemaläggning av detaljjobb och prisbevakning mot D1. Samma Worker konsumerar `render_jobs` via Browser Run/Playwright och återanvänder en browsersession per cron-tick. HTTP-endpoints för lease/result finns kvar som kanonisk jobbväg och som rollback-gränssnitt. On-demand-beskrivning via `POST /describe`.
 
 `shared/` — kod gemensam för flera Workers (kryptering, AI-providers, prompts, kontoinställningar). OBS: `extractors.ts` ligger i `processor/src/` istället för `shared/` trots att den konceptuellt är delad logik — TypeScripts modulupplösning för tredjepartsbibliotek (xlsx/mammoth/unpdf) söker bara uppåt i katalogträdet, så filer i `shared/` (ett syskon till `processor/`) kan inte hitta paket som bara finns i `processor/node_modules`.
 
@@ -70,16 +72,20 @@ engångskörningar och för att sätta secrets:
 ```bash
 cd app && npx wrangler secret put PROVIDER_CONFIG_KEY && npx wrangler deploy
 cd ../processor && npx wrangler secret put PROVIDER_CONFIG_KEY && npx wrangler deploy   # samma värde som ovan
-cd ../engine && npx wrangler secret put INGEST_API_KEY   # operatörsnyckel för fetcher-endpoints
+cd ../engine && npx wrangler secret put INGEST_API_KEY   # operatörsnyckel för interna lease/result-endpoints
 npx wrangler secret put GEMINI_API_KEY   # och/eller ANTHROPIC_API_KEY/OPENAI_API_KEY för beskriv-steget
 npx wrangler secret put GITHUB_ERROR_REPORT_TOKEN   # valfritt: auto-felrapportering (även i processor/)
 npx wrangler deploy
 ```
 
-Själva renderingen (Playwright-baserad webbskrapning) flyttas INTE till
-Cloudflare — den körs som en statslös fetcher på mp100 som leasar `render_jobs`
-från `engine/` och postar tillbaka resultat (skyddat av `X-API-Key`). Se
-`DESIGN.md` för arkitekturen.
+Själva webbskrapningen körs primärt i `engine/` via Cloudflare Browser Run och
+`@cloudflare/playwright`. `render_jobs`, produkter och prishistorik ligger i D1.
+Den äldre Python-fetchern under `scraper/` behålls tills Browser Run-vägen har
+verifierats mot representativa list- och detaljsidor under ett rollbackfönster.
+
+Browser Run-koden ligger i `engine/src/webblasare.ts`. Den återanvänder en
+browsersession per cron-tick men isolerar varje renderjobb i ett eget context,
+begränsar listpagination och validerar mål-URL:er innan navigation.
 
 ## Verifierat lokalt (denna migrering)
 
