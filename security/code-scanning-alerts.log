@@ -15,36 +15,6 @@
     "end_line": 458
   },
   {
-    "number": 58,
-    "tool": "CodeQL",
-    "rule_id": "py/partial-ssrf",
-    "rule_name": "py/partial-ssrf",
-    "severity": "critical",
-    "created_at": "2026-08-25T06:04:46Z",
-    "updated_at": "2026-08-25T06:04:46Z",
-    "url": "https://github.com/Avkroken/produkter/security/code-scanning/58",
-    "ref": "refs/heads/main",
-    "category": "/language:python",
-    "file": "scraper/webui/app.py",
-    "start_line": 93,
-    "end_line": 93
-  },
-  {
-    "number": 59,
-    "tool": "CodeQL",
-    "rule_id": "py/partial-ssrf",
-    "rule_name": "py/partial-ssrf",
-    "severity": "critical",
-    "created_at": "2026-08-25T06:04:46Z",
-    "updated_at": "2026-08-25T06:04:46Z",
-    "url": "https://github.com/Avkroken/produkter/security/code-scanning/59",
-    "ref": "refs/heads/main",
-    "category": "/language:python",
-    "file": "scraper/webui/app.py",
-    "start_line": 121,
-    "end_line": 121
-  },
-  {
     "number": 60,
     "tool": "CodeQL",
     "rule_id": "py/log-injection",
@@ -56,8 +26,8 @@
     "ref": "refs/heads/main",
     "category": "/language:python",
     "file": "scraper/webui/app.py",
-    "start_line": 36,
-    "end_line": 36
+    "start_line": 45,
+    "end_line": 45
   },
   {
     "number": 61,
@@ -71,8 +41,8 @@
     "ref": "refs/heads/main",
     "category": "/language:python",
     "file": "scraper/webui/app.py",
-    "start_line": 36,
-    "end_line": 36
+    "start_line": 45,
+    "end_line": 45
   },
   {
     "number": 62,
