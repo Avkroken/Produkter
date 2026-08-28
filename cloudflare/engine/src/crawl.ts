@@ -32,18 +32,20 @@ type CrawlRecord = {
   metadata?: { status?: number; title?: string; url?: string };
 };
 
+type CrawlResultat = {
+  id?: string;
+  status?: string;
+  records?: CrawlRecord[];
+  cursor?: string | number | null;
+  total?: number;
+  finished?: number;
+  browserSecondsUsed?: number;
+};
+
 type CrawlSvar = {
   success?: boolean;
   errors?: Array<{ message?: string }>;
-  result?: {
-    id?: string;
-    status?: string;
-    records?: CrawlRecord[];
-    cursor?: string | number | null;
-    total?: number;
-    finished?: number;
-    browserSecondsUsed?: number;
-  } | string;
+  result?: CrawlResultat | string;
 };
 
 type ProduktData = {
@@ -61,16 +63,15 @@ const MAX_KALLTEXT_LANGD = 1200;
 const STANDARD_SAJTER_PER_TICK = 2;
 const STANDARD_SIDTAK = 100;
 const ABSOLUT_SIDTAK = 1000;
+const MAX_RUN_AGE_MS = 30 * 60 * 1000;
+const FALLBACK_MARKOR = "playwright-fallback:";
 
 function apiBas(env: CrawlEnv): string {
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID ?? "")}/browser-rendering/crawl`;
 }
 
 function authHeaders(env: CrawlEnv): HeadersInit {
-  return {
-    Authorization: `Bearer ${env.CLOUDFLARE_BROWSER_TOKEN ?? ""}`,
-    "content-type": "application/json",
-  };
+  return { Authorization: `Bearer ${env.CLOUDFLARE_BROWSER_TOKEN ?? ""}`, "content-type": "application/json" };
 }
 
 function harCrawlKonfiguration(env: CrawlEnv): boolean {
@@ -131,22 +132,16 @@ function crawlBody(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Record<stri
         json_schema: {
           type: "object",
           properties: {
-            isProduct: { type: "boolean" },
-            name: { type: "string" },
-            price: { type: "number" },
-            currency: { type: "string" },
-            description: { type: "string" },
-            category: { type: "string" },
+            isProduct: { type: "boolean" }, name: { type: "string" }, price: { type: "number" },
+            currency: { type: "string" }, description: { type: "string" }, category: { type: "string" },
           },
           required: ["isProduct"],
         },
       },
     },
     options: {
-      includeExternalLinks: false,
-      includeSubdomains: false,
-      includePatterns: includeMonster(site),
-      excludePatterns: excludeMonster(site),
+      includeExternalLinks: false, includeSubdomains: false,
+      includePatterns: includeMonster(site), excludePatterns: excludeMonster(site),
     },
   };
   if (mode === "rendered") body.rejectResourceTypes = ["image", "media", "font", "stylesheet"];
@@ -164,7 +159,7 @@ async function startaCrawl(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Pro
   return id;
 }
 
-async function hamtaCrawl(env: CrawlEnv, crawlId: string, query = "limit=1"): Promise<CrawlSvar["result"]> {
+async function hamtaCrawl(env: CrawlEnv, crawlId: string, query = "limit=1"): Promise<CrawlResultat> {
   const suffix = query ? `?${query}` : "";
   const response = await fetch(`${apiBas(env)}/${encodeURIComponent(crawlId)}${suffix}`, { headers: authHeaders(env) });
   const data = (await response.json().catch(() => ({}))) as CrawlSvar;
@@ -191,19 +186,19 @@ function produktFranRecord(record: CrawlRecord): ProduktData | null {
 
 function normaliseraPris(product: ProduktData): number | null {
   if (product.price == null || !Number.isFinite(product.price) || product.price < 0) return null;
-  const currency = (product.currency ?? "SEK").toUpperCase();
-  if (currency && currency !== "SEK" && currency !== "KR" && currency !== "KRONOR") return null;
+  const currency = product.currency?.trim().toUpperCase();
+  if (!currency || !["SEK", "KR", "KRONOR"].includes(currency)) return null;
   return Math.round(product.price);
 }
 
 async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, error: string): Promise<void> {
-  const site = await env.DB.prepare("SELECT base_url FROM sites WHERE id=?1").bind(siteId).first<{ base_url: string }>();
+  const site = await env.DB.prepare("SELECT base_url FROM sites WHERE id=?1 AND enabled=1").bind(siteId).first<{ base_url: string }>();
   if (!site?.base_url) return;
   await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'list', 'pending', ?3, ?4, ?4
      WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased'))`,
-  ).bind(site.base_url, siteId, error.slice(0, 500), now).run();
+  ).bind(site.base_url, siteId, `${FALLBACK_MARKOR}${error}`.slice(0, 500), now).run();
 }
 
 async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecord, now: number): Promise<boolean> {
@@ -238,17 +233,19 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
   return true;
 }
 
-async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ importerade: number; fel: number }> {
+async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ importerade: number; fel: number; disallowed: number }> {
   let cursor: string | number | null | undefined;
   let importerade = 0;
   let fel = 0;
+  let disallowed = 0;
   const now = Date.now();
   do {
     const params = new URLSearchParams({ limit: "100" });
     if (cursor != null) params.set("cursor", String(cursor));
     const result = await hamtaCrawl(env, run.crawl_id, params.toString());
-    for (const record of result?.records ?? []) {
+    for (const record of result.records ?? []) {
       try {
+        if (record.status === "disallowed") disallowed++;
         if (record.status === "errored") fel++;
         if (await importeraRecord(env, run.site_id, record, now)) importerade++;
       } catch (err) {
@@ -256,9 +253,9 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
         console.error("crawl_record_fel", { siteId: run.site_id, url: record.url, fel: err instanceof Error ? err.message : String(err) });
       }
     }
-    cursor = result?.cursor;
+    cursor = result.cursor;
   } while (cursor != null && cursor !== "");
-  return { importerade, fel };
+  return { importerade, fel, disallowed };
 }
 
 async function hamtaSiteForFallback(env: CrawlEnv, siteId: number): Promise<CrawlSite | null> {
@@ -297,32 +294,42 @@ async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
   for (const run of runs.results ?? []) {
     try {
       const result = await hamtaCrawl(env, run.crawl_id, "limit=1");
-      const status = result?.status ?? "unknown";
-      await env.DB.prepare("UPDATE crawl_runs SET status=?1, updated_at=?2 WHERE site_id=?3").bind(status, Date.now(), run.site_id).run();
-      console.log("crawl_status", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", status, total: result?.total, finished: result?.finished, browserSecondsUsed: result?.browserSecondsUsed });
+      const status = result.status ?? "unknown";
+      await env.DB.prepare("UPDATE crawl_runs SET status=?1, updated_at=?2, last_error=NULL WHERE site_id=?3").bind(status, Date.now(), run.site_id).run();
+      console.log("crawl_status", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", status, total: result.total, finished: result.finished, browserSecondsUsed: result.browserSecondsUsed });
       if (status === "running" || status === "queued") continue;
-      if (status === "completed") {
-        const summary = await importeraFardigCrawl(env, run);
-        console.log("crawl_import_klar", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", ...summary });
-        if (summary.importerade === 0 && (run.mode ?? "static") === "static") {
-          if (await startaRenderadReserv(env, run, "statisk-crawl-gav-inga-produkter")) continue;
-        }
-        if (summary.importerade === 0) {
-          await skapaListFallback(env, run.site_id, Date.now(), "crawl gav inga kompletta produkter");
-          console.warn("crawl_fallback", { siteId: run.site_id, orsak: "inga-produkter" });
-        }
-      } else if ((run.mode ?? "static") === "static") {
+
+      const summary = await importeraFardigCrawl(env, run);
+      console.log("crawl_import_klar", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", status, ...summary });
+      if (summary.fel > 0) {
+        console.warn("crawl_import_aterforsok", { siteId: run.site_id, crawlId: run.crawl_id, fel: summary.fel });
+        continue;
+      }
+      if (summary.importerade === 0 && summary.disallowed > 0) {
+        console.warn("crawl_disallowed", { siteId: run.site_id, crawlId: run.crawl_id, antal: summary.disallowed });
+      } else if (status === "completed" && summary.importerade === 0 && (run.mode ?? "static") === "static") {
+        if (await startaRenderadReserv(env, run, "statisk-crawl-gav-inga-produkter")) continue;
+        await skapaListFallback(env, run.site_id, Date.now(), "statisk crawl gav inga produkter och renderad reserv kunde inte starta");
+      } else if (status !== "completed" && (run.mode ?? "static") === "static") {
         if (await startaRenderadReserv(env, run, `statisk-crawl-${status}`)) continue;
-      } else {
-        await skapaListFallback(env, run.site_id, Date.now(), `crawl avslutades med status ${status}`);
-        console.warn("crawl_fallback", { siteId: run.site_id, orsak: status });
+        await skapaListFallback(env, run.site_id, Date.now(), `statisk crawl avslutades med status ${status}`);
+      } else if (summary.importerade === 0) {
+        await skapaListFallback(env, run.site_id, Date.now(), `crawl avslutades med status ${status} utan kompletta produkter`);
       }
       await env.DB.prepare("DELETE FROM crawl_runs WHERE site_id=?1").bind(run.site_id).run();
       klara++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await env.DB.prepare("UPDATE crawl_runs SET last_error=?1, updated_at=?2 WHERE site_id=?3").bind(message.slice(0, 500), Date.now(), run.site_id).run();
-      console.error("crawl_fel", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", fel: message });
+      const now = Date.now();
+      if (now - run.started_at >= MAX_RUN_AGE_MS) {
+        await env.DB.prepare("DELETE FROM crawl_runs WHERE site_id=?1").bind(run.site_id).run();
+        await skapaListFallback(env, run.site_id, now, `crawl-status kunde inte hämtas: ${message}`);
+        console.error("crawl_run_utgangen", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", fel: message });
+        klara++;
+      } else {
+        await env.DB.prepare("UPDATE crawl_runs SET last_error=?1, updated_at=?2 WHERE site_id=?3").bind(message.slice(0, 500), now, run.site_id).run();
+        console.error("crawl_fel", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", fel: message });
+      }
     }
   }
   return klara;
@@ -337,8 +344,10 @@ async function delegeraListJobb(env: CrawlEnv): Promise<number> {
   const pending = await env.DB.prepare(
     `SELECT r.id AS job_id, r.site_id, r.url, s.base_url, s.max_pages, s.url_scope, s.exclude_link_pattern
      FROM render_jobs r JOIN sites s ON s.id=r.site_id
-     WHERE r.type='list' AND r.status='pending' AND s.enabled=1 ORDER BY r.id LIMIT ?1`,
-  ).bind(antal).all<CrawlSite>();
+     WHERE r.type='list' AND r.status='pending' AND s.enabled=1
+       AND COALESCE(r.last_error, '') NOT LIKE ?1
+     ORDER BY r.id LIMIT ?2`,
+  ).bind(`${FALLBACK_MARKOR}%`, antal).all<CrawlSite>();
   let startade = 0;
   for (const site of pending.results ?? []) {
     const active = await env.DB.prepare("SELECT crawl_id FROM crawl_runs WHERE site_id=?1").bind(site.site_id).first<{ crawl_id: string }>();
