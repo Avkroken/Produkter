@@ -203,12 +203,44 @@ async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, err
 
 async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecord, now: number): Promise<boolean> {
   const url = record.url || record.metadata?.url;
-  if (!url || record.status !== "completed") return false;
+  if (!url) {
+    console.warn("crawl_record_avvisad", { siteId, orsak: "saknar-url", status: record.status });
+    return false;
+  }
+  if (record.status !== "completed") {
+    console.warn("crawl_record_avvisad", { siteId, url, orsak: "ej-completed", status: record.status });
+    return false;
+  }
+
   const product = produktFranRecord(record);
-  if (!product?.isProduct) return false;
+  if (!product) {
+    console.warn("crawl_record_avvisad", { siteId, url, orsak: "saknar-json" });
+    return false;
+  }
+  if (!product.isProduct) {
+    console.warn("crawl_record_avvisad", { siteId, url, orsak: "inte-produkt" });
+    return false;
+  }
+
   const title = product.name?.slice(0, 500) || null;
+  if (!title) {
+    console.warn("crawl_record_avvisad", { siteId, url, orsak: "saknar-titel" });
+    return false;
+  }
+  if (product.price == null || !Number.isFinite(product.price) || product.price < 0) {
+    console.warn("crawl_record_avvisad", {
+      siteId, url, orsak: "saknar-eller-ogiltigt-pris", price: product.price,
+    });
+    return false;
+  }
+
   const price = normaliseraPris(product);
-  if (!title || price == null) return false;
+  if (price == null) {
+    console.warn("crawl_record_avvisad", {
+      siteId, url, orsak: "ogiltig-valuta", currency: product.currency ?? null, price: product.price,
+    });
+    return false;
+  }
   const sourceText = product.description?.slice(0, MAX_KALLTEXT_LANGD) || null;
   const category = product.category?.slice(0, 200) || null;
   await env.DB.batch([
