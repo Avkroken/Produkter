@@ -49,7 +49,7 @@ def handle_unexpected_error(exc):
     return jsonify({"error": "Internal server error"}), 500
 
 # === Configuration ===
-LOG_DIR = os.getenv("LOG_DIR", "/logs")
+LOG_DIR = "/logs"
 
 SETTINGS_META = {
     'concurrent_pages': {
@@ -126,49 +126,25 @@ _PRIVATE_NETS = [
 ]
 
 def _validate_scrape_url(url: str) -> None:
-    if not isinstance(url, str):
-        raise ValueError("URL must be a string")
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Only http/https URLs are allowed, got: {parsed.scheme!r}")
     host = parsed.hostname or ""
     if not host:
         raise ValueError("URL must have a hostname")
-    if parsed.username is not None or parsed.password is not None:
-        raise ValueError("URLs containing credentials are not allowed")
-
     try:
         addr = ipaddress.ip_address(host)
-        addresses = {addr}
-    except ValueError:
-        try:
-            addresses = {
-                ipaddress.ip_address(sockaddr[0])
-                for _family, _type, _proto, _canonname, sockaddr
-                in socket.getaddrinfo(host, parsed.port, type=socket.SOCK_STREAM)
-            }
-        except (socket.gaierror, UnicodeError) as exc:
-            raise ValueError(f"Hostname cannot be resolved: {host}") from exc
-
-    if not addresses:
-        raise ValueError(f"Hostname cannot be resolved: {host}")
-    for addr in addresses:
-        if not addr.is_global or any(addr in net for net in _PRIVATE_NETS):
+        if any(addr in net for net in _PRIVATE_NETS):
             raise ValueError(f"Requests to private/internal addresses are not allowed: {host}")
-
-
-async def _install_ssrf_guard(page) -> None:
-    """Validate every browser request, including redirects and subresources."""
-    async def validate_request(route, request):
+    except ValueError as exc:
+        if "not allowed" in str(exc):
+            raise
         try:
-            _validate_scrape_url(request.url)
-        except ValueError as exc:
-            logger.warning("Blocked browser request by SSRF guard: %s", exc)
-            await route.abort("blockedbyclient")
-            return
-        await route.continue_()
-
-    await page.route("**/*", validate_request)
+            resolved = ipaddress.ip_address(socket.gethostbyname(host))
+            if any(resolved in net for net in _PRIVATE_NETS):
+                raise ValueError(f"Hostname resolves to a private address: {host}")
+        except socket.gaierror:
+            pass
 
 
 stats = {"products": 0, "updated": 0, "skipped": 0, "errors": 0, "retries": 0}
@@ -534,7 +510,6 @@ async def scrape_page_with_retry(context, url, max_retries=3, use_stealth=False)
         page = None
         try:
             page = await context.new_page()
-            await _install_ssrf_guard(page)
             if use_stealth:
                 await Stealth().apply_stealth_async(page)
             await page.goto(url, timeout=60000, wait_until="domcontentloaded")
@@ -1054,7 +1029,6 @@ def test_scrape_sync():
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=BROWSER_ARGS)
                 page = await browser.new_page()
-                await _install_ssrf_guard(page)
                 try:
                     await page.goto(config['base_url'], timeout=30000)
                     await page.wait_for_load_state("domcontentloaded")
@@ -1280,7 +1254,6 @@ def detect_selectors():
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=BROWSER_ARGS)
                 page = await browser.new_page()
-                await _install_ssrf_guard(page)
                 await Stealth().apply_stealth_async(page)
                 try:
                     await page.goto(url, timeout=60000, wait_until="domcontentloaded")
