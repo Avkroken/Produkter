@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.0.28"
+    "@cloudflare/containers": "^0.3.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260821.1",
