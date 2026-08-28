@@ -97,10 +97,7 @@ async function sakerstallTabell(env: CrawlEnv): Promise<void> {
 }
 
 function sidtak(env: CrawlEnv, site: CrawlSite): number {
-  const globalt = Math.min(
-    Math.max(1, Number(env.CRAWL_PAGE_LIMIT) || STANDARD_SIDTAK),
-    ABSOLUT_SIDTAK,
-  );
+  const globalt = Math.min(Math.max(1, Number(env.CRAWL_PAGE_LIMIT) || STANDARD_SIDTAK), ABSOLUT_SIDTAK);
   return Math.min(Math.max(1, Number(site.max_pages) || STANDARD_SIDTAK), globalt);
 }
 
@@ -132,15 +129,16 @@ function crawlBody(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Record<stri
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "produkt",
+          type: "object",
           properties: {
-            isProduct: "boolean",
-            name: "string",
-            price: "number",
-            currency: "string",
-            description: "string",
-            category: "string",
+            isProduct: { type: "boolean" },
+            name: { type: "string" },
+            price: { type: "number" },
+            currency: { type: "string" },
+            description: { type: "string" },
+            category: { type: "string" },
           },
+          required: ["isProduct"],
         },
       },
     },
@@ -151,18 +149,12 @@ function crawlBody(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Record<stri
       excludePatterns: excludeMonster(site),
     },
   };
-  if (mode === "rendered") {
-    body.rejectResourceTypes = ["image", "media", "font", "stylesheet"];
-  }
+  if (mode === "rendered") body.rejectResourceTypes = ["image", "media", "font", "stylesheet"];
   return body;
 }
 
 async function startaCrawl(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Promise<string> {
-  const response = await fetch(apiBas(env), {
-    method: "POST",
-    headers: authHeaders(env),
-    body: JSON.stringify(crawlBody(env, site, mode)),
-  });
+  const response = await fetch(apiBas(env), { method: "POST", headers: authHeaders(env), body: JSON.stringify(crawlBody(env, site, mode)) });
   const data = (await response.json().catch(() => ({}))) as CrawlSvar;
   const id = typeof data.result === "string" ? data.result : data.result?.id;
   if (!response.ok || !data.success || !id) {
@@ -174,9 +166,7 @@ async function startaCrawl(env: CrawlEnv, site: CrawlSite, mode: CrawlLage): Pro
 
 async function hamtaCrawl(env: CrawlEnv, crawlId: string, query = "limit=1"): Promise<CrawlSvar["result"]> {
   const suffix = query ? `?${query}` : "";
-  const response = await fetch(`${apiBas(env)}/${encodeURIComponent(crawlId)}${suffix}`, {
-    headers: authHeaders(env),
-  });
+  const response = await fetch(`${apiBas(env)}/${encodeURIComponent(crawlId)}${suffix}`, { headers: authHeaders(env) });
   const data = (await response.json().catch(() => ({}))) as CrawlSvar;
   if (!response.ok || !data.success || typeof data.result === "string" || !data.result) {
     const message = data.errors?.map((e) => e.message).filter(Boolean).join("; ") || `HTTP ${response.status}`;
@@ -206,42 +196,24 @@ function normaliseraPris(product: ProduktData): number | null {
   return Math.round(product.price);
 }
 
-async function skapaDetailFallback(env: CrawlEnv, url: string, siteId: number, now: number): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO render_jobs (url, site_id, type, status, created_at, updated_at)
-     SELECT ?1, ?2, 'detail', 'pending', ?3, ?3
-     WHERE NOT EXISTS (
-       SELECT 1 FROM render_jobs
-       WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased')
-     )`,
-  ).bind(url, siteId, now).run();
-}
-
 async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, error: string): Promise<void> {
   const site = await env.DB.prepare("SELECT base_url FROM sites WHERE id=?1").bind(siteId).first<{ base_url: string }>();
   if (!site?.base_url) return;
   await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'list', 'pending', ?3, ?4, ?4
-     WHERE NOT EXISTS (
-       SELECT 1 FROM render_jobs
-       WHERE site_id=?2 AND type='list' AND status IN ('pending','leased')
-     )`,
+     WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased'))`,
   ).bind(site.base_url, siteId, error.slice(0, 500), now).run();
 }
 
 async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecord, now: number): Promise<boolean> {
   const url = record.url || record.metadata?.url;
-  if (!url) return false;
-  if (record.status === "errored") return false;
-  if (record.status !== "completed") return false;
-
+  if (!url || record.status !== "completed") return false;
   const product = produktFranRecord(record);
   if (!product?.isProduct) return false;
   const title = product.name?.slice(0, 500) || null;
   const price = normaliseraPris(product);
   if (!title || price == null) return false;
-
   const sourceText = product.description?.slice(0, MAX_KALLTEXT_LANGD) || null;
   const category = product.category?.slice(0, 200) || null;
   await env.DB.batch([
@@ -249,24 +221,18 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
       `INSERT INTO products (url, site_id, title, current_price, source_text, category, source_text_updated_at, first_seen, last_updated)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
        ON CONFLICT(url) DO UPDATE SET
-         site_id = COALESCE(products.site_id, excluded.site_id),
-         title = excluded.title,
-         current_price = excluded.current_price,
+         site_id = COALESCE(products.site_id, excluded.site_id), title = excluded.title, current_price = excluded.current_price,
          description = CASE WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL ELSE products.description END,
          description_why = CASE WHEN excluded.source_text IS NOT NULL AND COALESCE(excluded.source_text, '') <> COALESCE(products.source_text, '') THEN NULL ELSE products.description_why END,
-         source_text = COALESCE(excluded.source_text, products.source_text),
-         category = COALESCE(excluded.category, products.category),
+         source_text = COALESCE(excluded.source_text, products.source_text), category = COALESCE(excluded.category, products.category),
          source_text_updated_at = CASE WHEN excluded.source_text IS NOT NULL THEN excluded.source_text_updated_at ELSE products.source_text_updated_at END,
          last_updated = excluded.last_updated`,
     ).bind(url, siteId, title, price, sourceText, category, sourceText ? now : null, now),
     env.DB.prepare(
       `INSERT INTO price_history (product_id, price, ts)
-       SELECT p.id, ?1, ?2 FROM products p
-       WHERE p.url=?3 AND NOT EXISTS (
-         SELECT 1 FROM price_history ph
-         WHERE ph.product_id=p.id AND ph.price=?1
-           AND ph.ts=(SELECT MAX(ts) FROM price_history ph2 WHERE ph2.product_id=p.id)
-       )`,
+       SELECT p.id, ?1, ?2 FROM products p WHERE p.url=?3 AND NOT EXISTS (
+         SELECT 1 FROM price_history ph WHERE ph.product_id=p.id AND ph.price=?1
+           AND ph.ts=(SELECT MAX(ts) FROM price_history ph2 WHERE ph2.product_id=p.id))`,
     ).bind(price, now, url),
   ]);
   return true;
@@ -326,11 +292,8 @@ async function startaRenderadReserv(env: CrawlEnv, run: CrawlRun, orsak: string)
 }
 
 async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
-  const runs = await env.DB.prepare(
-    "SELECT site_id, crawl_id, status, mode, started_at, updated_at FROM crawl_runs ORDER BY updated_at LIMIT 20",
-  ).all<CrawlRun>();
+  const runs = await env.DB.prepare("SELECT site_id, crawl_id, status, mode, started_at, updated_at FROM crawl_runs ORDER BY updated_at LIMIT 20").all<CrawlRun>();
   let klara = 0;
-
   for (const run of runs.results ?? []) {
     try {
       const result = await hamtaCrawl(env, run.crawl_id, "limit=1");
@@ -338,7 +301,6 @@ async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
       await env.DB.prepare("UPDATE crawl_runs SET status=?1, updated_at=?2 WHERE site_id=?3").bind(status, Date.now(), run.site_id).run();
       console.log("crawl_status", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", status, total: result?.total, finished: result?.finished, browserSecondsUsed: result?.browserSecondsUsed });
       if (status === "running" || status === "queued") continue;
-
       if (status === "completed") {
         const summary = await importeraFardigCrawl(env, run);
         console.log("crawl_import_klar", { siteId: run.site_id, crawlId: run.crawl_id, mode: run.mode ?? "static", ...summary });
@@ -375,10 +337,8 @@ async function delegeraListJobb(env: CrawlEnv): Promise<number> {
   const pending = await env.DB.prepare(
     `SELECT r.id AS job_id, r.site_id, r.url, s.base_url, s.max_pages, s.url_scope, s.exclude_link_pattern
      FROM render_jobs r JOIN sites s ON s.id=r.site_id
-     WHERE r.type='list' AND r.status='pending' AND s.enabled=1
-     ORDER BY r.id LIMIT ?1`,
+     WHERE r.type='list' AND r.status='pending' AND s.enabled=1 ORDER BY r.id LIMIT ?1`,
   ).bind(antal).all<CrawlSite>();
-
   let startade = 0;
   for (const site of pending.results ?? []) {
     const active = await env.DB.prepare("SELECT crawl_id FROM crawl_runs WHERE site_id=?1").bind(site.site_id).first<{ crawl_id: string }>();
