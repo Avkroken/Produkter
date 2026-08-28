@@ -1,7 +1,8 @@
 import core from "./index";
+import { bearbetaCrawlKo, type CrawlEnv } from "./crawl";
 import { bearbetaRenderKo, type WebblasareEnv } from "./webblasare";
 
-interface Env extends WebblasareEnv {
+interface Env extends WebblasareEnv, CrawlEnv {
   DB: D1Database;
   INGEST_API_KEY: string;
   BROWSER_RENDER_LIMIT?: string;
@@ -19,8 +20,18 @@ const coreHandler = core as unknown as CoreHandler;
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     // Core-handlern är sanningskälla för schemaläggning, lease-recovery,
-    // prisbevakning och AI-beskrivningar. Browser Run konsumerar renderkön efteråt.
+    // prisbevakning och AI-beskrivningar. List-jobb delegeras därefter i första
+    // hand till Cloudflares /crawl. De som inte kan delegeras ligger kvar och
+    // konsumeras av Playwright-kön som fallback.
     await coreHandler.scheduled(controller, env, ctx);
+
+    try {
+      const crawl = await bearbetaCrawlKo(env);
+      console.log("crawl_cron_klar", crawl);
+    } catch (err) {
+      // Ett fel i primärvägen får inte hindra Playwright-fallbacken.
+      console.error("crawl_cron_fel", err);
+    }
 
     const limit = Math.min(Math.max(1, Number(env.BROWSER_RENDER_LIMIT) || 3), 10);
     try {
