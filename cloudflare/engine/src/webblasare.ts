@@ -249,17 +249,15 @@ async function renderaDetalj(context: any, jobb: RenderJobb): Promise<RenderResu
     } catch {
       // Extrahera det som hunnit renderas.
     }
-    const data = (await page.evaluate(DETAIL_EXTRACT_JS as any, detailSelector)) as {
-      title: string | null;
-      price: number | null;
-      source_text: string;
-      category: string | null;
-    };
+    const rawData = await page.evaluate(DETAIL_EXTRACT_JS as any, detailSelector);
+    const data = rawData && typeof rawData === "object"
+      ? rawData as Partial<RenderResultat>
+      : {};
     return {
-      title: data.title,
-      price: data.price,
+      title: data.title ?? null,
+      price: data.price ?? null,
       source_text: (data.source_text ?? "").slice(0, MAX_KALLTEXT_LANGD),
-      category: data.category,
+      category: data.category ?? null,
     };
   } finally {
     await page.close();
@@ -316,7 +314,13 @@ async function renderaLista(context: any, env: WebblasareEnv, jobb: RenderJobb, 
       await page.goto(mal.href, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await accepteraKakor(page);
       await scrollaTillSlut(page, productSelector, deadline);
-      items = (await page.evaluate(LIST_EXTRACT_JS as any, cfg)) as typeof items;
+      const rawItems = await page.evaluate(LIST_EXTRACT_JS as any, cfg);
+      items = Array.isArray(rawItems)
+        ? rawItems.filter(
+            (item): item is (typeof items)[number] =>
+              Boolean(item && typeof item === "object" && typeof item.url === "string"),
+          )
+        : [];
     } finally {
       await page.close();
     }
