@@ -9,8 +9,8 @@ export interface Env {
   PROVIDER_CONFIG_KEY: string;
   JOB_QUEUE: Queue<JobMessage>;
   GITHUB_ERROR_REPORT_TOKEN?: string;
-  // Avd. B: on-demand-beskrivning proxas till engine-Workern.
-  ENGINE_URL?: string;
+  // Avd. B: on-demand-beskrivning går direkt till engine-Workern via Service Binding.
+  ENGINE: Fetcher;
   INGEST_API_KEY?: string;
   // OAuth-inloggning (återanvänder politiker-webapps appar). client_id = vars,
   // client_secret = wrangler secret.
@@ -39,7 +39,7 @@ export async function getAccountByEmail(db: D1Database, email: string): Promise<
 }
 
 export async function getAccountById(db: D1Database, id: string): Promise<Account | null> {
-  return db.prepare("SELECT * FROM accounts WHERE id = ?").bind(id).first();
+  return db.prepare("SELECT * FROM accounts WHERE id = ?").bind(id).first<Account>();
 }
 
 export async function createAccount(
