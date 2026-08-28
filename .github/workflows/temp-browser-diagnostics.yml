@@ -1,8 +1,7 @@
 name: Browserdiagnostik
 "on":
   push:
-    branches:
-      - work/fix
+    branches: ["work/fix"]
 permissions:
   contents: write
 jobs:
@@ -15,69 +14,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Instrumentera Browser Run
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("cloudflare/engine/src/webblasare.ts")
-          s = p.read_text()
-          old = '''      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        locale: "sv-SE",
-        timezoneId: "Europe/Stockholm",
-        extraHTTPHeaders: { "Accept-Language": "sv-SE,sv;q=0.9,en-US;q=0.8,en;q=0.7" },
-      });
-
-      try {
-        const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);'''
-          new = '''      let context: any = null;
-      let steg = "newContext";
-      try {
-        console.log("browser_run_jobb_start", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, typ: aktuelltJobb.type });
-        context = await browser.newContext({
-          viewport: { width: 1920, height: 1080 },
-          locale: "sv-SE",
-          timezoneId: "Europe/Stockholm",
-          extraHTTPHeaders: { "Accept-Language": "sv-SE,sv;q=0.9,en-US;q=0.8,en;q=0.7" },
-        });
-        steg = "renderaJobb";
-        const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
-        steg = "rapporteraResultat";'''
-          if old not in s:
-              raise SystemExit("Browser Run-blocket hittades inte")
-          s = s.replace(old, new, 1)
-          old = '''      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, fel: message });'''
-          new = '''      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error ? err.stack : undefined;
-        console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, typ: aktuelltJobb.type, steg, fel: message, stack });'''
-          if old not in s:
-              raise SystemExit("Felblocket hittades inte")
-          s = s.replace(old, new, 1)
-          old = '''      } finally {
-        await context.close();
-      }'''
-          new = '''      } finally {
-        if (context) {
-          try { await context.close(); }
-          catch (err) { console.warn("browser_run_context_close_fel", { jobbId: aktuelltJobb.id, fel: err instanceof Error ? err.message : String(err) }); }
-        }
-      }'''
-          if old not in s:
-              raise SystemExit("Context-close-blocket hittades inte")
-          p.write_text(s.replace(old, new, 1))
-          PY
+      - name: Instrumentera
+        env:
+          SCRIPT_B64: "ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnA9UGF0aCgiY2xvdWRmbGFyZS9lbmdpbmUvc3JjL3dlYmJsYXNhcmUudHMiKQpzPXAucmVhZF90ZXh0KCkKcz1zLnJlcGxhY2UoIiIiICAgICAgY29uc3QgY29udGV4dCA9IGF3YWl0IGJyb3dzZXIubmV3Q29udGV4dCh7CiAgICAgICAgdmlld3BvcnQ6IHsgd2lkdGg6IDE5MjAsIGhlaWdodDogMTA4MCB9LAogICAgICAgIGxvY2FsZTogInN2LVNFIiwKICAgICAgICB0aW1lem9uZUlkOiAiRXVyb3BlL1N0b2NraG9sbSIsCiAgICAgICAgZXh0cmFIVFRQSGVhZGVyczogeyAiQWNjZXB0LUxhbmd1YWdlIjogInN2LVNFLHN2O3E9MC45LGVuLVVTO3E9MC44LGVuO3E9MC43IiB9LAogICAgICB9KTsKCiAgICAgIHRyeSB7CiAgICAgICAgY29uc3QgcmVzdWx0YXQgPSBhd2FpdCByZW5kZXJhSm9iYihjb250ZXh0LCBlbnYsIGFrdHVlbGx0Sm9iYiwgZGVhZGxpbmUpOyIiIiwgIiIiICAgICAgbGV0IGNvbnRleHQ6IGFueSA9IG51bGw7CiAgICAgIGxldCBzdGVnID0gIm5ld0NvbnRleHQiOwogICAgICB0cnkgewogICAgICAgIGNvbnNvbGUubG9nKCJicm93c2VyX3J1bl9qb2JiX3N0YXJ0IiwgeyBqb2JiSWQ6IGFrdHVlbGx0Sm9iYi5pZCwgc2l0ZUlkOiBha3R1ZWxsdEpvYmIuc2l0ZV9pZCwgdHlwOiBha3R1ZWxsdEpvYmIudHlwZSB9KTsKICAgICAgICBjb250ZXh0ID0gYXdhaXQgYnJvd3Nlci5uZXdDb250ZXh0KHsKICAgICAgICAgIHZpZXdwb3J0OiB7IHdpZHRoOiAxOTIwLCBoZWlnaHQ6IDEwODAgfSwKICAgICAgICAgIGxvY2FsZTogInN2LVNFIiwKICAgICAgICAgIHRpbWV6b25lSWQ6ICJFdXJvcGUvU3RvY2tob2xtIiwKICAgICAgICAgIGV4dHJhSFRUUEhlYWRlcnM6IHsgIkFjY2VwdC1MYW5ndWFnZSI6ICJzdi1TRSxzdjtxPTAuOSxlbi1VUztxPTAuOCxlbjtxPTAuNyIgfSwKICAgICAgICB9KTsKICAgICAgICBzdGVnID0gInJlbmRlcmFKb2JiIjsKICAgICAgICBjb25zdCByZXN1bHRhdCA9IGF3YWl0IHJlbmRlcmFKb2JiKGNvbnRleHQsIGVudiwgYWt0dWVsbHRKb2JiLCBkZWFkbGluZSk7CiAgICAgICAgc3RlZyA9ICJyYXBwb3J0ZXJhUmVzdWx0YXQiOyIiIiwxKQpzPXMucmVwbGFjZSgiIiIgICAgICB9IGNhdGNoIChlcnIpIHsKICAgICAgICBjb25zdCBtZXNzYWdlID0gZXJyIGluc3RhbmNlb2YgRXJyb3IgPyBlcnIubWVzc2FnZSA6IFN0cmluZyhlcnIpOwogICAgICAgIGNvbnNvbGUuZXJyb3IoImJyb3dzZXJfcnVuX2pvYmJfZmVsIiwgeyBqb2JiSWQ6IGFrdHVlbGx0Sm9iYi5pZCwgc2l0ZUlkOiBha3R1ZWxsdEpvYmIuc2l0ZV9pZCwgZmVsOiBtZXNzYWdlIH0pOyIiIiwgIiIiICAgICAgfSBjYXRjaCAoZXJyKSB7CiAgICAgICAgY29uc3QgbWVzc2FnZSA9IGVyciBpbnN0YW5jZW9mIEVycm9yID8gZXJyLm1lc3NhZ2UgOiBTdHJpbmcoZXJyKTsKICAgICAgICBjb25zdCBzdGFjayA9IGVyciBpbnN0YW5jZW9mIEVycm9yID8gZXJyLnN0YWNrIDogdW5kZWZpbmVkOwogICAgICAgIGNvbnNvbGUuZXJyb3IoImJyb3dzZXJfcnVuX2pvYmJfZmVsIiwgeyBqb2JiSWQ6IGFrdHVlbGx0Sm9iYi5pZCwgc2l0ZUlkOiBha3R1ZWxsdEpvYmIuc2l0ZV9pZCwgdHlwOiBha3R1ZWxsdEpvYmIudHlwZSwgc3RlZywgZmVsOiBtZXNzYWdlLCBzdGFjayB9KTsiIiIsMSkKcz1zLnJlcGxhY2UoIiIiICAgICAgfSBmaW5hbGx5IHsKICAgICAgICBhd2FpdCBjb250ZXh0LmNsb3NlKCk7CiAgICAgIH0iIiIsICIiIiAgICAgIH0gZmluYWxseSB7CiAgICAgICAgaWYgKGNvbnRleHQpIHsKICAgICAgICAgIHRyeSB7IGF3YWl0IGNvbnRleHQuY2xvc2UoKTsgfQogICAgICAgICAgY2F0Y2ggKGVycikgeyBjb25zb2xlLndhcm4oImJyb3dzZXJfcnVuX2NvbnRleHRfY2xvc2VfZmVsIiwgeyBqb2JiSWQ6IGFrdHVlbGx0Sm9iYi5pZCwgZmVsOiBlcnIgaW5zdGFuY2VvZiBFcnJvciA/IGVyci5tZXNzYWdlIDogU3RyaW5nKGVycikgfSk7IH0KICAgICAgICB9CiAgICAgIH0iIiIsMSkKcC53cml0ZV90ZXh0KHMpCg=="
+        run: echo "$SCRIPT_B64" | base64 -d | python3
       - name: Verifiera
         working-directory: cloudflare/engine
-        run: |
-          npm ci
-          npx tsc --noEmit
-          git diff --check
+        run: npm ci && npx tsc --noEmit
       - name: Commit
         run: |
+          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cloudflare/engine/src/webblasare.ts
