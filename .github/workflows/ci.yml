@@ -139,13 +139,15 @@ jobs:
   required:
     name: CI / required
     if: ${{ always() }}
-    needs: [python, node]
+    needs: [impact, python, node]
     runs-on: ubuntu-latest
     steps:
       - name: Kontrollera required CI
         env:
+          IMPACT_RESULT: ${{ needs.impact.result }}
           PYTHON_RESULT: ${{ needs.python.result }}
           NODE_RESULT: ${{ needs.node.result }}
         run: |
+          test "$IMPACT_RESULT" = "success"
           test "$PYTHON_RESULT" = "success"
           test "$NODE_RESULT" = "success"
