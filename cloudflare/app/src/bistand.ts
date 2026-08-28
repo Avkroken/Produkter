@@ -65,10 +65,13 @@ export async function listCategories(env: Env): Promise<{ category: string; n: n
 }
 
 // Hela underlaget (osidat) — används av renderUnderlag() så utskriften innehåller
-// alla produkter. Webb-UI:t använder listBistandPage() i stället.
+// alla produkter. Webb-UI:t använder listBistandPage() i stället. En manuellt
+// angiven motivering har företräde; annars används produktens AI-genererade
+// description_why som standard i utskriftsunderlaget.
 export async function listBistand(env: Env, accountId: string): Promise<BistandRow[]> {
   const { results } = await env.DB.prepare(
-    `SELECT p.id, p.url, p.title, p.current_price, p.description, b.motivation
+    `SELECT p.id, p.url, p.title, p.current_price, p.description,
+            COALESCE(NULLIF(TRIM(b.motivation), ''), p.description_why, '') AS motivation
      FROM bistand_items b JOIN products p ON p.id = b.product_id
      WHERE b.account_id = ?1 ORDER BY b.created_at`,
   )
@@ -167,16 +170,12 @@ export async function renderUnderlag(env: Env, account: Account): Promise<string
     .map(
       (r) => `
     <article class="item">
-      <h3>${escapeHtml(r.title ?? "(namnlös produkt)")}</h3>
       <table class="meta">
+        <tr><th>Produktens namn</th><td>${escapeHtml(r.title ?? "(namnlös produkt)")}</td></tr>
         <tr><th>Pris</th><td>${formatPrice(r.current_price)}</td></tr>
-        <tr><th>Länk</th><td><a href="${escapeHtml(r.url)}">${escapeHtml(r.url)}</a></td></tr>
+        <tr><th>Direktlänk till produkten</th><td><a href="${escapeHtml(r.url)}">${escapeHtml(r.url)}</a></td></tr>
+        <tr><th>Motivering till varför jag behöver just den här produkten.</th><td>${r.motivation ? escapeHtml(r.motivation) : "<em>(ingen motivering tillgänglig)</em>"}</td></tr>
       </table>
-      ${r.description ? `<p class="beskrivning">${escapeHtml(r.description)}</p>` : ""}
-      <div class="motivering">
-        <strong>Motivering — varför jag behöver detta:</strong>
-        <p>${r.motivation ? escapeHtml(r.motivation) : "<em>(ingen motivering angiven)</em>"}</p>
-      </div>
     </article>`,
     )
     .join("");
@@ -195,13 +194,10 @@ export async function renderUnderlag(env: Env, account: Account): Promise<string
   h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
   .sub { color: #9aa0aa; margin: 0; }
   .item { border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1rem; background: #13161f; page-break-inside: avoid; }
-  .item h3 { margin: 0 0 .5rem; font-size: 1.15rem; }
-  table.meta { border-collapse: collapse; margin: 0 0 .5rem; }
-  table.meta th { text-align: left; padding: .1rem .75rem .1rem 0; color: #9aa0aa; font-weight: normal; vertical-align: top; white-space: nowrap; }
+  table.meta { width: 100%; border-collapse: collapse; margin: 0; }
+  table.meta th { width: 16rem; text-align: left; padding: .25rem .75rem .25rem 0; color: #9aa0aa; font-weight: normal; vertical-align: top; }
+  table.meta td { padding: .25rem 0; vertical-align: top; }
   table.meta a { color: #f0a500; word-break: break-all; }
-  .beskrivning { margin: .5rem 0; color: #c9c7c1; }
-  .motivering { margin-top: .75rem; padding-top: .5rem; border-top: 1px dashed rgba(255,255,255,0.2); }
-  .motivering p { margin: .25rem 0 0; }
   .summary { margin-top: 1.5rem; font-size: 1.1rem; }
   .toolbar { margin-bottom: 1.5rem; }
   .toolbar button, .toolbar a { font-family: system-ui, sans-serif; font-size: .95rem; padding: .5rem 1rem; margin-right: .5rem; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; background: #13161f; color: #e4e2dc; text-decoration: none; cursor: pointer; }
@@ -214,8 +210,6 @@ export async function renderUnderlag(env: Env, account: Account): Promise<string
     .item { border-color: #ccc; background: #fff; }
     table.meta th { color: #555; }
     table.meta a { color: #0a58ca; }
-    .beskrivning { color: #333; }
-    .motivering { border-top-color: #bbb; }
     .toolbar { display: none; }
     a { color: #111; text-decoration: none; }
   }
