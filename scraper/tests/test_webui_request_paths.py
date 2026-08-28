@@ -1,6 +1,12 @@
+import sys
+from pathlib import Path
+
 import pytest
 
-from scraper.webui.app import API_PATH_RE, ENGINE_PATH_RE, _validate_path
+SCRAPER_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SCRAPER_ROOT))
+
+from webui.app import API_PATH_RE, ENGINE_PATH_RE, _validate_path
 
 
 @pytest.mark.parametrize(
