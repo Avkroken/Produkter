@@ -1,12 +1,11 @@
 import { launch } from "@cloudflare/playwright";
+import { leasaRenderJobb, rapporteraRenderResultat } from "./index";
 
 export interface WebblasareEnv {
   BROWSER: Fetcher;
-  INGEST_API_KEY: string;
+  DB: D1Database;
   BROWSER_MAX_LIST_PAGES?: string;
 }
-
-type InternFetch = (request: Request) => Promise<Response>;
 
 type RenderJobb = {
   id: number;
@@ -185,10 +184,6 @@ const LIST_EXTRACT_JS = `(cfg) => {
   return out;
 }`;
 
-function authHeaders(env: WebblasareEnv): HeadersInit {
-  return { "X-API-Key": env.INGEST_API_KEY, "Content-Type": "application/json" };
-}
-
 function arPrivatVard(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost")) return true;
@@ -213,23 +208,12 @@ export function valideraMalUrl(rawUrl: string, basUrl?: string): URL {
   return url;
 }
 
-async function hamtaJobb(env: WebblasareEnv, dispatch: InternFetch, antal: number): Promise<RenderJobb[]> {
-  const response = await dispatch(new Request("https://engine.internal/jobs/lease", {
-    method: "POST",
-    headers: authHeaders(env),
-    body: JSON.stringify({ n: antal }),
-  }));
-  if (!response.ok) throw new Error(`Lease misslyckades: HTTP ${response.status}`);
-  const body = (await response.json()) as { jobs?: RenderJobb[] };
-  return body.jobs ?? [];
+async function hamtaJobb(env: WebblasareEnv, antal: number): Promise<RenderJobb[]> {
+  return (await leasaRenderJobb(env, antal)) as RenderJobb[];
 }
 
-async function rapporteraResultat(env: WebblasareEnv, dispatch: InternFetch, jobbId: number, resultat: RenderResultat): Promise<void> {
-  const response = await dispatch(new Request(`https://engine.internal/jobs/${jobbId}/result`, {
-    method: "POST",
-    headers: authHeaders(env),
-    body: JSON.stringify(resultat),
-  }));
+async function rapporteraResultat(env: WebblasareEnv, jobbId: number, resultat: RenderResultat): Promise<void> {
+  const response = await rapporteraRenderResultat(jobbId, resultat, env);
   if (!response.ok) throw new Error(`Resultatrapportering misslyckades: HTTP ${response.status}`);
 }
 
@@ -357,9 +341,8 @@ async function renderaJobb(context: any, env: WebblasareEnv, jobb: RenderJobb, d
   return { error: `Okänd renderjobbtyp: ${jobb.type}` };
 }
 
-export async function bearbetaRenderKo(env: WebblasareEnv, dispatch: InternFetch, limit: number): Promise<number> {
-  if (!env.INGEST_API_KEY) throw new Error("INGEST_API_KEY saknas");
-  const jobb = await hamtaJobb(env, dispatch, limit);
+export async function bearbetaRenderKo(env: WebblasareEnv, limit: number): Promise<number> {
+  const jobb = await hamtaJobb(env, limit);
   if (jobb.length === 0) return 0;
 
   const deadline = Date.now() + CRON_BUDGET_MS;
@@ -382,13 +365,13 @@ export async function bearbetaRenderKo(env: WebblasareEnv, dispatch: InternFetch
 
       try {
         const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
-        await rapporteraResultat(env, dispatch, aktuelltJobb.id, resultat);
+        await rapporteraResultat(env, aktuelltJobb.id, resultat);
         klara++;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, fel: message });
         try {
-          await rapporteraResultat(env, dispatch, aktuelltJobb.id, { error: message.slice(0, 400) });
+          await rapporteraResultat(env, aktuelltJobb.id, { error: message.slice(0, 400) });
         } catch {
           // Leasen löper ut och kan återtas av core-handlern vid nästa cron.
         }
