@@ -1,0 +1,17 @@
+{
+  "name": "produkter-scraper-container",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.28"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260821.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.125.0"
+  }
+}
