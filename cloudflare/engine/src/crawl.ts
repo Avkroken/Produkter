@@ -185,10 +185,21 @@ function produktFranRecord(record: CrawlRecord): ProduktData | null {
   };
 }
 
-function normaliseraPris(product: ProduktData): number | null {
-  if (product.price == null || !Number.isFinite(product.price) || product.price < 0) return null;
+function arSvenskButiksUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    return host.endsWith(".se") || url.pathname === "/se" || url.pathname.startsWith("/se/");
+  } catch {
+    return false;
+  }
+}
+
+function normaliseraPris(product: ProduktData, productUrl: string): number | null {
+  if (product.price == null || !Number.isFinite(product.price) || product.price <= 0) return null;
   const currency = product.currency?.trim().toUpperCase();
-  if (!currency || !["SEK", "KR", "KRONOR"].includes(currency)) return null;
+  if (currency && !["SEK", "KR", "KRONOR"].includes(currency)) return null;
+  if (!currency && !arSvenskButiksUrl(productUrl)) return null;
   return Math.round(product.price);
 }
 
@@ -258,12 +269,15 @@ async function importeraRecord(
     return detailFallback("crawl saknar användbart pris");
   }
 
-  const price = normaliseraPris(product);
+  const price = normaliseraPris(product, url);
   if (price == null) {
     console.warn("crawl_record_avvisad", {
       siteId, url, orsak: "ogiltig-valuta", currency: product.currency ?? null, price: product.price,
     });
     return detailFallback("crawl saknar användbar SEK-valuta");
+  }
+  if (!product.currency?.trim()) {
+    console.log("crawl_valuta_antagen_sek", { siteId, url, price });
   }
   const sourceText = product.description?.slice(0, MAX_KALLTEXT_LANGD) || null;
   const category = product.category?.slice(0, 200) || null;
