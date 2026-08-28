@@ -91,10 +91,9 @@ async function sakerstallTabell(env: CrawlEnv): Promise<void> {
        last_error TEXT
      )`,
   ).run();
-  try {
+  const kolumner = await env.DB.prepare("PRAGMA table_info(crawl_runs)").all<{ name: string }>();
+  if (!(kolumner.results ?? []).some((kolumn) => kolumn.name === "mode")) {
     await env.DB.prepare("ALTER TABLE crawl_runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'static'").run();
-  } catch {
-    // Kolumnen finns redan på uppgraderade databaser.
   }
 }
 
