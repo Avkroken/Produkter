@@ -107,13 +107,14 @@ function formatPrice(kr: number | null): string {
 
 function csvCell(value: string | number | null): string {
   const text = value == null ? "" : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
+  const safeText = /^\s*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
 }
 
 function underlagCsv(items: BistandRow[]): string {
   const rows: (string | number | null)[][] = [
     ["Produktens namn", "Pris", "Direktlänk till produkten", "Motivering till varför jag behöver just den här produkten."],
-    ...items.map((r) => [r.title ?? "", r.current_price, r.url, r.motivation]),
+    ...items.map((r) => [r.title ?? "", formatPrice(r.current_price), r.url, r.motivation]),
   ];
   return "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n") + "\r\n";
 }
