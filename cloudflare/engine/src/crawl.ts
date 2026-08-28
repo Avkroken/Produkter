@@ -275,6 +275,17 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
     const params = new URLSearchParams({ limit: "100" });
     if (cursor != null) params.set("cursor", String(cursor));
     const result = await hamtaCrawl(env, run.crawl_id, params.toString());
+    console.log("crawl_resultat_form", {
+      siteId: run.site_id,
+      crawlId: run.crawl_id,
+      mode: run.mode ?? "static",
+      nycklar: Object.keys(result).sort(),
+      recordsTyp: Array.isArray(result.records) ? "array" : typeof result.records,
+      recordsAntal: Array.isArray(result.records) ? result.records.length : null,
+      cursor: result.cursor ?? null,
+      total: result.total ?? null,
+      finished: result.finished ?? null,
+    });
     for (const record of result.records ?? []) {
       try {
         if (record.status === "disallowed") disallowed++;
