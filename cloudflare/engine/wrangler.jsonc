@@ -21,7 +21,8 @@
     "SCHEDULE_LIMIT": "200",
     "DESCRIBE_LIMIT": "10",
     "DESCRIBE_WORKERS": "2",
-    "BROWSER_RENDER_LIMIT": "3"
+    "BROWSER_RENDER_LIMIT": "3",
+    "BROWSER_MAX_LIST_PAGES": "20"
   },
   // Custom domain — kontots workers.dev blockeras (403/1050); övriga Workers
   // använder också custom domains. HTTP-endpoints skyddas av X-API-Key.
