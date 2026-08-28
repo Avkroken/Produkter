@@ -59,12 +59,7 @@ export async function listBistand(env: Env, accountId: string): Promise<BistandR
   return results ?? [];
 }
 
-export async function listBistandPage(
-  env: Env,
-  accountId: string,
-  limit: number,
-  offset: number,
-): Promise<{ items: BistandRow[]; total: number }> {
+export async function listBistandPage(env: Env, accountId: string, limit: number, offset: number): Promise<{ items: BistandRow[]; total: number }> {
   const lim = Math.max(1, Math.min(100, limit | 0));
   const off = Math.max(0, offset | 0);
   const { results } = await env.DB.prepare(
@@ -72,8 +67,7 @@ export async function listBistandPage(
      FROM bistand_items b JOIN products p ON p.id = b.product_id
      WHERE b.account_id = ?1 ORDER BY b.created_at LIMIT ?2 OFFSET ?3`,
   ).bind(accountId, lim, off).all<BistandRow>();
-  const total = await env.DB.prepare("SELECT count(*) AS n FROM bistand_items WHERE account_id = ?1")
-    .bind(accountId).first<{ n: number }>();
+  const total = await env.DB.prepare("SELECT count(*) AS n FROM bistand_items WHERE account_id = ?1").bind(accountId).first<{ n: number }>();
   return { items: results ?? [], total: total?.n ?? 0 };
 }
 
@@ -116,26 +110,19 @@ function csvCell(value: string | number | null): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-// CSV:n använder exakt samma osidade urval och motiveringsfallback som utskriften.
-export async function exportUnderlagCsv(env: Env, accountId: string): Promise<Response> {
-  const items = await listBistand(env, accountId);
-  const rows = [
+function underlagCsv(items: BistandRow[]): string {
+  const rows: (string | number | null)[][] = [
     ["Produktens namn", "Pris", "Direktlänk till produkten", "Motivering till varför jag behöver just den här produkten."],
     ...items.map((r) => [r.title ?? "", r.current_price, r.url, r.motivation]),
   ];
-  const csv = "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n") + "\r\n";
-  return new Response(csv, {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": 'attachment; filename="underlag.csv"',
-    },
-  });
+  return "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n") + "\r\n";
 }
 
 export async function renderUnderlag(env: Env, account: Account): Promise<string> {
   const items = await listBistand(env, account.id);
   const total = items.reduce((sum, r) => sum + (r.current_price ?? 0), 0);
   const date = new Date().toISOString().slice(0, 10);
+  const csvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(underlagCsv(items))}`;
   const rows = items.map((r) => `
     <article class="item"><table class="meta">
       <tr><th>Produktens namn</th><td>${escapeHtml(r.title ?? "(namnlös produkt)")}</td></tr>
@@ -148,7 +135,7 @@ export async function renderUnderlag(env: Env, account: Account): Promise<string
 <style>
 *{box-sizing:border-box}body{font-family:Georgia,"Times New Roman",serif;background:#0c0e14;color:#e4e2dc;max-width:820px;margin:0 auto;padding:2rem;line-height:1.5}header{border-bottom:2px solid #f0a500;padding-bottom:1rem;margin-bottom:1.5rem}h1{font-size:1.6rem;margin:0 0 .25rem}.sub{color:#9aa0aa;margin:0}.item{border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:1rem 1.25rem;margin-bottom:1rem;background:#13161f;page-break-inside:avoid}table.meta{width:100%;border-collapse:collapse;margin:0}table.meta th{width:16rem;text-align:left;padding:.25rem .75rem .25rem 0;color:#9aa0aa;font-weight:normal;vertical-align:top}table.meta td{padding:.25rem 0;vertical-align:top}table.meta a{color:#f0a500;word-break:break-all}.summary{margin-top:1.5rem;font-size:1.1rem}.toolbar{margin-bottom:1.5rem}.toolbar button,.toolbar a{font-family:system-ui,sans-serif;font-size:.95rem;padding:.5rem 1rem;margin-right:.5rem;border:1px solid rgba(255,255,255,.2);border-radius:5px;background:#13161f;color:#e4e2dc;text-decoration:none;cursor:pointer}.empty{color:#6b7280;font-style:italic}@media print{body{background:#fff;color:#111;padding:0;max-width:none}header{border-bottom-color:#111}.sub{color:#444}.item{border-color:#ccc;background:#fff}table.meta th{color:#555}table.meta a{color:#0a58ca}.toolbar{display:none}a{color:#111;text-decoration:none}}
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">Skriv ut / spara som PDF</button><a href="/underlag.csv">Ladda ner CSV</a><a href="/">← Tillbaka</a></div>
+<div class="toolbar"><button onclick="window.print()">Skriv ut / spara som PDF</button><a href="${escapeHtml(csvHref)}" download="underlag.csv">Ladda ner CSV</a><a href="/">← Tillbaka</a></div>
 <header><h1>Underlag till socialtjänsten</h1><p class="sub">Produkter med motivering — sammanställt ${escapeHtml(date)} av ${escapeHtml(account.email)}</p></header>
 ${items.length ? rows : '<p class="empty">Inga produkter tillagda ännu.</p>'}
 ${items.length ? `<p class="summary"><strong>Summa:</strong> ${formatPrice(total)} (${items.length} produkter)</p>` : ""}
