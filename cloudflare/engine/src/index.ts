@@ -229,11 +229,17 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     );
   }
 
-  // Prishistorik (kopplas till produktens id via url).
+  // Prishistorik: detail-resultat ska följa samma dedupe-regel som list/crawl.
   if (body.price != null) {
     stmts.push(
       env.DB.prepare(
-        "INSERT INTO price_history (product_id, price, ts) SELECT id, ?1, ?2 FROM products WHERE url = ?3",
+        `INSERT INTO price_history (product_id, price, ts)
+         SELECT p.id, ?1, ?2 FROM products p
+         WHERE p.url = ?3 AND NOT EXISTS (
+           SELECT 1 FROM price_history ph WHERE ph.product_id = p.id
+             AND ph.price = ?1
+             AND ph.ts = (SELECT MAX(ts) FROM price_history ph2 WHERE ph2.product_id = p.id)
+         )`,
       ).bind(body.price, now, job.url),
     );
   }
