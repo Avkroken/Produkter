@@ -7,7 +7,6 @@ WebUI Control Plane - Proxyrar anrop till API och Scraper Engine
 import hmac
 import os
 import logging
-import re
 import requests
 import secrets as _secrets
 from datetime import datetime, timezone
@@ -19,10 +18,17 @@ from github_report import report_error_to_github
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
-ENGINE_PATH_RE = re.compile(
-    r"^/(?:config(?:/[0-9]+)?|scrape|test|detect|export|settings(?:/[A-Za-z0-9_-]+)?|credentials/(?:password|username))$"
-)
-API_PATH_RE = re.compile(r"^/(?:stats|products(?:/[0-9]+/history)?|deals)$")
+_ENGINE_URLS = {
+    path: f"{SCRAPER_ENGINE}{path}"
+    for path in (
+        "/config", "/scrape", "/test", "/detect", "/export", "/settings",
+        "/credentials/password", "/credentials/username",
+    )
+}
+_API_URLS = {
+    path: f"{SCRAPER_API}{path}"
+    for path in ("/stats", "/products", "/deals")
+}
 
 app = Flask(__name__)
 _cors_origins = [o.strip() for o in os.getenv('WEBUI_CORS_ORIGINS', '').split(',') if o.strip()]
@@ -81,13 +87,35 @@ def _get_webui_password():
         _WEBUI_PASSWORD = read_secret('WEBUI_PASSWORD') or _read_credential('webui_password')
     return _WEBUI_PASSWORD
 
-def _validate_path(path, allowed_paths):
-    if not isinstance(path, str) or not allowed_paths.fullmatch(path):
+def _engine_url(path):
+    if not isinstance(path, str):
         raise ValueError("Invalid request path")
+    if path in _ENGINE_URLS:
+        return _ENGINE_URLS[path]
+    if path.startswith("/config/"):
+        config_id = path.removeprefix("/config/")
+        if config_id.isdecimal():
+            return f"{SCRAPER_ENGINE}/config/{config_id}"
+    if path.startswith("/settings/"):
+        key = path.removeprefix("/settings/")
+        if key and key.replace("_", "").replace("-", "").isalnum():
+            return f"{SCRAPER_ENGINE}/settings/{key}"
+    raise ValueError("Invalid request path")
+
+
+def _api_url(path):
+    if not isinstance(path, str):
+        raise ValueError("Invalid request path")
+    if path in _API_URLS:
+        return _API_URLS[path]
+    if path.startswith("/products/") and path.endswith("/history"):
+        product_id = path.removeprefix("/products/").removesuffix("/history")
+        if product_id.isdecimal():
+            return f"{SCRAPER_API}/products/{product_id}/history"
+    raise ValueError("Invalid request path")
 
 def engine_request(method, path, **kwargs):
-    _validate_path(path, ENGINE_PATH_RE)
-    url = f"{SCRAPER_ENGINE}{path}"
+    url = _engine_url(path)
     headers = kwargs.pop('headers', {})
     key = _get_engine_key()
     if key:
@@ -116,8 +144,7 @@ def inject_csp_nonce():
     return {'csp_nonce': g.get('csp_nonce', '')}
 
 def api_request(method, path, **kwargs):
-    _validate_path(path, API_PATH_RE)
-    url = f"{SCRAPER_API}{path}"
+    url = _api_url(path)
     headers = kwargs.pop('headers', {})
     headers['X-API-Key'] = get_api_key()
     timeout = kwargs.pop('timeout', 30)
