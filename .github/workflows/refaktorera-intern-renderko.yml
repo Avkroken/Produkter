@@ -1,0 +1,139 @@
+name: Tillfallig refaktorering av intern renderko
+
+on:
+  push:
+    branches:
+      - work/fix
+    paths:
+      - .github/workflows/refaktorera-intern-renderko.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refaktorera:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: work/fix
+          persist-credentials: true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+
+      - name: Refaktorera interna renderko-anrop
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly 1 match, got {count}")
+              return text.replace(old, new, 1)
+
+          index_path = Path("cloudflare/engine/src/index.ts")
+          index = index_path.read_text()
+
+          index = replace_once(
+              index,
+              '  ALERT_COOLDOWN_HOURS?: string; // cooldown per bevakning (default 24)\n}\n\nconst REPO = "Avkroken/produkter";',
+              '  ALERT_COOLDOWN_HOURS?: string; // cooldown per bevakning (default 24)\n}\n\nexport interface RenderKoEnv {\n  DB: D1Database;\n}\n\nconst REPO = "Avkroken/produkter";',
+              "RenderKoEnv",
+          )
+          index = replace_once(index, "interface LeasedJob {", "export interface LeasedJob {", "LeasedJob export")
+          index = replace_once(
+              index,
+              'async function leaseJobs(req: Request, env: Env): Promise<Response> {\n  const body = (await req.json().catch(() => ({}))) as { n?: number };\n  const n = Math.min(Math.max(1, body.n ?? 10), MAX_LEASE);\n  const now = Date.now();',
+              'export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<LeasedJob[]> {\n  const n = Math.min(Math.max(1, antal), MAX_LEASE);\n  const now = Date.now();',
+              "lease helper header",
+          )
+          index = replace_once(index, "  if (rows.length === 0) return json({ jobs: [] });", "  if (rows.length === 0) return [];", "empty lease")
+          index = replace_once(
+              index,
+              '  return json({ jobs });\n}\n\ninterface ResultBody {',
+              '  return jobs;\n}\n\nasync function leaseJobs(req: Request, env: Env): Promise<Response> {\n  const body = (await req.json().catch(() => ({}))) as { n?: number };\n  return json({ jobs: await leasaRenderJobb(env, body.n ?? 10) });\n}\n\nexport interface ResultBody {',
+              "lease http adapter",
+          )
+          index = replace_once(
+              index,
+              '  title?: string;\n  price?: number;\n  source_text?: string;\n  category?: string;\n  links?: string[]; // för list-jobb: upptäckta produkt-URL:er (bakåtkompat)\n  items?: { url: string; title?: string; price?: number; category?: string }[]; // list-jobb: strukturerat',
+              '  title?: string | null;\n  price?: number | null;\n  source_text?: string;\n  category?: string | null;\n  links?: string[]; // för list-jobb: upptäckta produkt-URL:er (bakåtkompat)\n  items?: { url: string; title?: string | null; price?: number | null; category?: string | null }[]; // list-jobb: strukturerat',
+              "nullable render result",
+          )
+          index = replace_once(
+              index,
+              'async function reportResult(id: number, req: Request, env: Env): Promise<Response> {\n  const body = (await req.json().catch(() => ({}))) as ResultBody;\n  const now = Date.now();',
+              'export async function rapporteraRenderResultat(id: number, body: ResultBody, env: RenderKoEnv): Promise<Response> {\n  const now = Date.now();',
+              "result helper header",
+          )
+          index = replace_once(
+              index,
+              '  return json({ ok: true, links: body.links?.length ?? 0, items: body.items?.length ?? 0 });\n}\n\ninterface IngestBody {',
+              '  return json({ ok: true, links: body.links?.length ?? 0, items: body.items?.length ?? 0 });\n}\n\nasync function reportResult(id: number, req: Request, env: Env): Promise<Response> {\n  const body = (await req.json().catch(() => ({}))) as ResultBody;\n  return rapporteraRenderResultat(id, body, env);\n}\n\ninterface IngestBody {',
+              "result http adapter",
+          )
+          index_path.write_text(index)
+
+          browser_path = Path("cloudflare/engine/src/webblasare.ts")
+          browser = browser_path.read_text()
+          browser = replace_once(
+              browser,
+              'import { launch } from "@cloudflare/playwright";\n',
+              'import { launch } from "@cloudflare/playwright";\nimport { leasaRenderJobb, rapporteraRenderResultat } from "./index";\n',
+              "browser import",
+          )
+          browser = replace_once(
+              browser,
+              'export interface WebblasareEnv {\n  BROWSER: Fetcher;\n  INGEST_API_KEY: string;\n  BROWSER_MAX_LIST_PAGES?: string;\n}\n\ntype InternFetch = (request: Request) => Promise<Response>;\n',
+              'export interface WebblasareEnv {\n  BROWSER: Fetcher;\n  DB: D1Database;\n  BROWSER_MAX_LIST_PAGES?: string;\n}\n',
+              "browser env",
+          )
+          start = browser.index("function authHeaders")
+          end = browser.index("async function accepteraKakor")
+          browser = browser[:start] + '''async function hamtaJobb(env: WebblasareEnv, antal: number): Promise<RenderJobb[]> {\n  return (await leasaRenderJobb(env, antal)) as RenderJobb[];\n}\n\nasync function rapporteraResultat(env: WebblasareEnv, jobbId: number, resultat: RenderResultat): Promise<void> {\n  const response = await rapporteraRenderResultat(jobbId, resultat, env);\n  if (!response.ok) throw new Error(`Resultatrapportering misslyckades: HTTP ${response.status}`);\n}\n\n''' + browser[end:]
+          browser = replace_once(
+              browser,
+              'export async function bearbetaRenderKo(env: WebblasareEnv, dispatch: InternFetch, limit: number): Promise<number> {\n  if (!env.INGEST_API_KEY) throw new Error("INGEST_API_KEY saknas");\n  const jobb = await hamtaJobb(env, dispatch, limit);',
+              'export async function bearbetaRenderKo(env: WebblasareEnv, limit: number): Promise<number> {\n  const jobb = await hamtaJobb(env, limit);',
+              "browser queue entry",
+          )
+          browser = browser.replace("rapporteraResultat(env, dispatch, ", "rapporteraResultat(env, ")
+          if "dispatch" in browser or "INGEST_API_KEY" in browser or "InternFetch" in browser or "authHeaders" in browser:
+              raise SystemExit("webblasare.ts still contains removed internal HTTP/auth dependency")
+          browser_path.write_text(browser)
+
+          worker_path = Path("cloudflare/engine/src/worker.ts")
+          worker = worker_path.read_text()
+          worker = replace_once(
+              worker,
+              '      const renderade = await bearbetaRenderKo(\n        env,\n        (request) => coreHandler.fetch(request, env, ctx),\n        limit,\n      );',
+              '      const renderade = await bearbetaRenderKo(env, limit);',
+              "worker browser call",
+          )
+          worker_path.write_text(worker)
+          PY
+
+      - name: Installera beroenden
+        working-directory: cloudflare/engine
+        run: npm ci
+
+      - name: Typkontrollera
+        working-directory: cloudflare/engine
+        run: npx tsc --noEmit
+
+      - name: Kontrollera diff
+        run: |
+          git diff --check
+          git diff -- cloudflare/engine/src/index.ts cloudflare/engine/src/webblasare.ts cloudflare/engine/src/worker.ts
+
+      - name: Commit runtime-fixen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare/engine/src/index.ts cloudflare/engine/src/webblasare.ts cloudflare/engine/src/worker.ts
+          git commit -m "fix: koppla Browser Run direkt till renderkon"
+          git push origin HEAD:work/fix
