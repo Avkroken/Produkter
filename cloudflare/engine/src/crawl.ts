@@ -58,6 +58,7 @@ type ProduktData = {
 };
 
 type CrawlLage = "static" | "rendered";
+type ImportResultat = "importerad" | "detailjobb" | "avvisad";
 
 const MAX_KALLTEXT_LANGD = 1200;
 const STANDARD_SAJTER_PER_TICK = 2;
@@ -201,37 +202,60 @@ async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, err
   ).bind(site.base_url, siteId, `${FALLBACK_MARKOR}${error}`.slice(0, 500), now).run();
 }
 
-async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecord, now: number): Promise<boolean> {
+async function skapaDetailFallback(env: CrawlEnv, siteId: number, url: string, now: number, error: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
+     SELECT ?1, ?2, 'detail', 'pending', ?3, ?4, ?4
+     WHERE NOT EXISTS (
+       SELECT 1 FROM render_jobs WHERE url=?1 AND type='detail' AND status IN ('pending','leased')
+     )`,
+  ).bind(url, siteId, `${FALLBACK_MARKOR}${error}`.slice(0, 500), now).run();
+}
+
+async function importeraRecord(
+  env: CrawlEnv,
+  siteId: number,
+  record: CrawlRecord,
+  now: number,
+  mode: CrawlLage,
+): Promise<ImportResultat> {
   const url = record.url || record.metadata?.url;
   if (!url) {
     console.warn("crawl_record_avvisad", { siteId, orsak: "saknar-url", status: record.status });
-    return false;
+    return "avvisad";
   }
   if (record.status !== "completed") {
     console.warn("crawl_record_avvisad", { siteId, url, orsak: "ej-completed", status: record.status });
-    return false;
+    return "avvisad";
   }
 
   const product = produktFranRecord(record);
   if (!product) {
     console.warn("crawl_record_avvisad", { siteId, url, orsak: "saknar-json" });
-    return false;
+    return "avvisad";
   }
   if (!product.isProduct) {
     console.warn("crawl_record_avvisad", { siteId, url, orsak: "inte-produkt" });
-    return false;
+    return "avvisad";
   }
+
+  const detailFallback = async (orsak: string): Promise<ImportResultat> => {
+    if (mode !== "static") return "avvisad";
+    await skapaDetailFallback(env, siteId, url, now, orsak);
+    console.warn("crawl_detail_reserv", { siteId, url, orsak });
+    return "detailjobb";
+  };
 
   const title = product.name?.slice(0, 500) || null;
   if (!title) {
     console.warn("crawl_record_avvisad", { siteId, url, orsak: "saknar-titel" });
-    return false;
+    return detailFallback("crawl saknar titel");
   }
   if (product.price == null || !Number.isFinite(product.price) || product.price < 0) {
     console.warn("crawl_record_avvisad", {
       siteId, url, orsak: "saknar-eller-ogiltigt-pris", price: product.price,
     });
-    return false;
+    return detailFallback("crawl saknar användbart pris");
   }
 
   const price = normaliseraPris(product);
@@ -239,7 +263,7 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
     console.warn("crawl_record_avvisad", {
       siteId, url, orsak: "ogiltig-valuta", currency: product.currency ?? null, price: product.price,
     });
-    return false;
+    return detailFallback("crawl saknar användbar SEK-valuta");
   }
   const sourceText = product.description?.slice(0, MAX_KALLTEXT_LANGD) || null;
   const category = product.category?.slice(0, 200) || null;
@@ -262,15 +286,20 @@ async function importeraRecord(env: CrawlEnv, siteId: number, record: CrawlRecor
            AND ph.ts=(SELECT MAX(ts) FROM price_history ph2 WHERE ph2.product_id=p.id))`,
     ).bind(price, now, url),
   ]);
-  return true;
+  return "importerad";
 }
 
-async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ importerade: number; fel: number; disallowed: number }> {
+async function importeraFardigCrawl(
+  env: CrawlEnv,
+  run: CrawlRun,
+): Promise<{ importerade: number; detailjobb: number; fel: number; disallowed: number }> {
   let cursor: string | number | null | undefined;
   let importerade = 0;
+  let detailjobb = 0;
   let fel = 0;
   let disallowed = 0;
   const now = Date.now();
+  const mode = (run.mode ?? "static") as CrawlLage;
   do {
     const params = new URLSearchParams({ limit: "100" });
     if (cursor != null) params.set("cursor", String(cursor));
@@ -278,7 +307,7 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
     console.log("crawl_resultat_form", {
       siteId: run.site_id,
       crawlId: run.crawl_id,
-      mode: run.mode ?? "static",
+      mode,
       nycklar: Object.keys(result).sort(),
       recordsTyp: Array.isArray(result.records) ? "array" : typeof result.records,
       recordsAntal: Array.isArray(result.records) ? result.records.length : null,
@@ -290,7 +319,9 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
       try {
         if (record.status === "disallowed") disallowed++;
         if (record.status === "errored") fel++;
-        if (await importeraRecord(env, run.site_id, record, now)) importerade++;
+        const resultat = await importeraRecord(env, run.site_id, record, now, mode);
+        if (resultat === "importerad") importerade++;
+        if (resultat === "detailjobb") detailjobb++;
       } catch (err) {
         fel++;
         console.error("crawl_record_fel", { siteId: run.site_id, url: record.url, fel: err instanceof Error ? err.message : String(err) });
@@ -298,7 +329,7 @@ async function importeraFardigCrawl(env: CrawlEnv, run: CrawlRun): Promise<{ imp
     }
     cursor = result.cursor;
   } while (cursor != null && cursor !== "");
-  return { importerade, fel, disallowed };
+  return { importerade, detailjobb, fel, disallowed };
 }
 
 async function hamtaSiteForFallback(env: CrawlEnv, siteId: number): Promise<CrawlSite | null> {
@@ -350,6 +381,8 @@ async function behandlaAktivaCrawls(env: CrawlEnv): Promise<number> {
       }
       if (summary.importerade === 0 && summary.disallowed > 0) {
         console.warn("crawl_disallowed", { siteId: run.site_id, crawlId: run.crawl_id, antal: summary.disallowed });
+      } else if (status === "completed" && summary.detailjobb > 0 && (run.mode ?? "static") === "static") {
+        console.log("crawl_detail_reserv_klar", { siteId: run.site_id, crawlId: run.crawl_id, detailjobb: summary.detailjobb });
       } else if (status === "completed" && summary.importerade === 0 && (run.mode ?? "static") === "static") {
         if (await startaRenderadReserv(env, run, "statisk-crawl-gav-inga-produkter")) continue;
         await skapaListFallback(env, run.site_id, Date.now(), "statisk crawl gav inga produkter och renderad reserv kunde inte starta");
