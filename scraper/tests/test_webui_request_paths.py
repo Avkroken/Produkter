@@ -6,22 +6,22 @@ import pytest
 SCRAPER_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRAPER_ROOT))
 
-from webui.app import API_PATH_RE, ENGINE_PATH_RE, _validate_path
+from webui.app import SCRAPER_API, SCRAPER_ENGINE, _api_url, _engine_url
 
 
 @pytest.mark.parametrize(
-    ("path", "allowed_paths"),
+    ("resolver", "path", "expected"),
     [
-        ("/config", ENGINE_PATH_RE),
-        ("/config/42", ENGINE_PATH_RE),
-        ("/settings/cooldown_hours", ENGINE_PATH_RE),
-        ("/credentials/password", ENGINE_PATH_RE),
-        ("/products/42/history", API_PATH_RE),
-        ("/deals", API_PATH_RE),
+        (_engine_url, "/config", f"{SCRAPER_ENGINE}/config"),
+        (_engine_url, "/config/42", f"{SCRAPER_ENGINE}/config/42"),
+        (_engine_url, "/settings/cooldown_hours", f"{SCRAPER_ENGINE}/settings/cooldown_hours"),
+        (_engine_url, "/credentials/password", f"{SCRAPER_ENGINE}/credentials/password"),
+        (_api_url, "/products/42/history", f"{SCRAPER_API}/products/42/history"),
+        (_api_url, "/deals", f"{SCRAPER_API}/deals"),
     ],
 )
-def test_allows_only_declared_internal_service_paths(path, allowed_paths):
-    _validate_path(path, allowed_paths)
+def test_resolves_only_declared_internal_service_paths(resolver, path, expected):
+    assert resolver(path) == expected
 
 
 @pytest.mark.parametrize(
@@ -37,4 +37,4 @@ def test_allows_only_declared_internal_service_paths(path, allowed_paths):
 )
 def test_rejects_paths_outside_internal_service_allowlist(path):
     with pytest.raises(ValueError, match="Invalid request path"):
-        _validate_path(path, ENGINE_PATH_RE)
+        _engine_url(path)
