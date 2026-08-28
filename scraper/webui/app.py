@@ -19,7 +19,10 @@ from github_report import report_error_to_github
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
-PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/%-]*$")
+ENGINE_PATH_RE = re.compile(
+    r"^/(?:config(?:/[0-9]+)?|scrape|test|detect|export|settings(?:/[A-Za-z0-9_-]+)?|credentials/(?:password|username))$"
+)
+API_PATH_RE = re.compile(r"^/(?:stats|products(?:/[0-9]+/history)?|deals)$")
 
 app = Flask(__name__)
 _cors_origins = [o.strip() for o in os.getenv('WEBUI_CORS_ORIGINS', '').split(',') if o.strip()]
@@ -78,12 +81,12 @@ def _get_webui_password():
         _WEBUI_PASSWORD = read_secret('WEBUI_PASSWORD') or _read_credential('webui_password')
     return _WEBUI_PASSWORD
 
-def _validate_path(path):
-    if not isinstance(path, str) or not PATH_RE.fullmatch(path):
+def _validate_path(path, allowed_paths):
+    if not isinstance(path, str) or not allowed_paths.fullmatch(path):
         raise ValueError("Invalid request path")
 
 def engine_request(method, path, **kwargs):
-    _validate_path(path)
+    _validate_path(path, ENGINE_PATH_RE)
     url = f"{SCRAPER_ENGINE}{path}"
     headers = kwargs.pop('headers', {})
     key = _get_engine_key()
@@ -113,7 +116,7 @@ def inject_csp_nonce():
     return {'csp_nonce': g.get('csp_nonce', '')}
 
 def api_request(method, path, **kwargs):
-    _validate_path(path)
+    _validate_path(path, API_PATH_RE)
     url = f"{SCRAPER_API}{path}"
     headers = kwargs.pop('headers', {})
     headers['X-API-Key'] = get_api_key()
