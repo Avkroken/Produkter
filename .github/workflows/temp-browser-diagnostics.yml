@@ -1,8 +1,8 @@
-name: Tillfällig Browser Run-diagnostik
-on:
+name: Browserdiagnostik
+"on":
   push:
-    branches: [work/fix]
-    paths: [.github/workflows/temp-browser-diagnostics.yml]
+    branches:
+      - work/fix
 permissions:
   contents: write
 jobs:
@@ -14,12 +14,13 @@ jobs:
           ref: work/fix
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - name: Lägg till diagnostik och utökad observability
+          node-version: "24"
+      - name: Instrumentera Browser Run
+        shell: bash
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
-          p = Path('cloudflare/engine/src/webblasare.ts')
+          p = Path("cloudflare/engine/src/webblasare.ts")
           s = p.read_text()
           old = '''      const context = await browser.newContext({
         viewport: { width: 1920, height: 1080 },
@@ -44,82 +45,41 @@ jobs:
         const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
         steg = "rapporteraResultat";'''
           if old not in s:
-              raise SystemExit('förväntat Browser Run-block saknas')
+              raise SystemExit("Browser Run-blocket hittades inte")
           s = s.replace(old, new, 1)
-          old2 = '''      } catch (err) {
+          old = '''      } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, fel: message });'''
-          new2 = '''      } catch (err) {
+          new = '''      } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
-        console.error("browser_run_jobb_fel", {
-          jobbId: aktuelltJobb.id,
-          siteId: aktuelltJobb.site_id,
-          typ: aktuelltJobb.type,
-          steg,
-          fel: message,
-          stack,
-        });'''
-          if old2 not in s:
-              raise SystemExit('förväntad felhantering saknas')
-          s = s.replace(old2, new2, 1)
-          old3 = '''      } finally {
+        console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, typ: aktuelltJobb.type, steg, fel: message, stack });'''
+          if old not in s:
+              raise SystemExit("Felblocket hittades inte")
+          s = s.replace(old, new, 1)
+          old = '''      } finally {
         await context.close();
       }'''
-          new3 = '''      } finally {
+          new = '''      } finally {
         if (context) {
-          try {
-            await context.close();
-          } catch (err) {
-            console.warn("browser_run_context_close_fel", {
-              jobbId: aktuelltJobb.id,
-              fel: err instanceof Error ? err.message : String(err),
-            });
-          }
+          try { await context.close(); }
+          catch (err) { console.warn("browser_run_context_close_fel", { jobbId: aktuelltJobb.id, fel: err instanceof Error ? err.message : String(err) }); }
         }
       }'''
-          if old3 not in s:
-              raise SystemExit('förväntad context-close saknas')
-          p.write_text(s)
-
-          p = Path('cloudflare/engine/wrangler.jsonc')
-          s = p.read_text()
-          old = '''  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
-  },'''
-          new = '''  "observability": {
-    "enabled": true,
-    "logs": {
-      "enabled": true,
-      "invocation_logs": true,
-      "head_sampling_rate": 1,
-      "persist": true
-    },
-    "traces": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true
-    }
-  },'''
           if old not in s:
-              raise SystemExit('förväntad observability-konfiguration saknas')
+              raise SystemExit("Context-close-blocket hittades inte")
           p.write_text(s.replace(old, new, 1))
           PY
-      - name: Typecheck
+      - name: Verifiera
         working-directory: cloudflare/engine
         run: |
           npm ci
           npx tsc --noEmit
-      - name: Kontrollera diff
-        run: |
           git diff --check
-          grep -q 'browser_run_jobb_start' cloudflare/engine/src/webblasare.ts
-          grep -q '"traces"' cloudflare/engine/wrangler.jsonc
       - name: Commit
         run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add cloudflare/engine/src/webblasare.ts cloudflare/engine/wrangler.jsonc
-          git commit -m 'fix: utöka Browser Run-diagnostiken'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare/engine/src/webblasare.ts
+          git commit -m "fix: utöka Browser Run-diagnostiken"
           git push origin HEAD:work/fix
