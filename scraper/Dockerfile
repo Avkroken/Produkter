@@ -41,7 +41,10 @@ RUN python3 -m venv --without-pip /opt/venv \
     && pip --python /opt/venv/bin/python install --no-cache-dir -r requirements.txt
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN playwright install-deps chromium
+# Installera både systemberoenden och Chromium vid image-build. Containern ska
+# kunna starta utan nätverksberoende eller en dyr browser-download vid cold start.
+RUN playwright install-deps chromium \
+    && playwright install chromium
 
 # Supervisord startar de fyra processerna från olika kataloger (/app/scraper,
 # /app/api, /app/alerts, /app). Utan detta blir sys.path[0] processens egen
@@ -60,7 +63,7 @@ RUN mkdir -p /ms-playwright /logs /tmp /credentials && \
 
 USER appuser
 
-EXPOSE 3000 8000
+EXPOSE 3000 8765
 
 ENTRYPOINT ["./entrypoint.sh"]
 
