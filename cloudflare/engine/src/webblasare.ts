@@ -1,19 +1,19 @@
 import { launch } from "@cloudflare/playwright";
 
-export interface BrowserRunEnv {
+export interface WebblasareEnv {
   BROWSER: Fetcher;
   INGEST_API_KEY: string;
+  BROWSER_MAX_LIST_PAGES?: string;
 }
 
-type InternalFetch = (request: Request) => Promise<Response>;
+type InternFetch = (request: Request) => Promise<Response>;
 
-type RenderJob = {
+type RenderJobb = {
   id: number;
   url: string;
   type: "detail" | "list" | string;
   site_id: number | null;
   detail_selector?: string;
-  use_stealth?: number;
   base_url?: string;
   product_selector?: string;
   title_selector?: string;
@@ -25,7 +25,7 @@ type RenderJob = {
   url_scope?: string;
 };
 
-type RenderResult = {
+type RenderResultat = {
   error?: string;
   title?: string | null;
   price?: number | null;
@@ -34,9 +34,11 @@ type RenderResult = {
   items?: Array<{ url: string; title?: string | null; price?: number | null; category?: string | null }>;
 };
 
-const MAX_SOURCE_LEN = 1200;
-const MAX_LIST_PAGES = 60;
-const RENDER_WAIT_MS = 12_000;
+const MAX_KALLTEXT_LANGD = 1200;
+const ABSOLUT_MAX_LISTSIDOR = 60;
+const STANDARD_MAX_LISTSIDOR = 20;
+const RENDER_VANTETID_MS = 12_000;
+const CRON_BUDGET_MS = 12 * 60_000;
 
 const JSONLD_READY_JS = `() => {
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
@@ -91,8 +93,9 @@ const DETAIL_EXTRACT_JS = `(detailSelector) => {
     const offers = Array.isArray(product.offers) ? product.offers[0] : product.offers;
     const p = offers && (offers.price ?? offers.lowPrice);
     if (p != null) {
-      const num = Math.round(parseFloat(String(p).replace(/\\s/g, '').replace(',', '.')));
-      if (!Number.isNaN(num)) out.price = num;
+      const normalized = String(p).replace(/\\s/g, '').replace(',', '.');
+      const num = Number(normalized);
+      if (Number.isFinite(num)) out.price = Math.round(num);
     }
   }
 
@@ -134,17 +137,15 @@ const DETAIL_EXTRACT_JS = `(detailSelector) => {
 
 const LIST_EXTRACT_JS = `(cfg) => {
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
-  const toInt = (s) => {
-    const d = (s || '').replace(/[^\\d]/g, '');
-    if (!d) return null;
-    const n = parseInt(d, 10);
-    return Number.isNaN(n) ? null : n;
-  };
-  const parsePrice = (text, scoped) => {
-    const t = clean(text);
-    if (scoped) return toInt((t.match(/\\d[\\d\\s]*/) || [])[0]);
-    const m = t.match(/(\\d[\\d\\s]*?)\\s*(?:kr|:-)/);
-    return m ? toInt(m[1]) : null;
+  const parsePrice = (text) => {
+    const t = clean(text).replace(/\\u00a0/g, ' ');
+    const m = t.match(/(\\d[\\d\\s.,]*?)\\s*(?:kr|SEK|:-)/i);
+    if (!m) return null;
+    let value = m[1].replace(/\\s/g, '');
+    if (value.includes(',')) value = value.replace(/\\./g, '').replace(',', '.');
+    else if (/^\\d{1,3}(?:\\.\\d{3})+$/.test(value)) value = value.replace(/\\./g, '');
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(n) : null;
   };
   const out = [];
   const els = document.querySelectorAll(cfg.productSel);
@@ -159,9 +160,9 @@ const LIST_EXTRACT_JS = `(cfg) => {
     let price = null;
     if (cfg.priceSel && !cfg.priceSel.startsWith('text=')) {
       const p = el.querySelector(cfg.priceSel);
-      if (p) price = parsePrice(p.innerText || p.textContent, true);
+      if (p) price = parsePrice(p.innerText || p.textContent);
     }
-    if (price == null) price = parsePrice(el.innerText, false);
+    if (price == null) price = parsePrice(el.innerText);
 
     let href = null;
     if (cfg.linkSel) {
@@ -184,35 +185,55 @@ const LIST_EXTRACT_JS = `(cfg) => {
   return out;
 }`;
 
-function headers(env: BrowserRunEnv): HeadersInit {
+function authHeaders(env: WebblasareEnv): HeadersInit {
   return { "X-API-Key": env.INGEST_API_KEY, "Content-Type": "application/json" };
 }
 
-async function leaseJobs(env: BrowserRunEnv, dispatch: InternalFetch, n: number): Promise<RenderJob[]> {
-  const response = await dispatch(
-    new Request("https://engine.internal/jobs/lease", {
-      method: "POST",
-      headers: headers(env),
-      body: JSON.stringify({ n }),
-    }),
-  );
-  if (!response.ok) throw new Error(`lease failed: ${response.status}`);
-  const body = (await response.json()) as { jobs?: RenderJob[] };
+function arPrivatVard(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "::1" || host === "0.0.0.0") return true;
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) return false;
+  const [, aRaw, bRaw] = ipv4;
+  const a = Number(aRaw);
+  const b = Number(bRaw);
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+export function valideraMalUrl(rawUrl: string, basUrl?: string): URL {
+  const url = new URL(rawUrl, basUrl);
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`Otillåtet protokoll: ${url.protocol}`);
+  if (url.username || url.password) throw new Error("URL med inloggningsuppgifter tillåts inte");
+  if (arPrivatVard(url.hostname)) throw new Error(`Privat målhost tillåts inte: ${url.hostname}`);
+  if (basUrl) {
+    const bas = new URL(basUrl);
+    if (url.origin !== bas.origin) throw new Error(`Mål utanför butikens origin: ${url.origin}`);
+  }
+  return url;
+}
+
+async function hamtaJobb(env: WebblasareEnv, dispatch: InternFetch, antal: number): Promise<RenderJobb[]> {
+  const response = await dispatch(new Request("https://engine.internal/jobs/lease", {
+    method: "POST",
+    headers: authHeaders(env),
+    body: JSON.stringify({ n: antal }),
+  }));
+  if (!response.ok) throw new Error(`Lease misslyckades: HTTP ${response.status}`);
+  const body = (await response.json()) as { jobs?: RenderJobb[] };
   return body.jobs ?? [];
 }
 
-async function reportResult(env: BrowserRunEnv, dispatch: InternalFetch, jobId: number, result: RenderResult): Promise<void> {
-  const response = await dispatch(
-    new Request(`https://engine.internal/jobs/${jobId}/result`, {
-      method: "POST",
-      headers: headers(env),
-      body: JSON.stringify(result),
-    }),
-  );
-  if (!response.ok) throw new Error(`result failed: ${response.status}`);
+async function rapporteraResultat(env: WebblasareEnv, dispatch: InternFetch, jobbId: number, resultat: RenderResultat): Promise<void> {
+  const response = await dispatch(new Request(`https://engine.internal/jobs/${jobbId}/result`, {
+    method: "POST",
+    headers: authHeaders(env),
+    body: JSON.stringify(resultat),
+  }));
+  if (!response.ok) throw new Error(`Resultatrapportering misslyckades: HTTP ${response.status}`);
 }
 
-async function acceptCookies(page: any): Promise<void> {
+async function accepteraKakor(page: any): Promise<void> {
   for (const selector of [
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
     "button#onetrust-accept-btn-handler",
@@ -226,22 +247,23 @@ async function acceptCookies(page: any): Promise<void> {
         return;
       }
     } catch {
-      // Best-effort: fortsätt med nästa vanligt förekommande cookie-knapp.
+      // Best effort; fortsätt med nästa vanlig cookie-knapp.
     }
   }
 }
 
-async function renderDetail(context: any, job: RenderJob): Promise<RenderResult> {
+async function renderaDetalj(context: any, jobb: RenderJobb): Promise<RenderResultat> {
+  const mal = valideraMalUrl(jobb.url, jobb.base_url);
   const page = await context.newPage();
   try {
-    await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    await acceptCookies(page);
-    const detailSelector = job.detail_selector ?? "";
+    await page.goto(mal.href, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await accepteraKakor(page);
+    const detailSelector = jobb.detail_selector ?? "";
     try {
-      if (detailSelector) await page.waitForSelector(detailSelector, { timeout: RENDER_WAIT_MS });
-      else await page.waitForFunction(JSONLD_READY_JS as any, undefined, { timeout: RENDER_WAIT_MS });
+      if (detailSelector) await page.waitForSelector(detailSelector, { timeout: RENDER_VANTETID_MS });
+      else await page.waitForFunction(JSONLD_READY_JS as any, undefined, { timeout: RENDER_VANTETID_MS });
     } catch {
-      // Best-effort: extrahera den data som hunnit renderas.
+      // Extrahera det som hunnit renderas.
     }
     const data = (await page.evaluate(DETAIL_EXTRACT_JS as any, detailSelector)) as {
       title: string | null;
@@ -252,7 +274,7 @@ async function renderDetail(context: any, job: RenderJob): Promise<RenderResult>
     return {
       title: data.title,
       price: data.price,
-      source_text: (data.source_text ?? "").slice(0, MAX_SOURCE_LEN),
+      source_text: (data.source_text ?? "").slice(0, MAX_KALLTEXT_LANGD),
       category: data.category,
     };
   } finally {
@@ -260,14 +282,14 @@ async function renderDetail(context: any, job: RenderJob): Promise<RenderResult>
   }
 }
 
-async function infiniteScroll(page: any, productSelector: string): Promise<void> {
+async function scrollaTillSlut(page: any, produktSelector: string, deadline: number): Promise<void> {
   let previous = -1;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 15 && Date.now() < deadline; i++) {
     try {
-      const before = (await page.locator(productSelector).count()) as number;
+      const before = (await page.locator(produktSelector).count()) as number;
       await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
       await page.waitForTimeout(500);
-      const after = (await page.locator(productSelector).count()) as number;
+      const after = (await page.locator(produktSelector).count()) as number;
       if (after === before && after === previous) break;
       previous = after;
     } catch {
@@ -276,94 +298,107 @@ async function infiniteScroll(page: any, productSelector: string): Promise<void>
   }
 }
 
-async function renderList(context: any, job: RenderJob): Promise<RenderResult> {
-  const baseUrl = job.base_url ?? job.url;
-  const productSelector = job.product_selector ?? "";
+function maxListSidor(env: WebblasareEnv, jobb: RenderJobb): number {
+  const globaltTak = Math.min(
+    Math.max(1, Number(env.BROWSER_MAX_LIST_PAGES) || STANDARD_MAX_LISTSIDOR),
+    ABSOLUT_MAX_LISTSIDOR,
+  );
+  return Math.min(Math.max(1, Number(jobb.max_pages) || 1), globaltTak);
+}
+
+async function renderaLista(context: any, env: WebblasareEnv, jobb: RenderJobb, deadline: number): Promise<RenderResultat> {
+  const baseUrl = valideraMalUrl(jobb.base_url ?? jobb.url).href;
+  const productSelector = jobb.product_selector ?? "";
   if (!productSelector) return { items: [] };
 
-  const maxPages = Math.min(Math.max(1, Number(job.max_pages) || 1), MAX_LIST_PAGES);
-  const pages = job.pagination_type === "query" ? maxPages : 1;
+  const antalSidor = jobb.pagination_type === "query" ? maxListSidor(env, jobb) : 1;
   const seen = new Map<string, { url: string; title?: string | null; price?: number | null }>();
-
   const cfg = {
     productSel: productSelector,
-    titleSel: job.title_selector ?? "",
-    priceSel: job.price_selector ?? "",
-    linkSel: job.link_selector ?? "",
-    excludePattern: job.exclude_link_pattern ?? "",
-    urlScope: job.url_scope ?? "",
+    titleSel: jobb.title_selector ?? "",
+    priceSel: jobb.price_selector ?? "",
+    linkSel: jobb.link_selector ?? "",
+    excludePattern: jobb.exclude_link_pattern ?? "",
+    urlScope: jobb.url_scope ?? "",
   };
 
-  for (let pageNum = 1; pageNum <= pages; pageNum++) {
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    const url = pageNum === 1 ? baseUrl : `${baseUrl}${separator}page=${pageNum}`;
+  for (let sidnummer = 1; sidnummer <= antalSidor && Date.now() < deadline; sidnummer++) {
+    const bas = new URL(baseUrl);
+    if (sidnummer > 1) bas.searchParams.set("page", String(sidnummer));
+    const mal = valideraMalUrl(bas.href, baseUrl);
     const page = await context.newPage();
     let items: Array<{ url: string; title?: string | null; price?: number | null }> = [];
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-      await acceptCookies(page);
-      await infiniteScroll(page, productSelector);
+      await page.goto(mal.href, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      await accepteraKakor(page);
+      await scrollaTillSlut(page, productSelector, deadline);
       items = (await page.evaluate(LIST_EXTRACT_JS as any, cfg)) as typeof items;
     } finally {
       await page.close();
     }
     if (items.length === 0) break;
-    for (const item of items) if (item.url) seen.set(item.url, item);
-    if (pageNum < pages) await new Promise((resolve) => setTimeout(resolve, 500));
+    for (const item of items) {
+      try {
+        const sakerUrl = valideraMalUrl(item.url, baseUrl).href;
+        seen.set(sakerUrl, { ...item, url: sakerUrl });
+      } catch {
+        // Externa/ogiltiga länkar läggs inte i kön.
+      }
+    }
+    if (sidnummer < antalSidor && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   return { items: [...seen.values()] };
 }
 
-async function renderJob(context: any, job: RenderJob): Promise<RenderResult> {
-  if (job.type === "detail") return renderDetail(context, job);
-  if (job.type === "list") return renderList(context, job);
-  return { error: `unsupported render job type: ${job.type}` };
+async function renderaJobb(context: any, env: WebblasareEnv, jobb: RenderJobb, deadline: number): Promise<RenderResultat> {
+  if (jobb.type === "detail") return renderaDetalj(context, jobb);
+  if (jobb.type === "list") return renderaLista(context, env, jobb, deadline);
+  return { error: `Okänd renderjobbtyp: ${jobb.type}` };
 }
 
-export async function processBrowserQueue(
-  env: BrowserRunEnv,
-  dispatch: InternalFetch,
-  limit: number,
-): Promise<number> {
+export async function bearbetaRenderKo(env: WebblasareEnv, dispatch: InternFetch, limit: number): Promise<number> {
   if (!env.INGEST_API_KEY) throw new Error("INGEST_API_KEY saknas");
-  const jobs = await leaseJobs(env, dispatch, limit);
-  if (jobs.length === 0) return 0;
+  const jobb = await hamtaJobb(env, dispatch, limit);
+  if (jobb.length === 0) return 0;
 
-  // En session per cron-tick, flera sidor/jobbs inom samma browser. Det minskar
-  // acquisitions/concurrency och följer Browser Runs rekommendation om reuse.
+  const deadline = Date.now() + CRON_BUDGET_MS;
   const browser = await launch(env.BROWSER, { keep_alive: 60_000 });
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    viewport: { width: 1920, height: 1080 },
-    locale: "sv-SE",
-    timezoneId: "Europe/Stockholm",
-    extraHTTPHeaders: { "Accept-Language": "sv-SE,sv;q=0.9,en-US;q=0.8,en;q=0.7" },
-  });
+  let klara = 0;
 
-  let done = 0;
   try {
-    // Sekventiellt medvetet: list-jobb kan själva öppna många sidor. Det håller
-    // target-rate och Browser Run-concurrency låg; nästa cron fortsätter kön.
-    for (const job of jobs) {
+    for (const aktuelltJobb of jobb) {
+      if (Date.now() >= deadline) {
+        console.warn("browser_run_budget_slut", { kvarvarande: jobb.length - klara });
+        break;
+      }
+
+      const context = await browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        locale: "sv-SE",
+        timezoneId: "Europe/Stockholm",
+        extraHTTPHeaders: { "Accept-Language": "sv-SE,sv;q=0.9,en-US;q=0.8,en;q=0.7" },
+      });
+
       try {
-        const result = await renderJob(context, job);
-        await reportResult(env, dispatch, job.id, result);
-        done++;
+        const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
+        await rapporteraResultat(env, dispatch, aktuelltJobb.id, resultat);
+        klara++;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, fel: message });
         try {
-          await reportResult(env, dispatch, job.id, { error: message.slice(0, 400) });
+          await rapporteraResultat(env, dispatch, aktuelltJobb.id, { error: message.slice(0, 400) });
         } catch {
-          // Leasen löper ut och reclaimas av core-handlern vid nästa cron.
+          // Leasen löper ut och kan återtas av core-handlern vid nästa cron.
         }
+      } finally {
+        await context.close();
       }
     }
   } finally {
-    await context.close();
     await browser.close();
   }
-  return done;
+
+  return klara;
 }

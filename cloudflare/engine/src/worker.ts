@@ -1,10 +1,11 @@
 import core from "./index";
-import { processBrowserQueue, type BrowserRunEnv } from "./browser";
+import { bearbetaRenderKo, type WebblasareEnv } from "./webblasare";
 
-interface Env extends BrowserRunEnv {
+interface Env extends WebblasareEnv {
   DB: D1Database;
   INGEST_API_KEY: string;
   BROWSER_RENDER_LIMIT?: string;
+  BROWSER_MAX_LIST_PAGES?: string;
   [key: string]: unknown;
 }
 
@@ -17,20 +18,20 @@ const coreHandler = core as unknown as CoreHandler;
 
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // Behåll engine:s befintliga cron som sanningskälla för schemaläggning,
-    // lease-recovery, prisbevakning och AI-beskrivningar.
+    // Core-handlern är sanningskälla för schemaläggning, lease-recovery,
+    // prisbevakning och AI-beskrivningar. Browser Run konsumerar renderkön efteråt.
     await coreHandler.scheduled(controller, env, ctx);
 
     const limit = Math.min(Math.max(1, Number(env.BROWSER_RENDER_LIMIT) || 3), 10);
     try {
-      const rendered = await processBrowserQueue(
+      const renderade = await bearbetaRenderKo(
         env,
         (request) => coreHandler.fetch(request, env, ctx),
         limit,
       );
-      console.log(`browser-run: rendered=${rendered}`);
+      console.log("browser_run_cron_klar", { renderade });
     } catch (err) {
-      console.error("browser-run cron misslyckades:", err);
+      console.error("browser_run_cron_fel", err);
     }
   },
 
