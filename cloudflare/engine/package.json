@@ -9,6 +9,7 @@
     "secret:set-ingest-key": "wrangler secret put INGEST_API_KEY"
   },
   "devDependencies": {
+    "@cloudflare/playwright": "^1.3.0",
     "@cloudflare/workers-types": "^5.20260821.1",
     "typescript": "^7.0.2",
     "wrangler": "^4.125.0"
