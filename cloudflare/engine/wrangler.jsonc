@@ -5,6 +5,7 @@
   "compatibility_date": "2026-06-01",
   // @cloudflare/playwright requires nodejs_compat and a compatibility date >= 2025-09-15.
   "compatibility_flags": ["nodejs_compat"],
+  "upload_source_maps": true,
   "observability": {
     "enabled": true,
     "logs": {
@@ -19,8 +20,9 @@
       "persist": true
     }
   },
-  // EN cron (*/5). Core-handlern skapar/underhåller render_jobs och den yttre
-  // Worker-entrypointen konsumerar därefter ett litet antal via Browser Run.
+  // EN cron (*/5). Core-handlern schemalägger arbetet. Den yttre Workern
+  // delegerar list-jobb till Cloudflare /crawl och använder Playwright endast
+  // som fallback för jobb som crawl inte kan hantera.
   "triggers": {
     "crons": ["*/5 * * * *"]
   },
@@ -31,6 +33,8 @@
     "SCHEDULE_LIMIT": "200",
     "DESCRIBE_LIMIT": "10",
     "DESCRIBE_WORKERS": "2",
+    "CRAWL_SITE_LIMIT": "2",
+    "CRAWL_PAGE_LIMIT": "100",
     "BROWSER_RENDER_LIMIT": "3",
     "BROWSER_MAX_LIST_PAGES": "20"
   },
@@ -48,5 +52,7 @@
   ]
   // Secrets (wrangler secret put):
   //   INGEST_API_KEY
+  //   CLOUDFLARE_ACCOUNT_ID
+  //   CLOUDFLARE_BROWSER_TOKEN  (API-token med Browser Rendering - Edit)
   //   GEMINI_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY / AZURE_*
 }
