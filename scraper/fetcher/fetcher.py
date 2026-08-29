@@ -210,8 +210,10 @@ def lease(n):
 def post_result(job_id, attempt, payload):
     body = {**payload, "attempt": attempt}
     r = requests.post(f"{ENGINE_URL}/jobs/{job_id}/result", json=body, headers=_headers(), timeout=30)
+    if r.status_code == 409:
+        return False
     r.raise_for_status()
-    return r.json()
+    return True
 
 
 async def accept_cookies(page):
@@ -316,11 +318,17 @@ async def process(context, sem, job):
             jtype = job.get("type")
             if jtype == "detail":
                 result = await render_detail(context, job)
-                await asyncio.to_thread(post_result, job["id"], attempt, result)
+                accepted = await asyncio.to_thread(post_result, job["id"], attempt, result)
+                if not accepted:
+                    logger.info("jobb %s: stale lease-resultat ignorerat", job["id"])
+                    return
                 logger.info("jobb %s (detail): %s tecken source_text", job["id"], len(result["source_text"]))
             elif jtype == "list":
                 result = await render_list(context, job)
-                await asyncio.to_thread(post_result, job["id"], attempt, result)
+                accepted = await asyncio.to_thread(post_result, job["id"], attempt, result)
+                if not accepted:
+                    logger.info("jobb %s: stale lease-resultat ignorerat", job["id"])
+                    return
                 logger.info("jobb %s (list): %s produkter upptäckta", job["id"], len(result["items"]))
             else:
                 logger.info("hoppar över jobb %s (typ %s ej implementerad)", job["id"], jtype)

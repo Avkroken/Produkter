@@ -213,9 +213,11 @@ async function hamtaJobb(env: WebblasareEnv, antal: number): Promise<RenderJobb[
   return (await leasaRenderJobb(env, antal)) as RenderJobb[];
 }
 
-async function rapporteraResultat(env: WebblasareEnv, jobb: RenderJobb, resultat: RenderResultat): Promise<void> {
+async function rapporteraResultat(env: WebblasareEnv, jobb: RenderJobb, resultat: RenderResultat): Promise<boolean> {
   const response = await rapporteraRenderResultat(jobb.id, { ...resultat, attempt: jobb.attempt }, env);
+  if (response.status === 409) return false;
   if (!response.ok) throw new Error(`Resultatrapportering misslyckades: HTTP ${response.status}`);
+  return true;
 }
 
 async function accepteraKakor(page: any): Promise<void> {
@@ -370,7 +372,11 @@ export async function bearbetaRenderKo(env: WebblasareEnv, limit: number): Promi
 
       try {
         const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
-        await rapporteraResultat(env, aktuelltJobb, resultat);
+        const accepterat = await rapporteraResultat(env, aktuelltJobb, resultat);
+        if (!accepterat) {
+          console.info("browser_run_stale_lease", { jobbId: aktuelltJobb.id, attempt: aktuelltJobb.attempt });
+          continue;
+        }
         klara++;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

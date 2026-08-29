@@ -172,7 +172,7 @@ async function leaseJobs(req: Request, env: Env): Promise<Response> {
 }
 
 export interface ResultBody {
-  attempt?: number;
+  attempt: number;
   error?: string;
   title?: string | null;
   price?: number | null;
@@ -786,7 +786,12 @@ export default {
       // direkt när en produkt faktiskt visas/väljs, oavsett var bakgrunds-
       // loopen befinner sig.
       const reclaimed = await reclaimLeases(env, now);
-      const redundant = await completeRedundantDetailJobs(env, now);
+      let redundant = 0;
+      try {
+        redundant = await completeRedundantDetailJobs(env, now);
+      } catch (err) {
+        console.warn("redundant_cleanup_fel", err instanceof Error ? err.message : String(err));
+      }
       const crawls = await scheduleDueCrawls(env, now);
       const scheduled = await scheduleDetailJobs(env, now, Number(env.SCHEDULE_LIMIT) || 200);
       const alerts = await checkPriceDrops(env, now);
