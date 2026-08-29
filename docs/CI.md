@@ -2,42 +2,18 @@
 
 ## Grundmodell
 
-Arbete sker i en sluten pool av tre grenar, en per arbetstyp — `work/feature`,
-`work/fix` och `work/chore`. Namnen gör PR-listan självbeskrivande. Rulesetet
-blockerar skapande av allt utanför poolen, så antalet arbetsgrenar kan inte växa.
-Kortlivade grenar per uppgift användes tidigare och blev liggande halvfärdiga.
+Arbete sker på fria arbetsgrenar. `main` tar endast emot squash-mergade PR:er.
 
-1. En bot tar sloten som matchar arbetet, eller vilken ledig som helst om den är
-   upptagen. Finns omergat arbete i en slot slutförs det först.
-2. PR öppnas från sloten till `main`.
-3. PR-CI verifierar ändringen.
-4. Auto-merge aktiveras; merge-kön tar PR:n när required checks är gröna och
-   mergar en i taget mot aktuell `main`.
-5. **Squash merge är den enda tillåtna merge-metoden.**
-6. `sync-pool.yml` rebasar varje slot på `main` efter varje merge.
+1. Skapa eller använd en arbetsgren för ändringen.
+2. Öppna PR till `main`.
+3. Aktivera auto-merge direkt.
+4. Required CI och olösta review-trådar blockerar merge tills de är klara.
+5. Relevanta reviewfynd åtgärdas i samma PR och tråden löses först efter verifierad fix.
+6. **Squash merge är den enda tillåtna merge-metoden.**
 
-Punkt 6 är inte kosmetika. Squash-merge ger `main` en enda ny commit medan sloten
-behåller sina ursprungliga — utan rebase divergerar de och nästa PR fylls av
-konflikter. `--empty=drop` tar bort de commits vars innehåll redan finns i main
-och replayar resten, så arbete som tillkommit under en öppen PR överlever.
-
-Tre slots ger parallellt arbete utan grenkaos, och gör merge-kön meningsfull:
-den serialiserar upp till tre strömmar mot `main`.
-
-CI ska inte köras dubbelt för samma arbetscommit. Vanlig CI triggas därför av
-`pull_request`, av `merge_group` (merge-kön) och av `push` till `main` där
-efter-merge-verifiering behövs.
-
-## Merge-kön
-
-Kön kräver att required checks svarar på `merge_group`-eventet. Varje workflow vars
-jobb är en required check har därför `merge_group:` i sin `on:` — utan den skickar
-kön `merge_group.checks_requested`, ingen svarar, och PR:n kastas ut efter
-`check_response_timeout_minutes`.
-
-`CodeQL` är medvetet **inte** en required status check. Code scanning default setup
-rapporterar inte på merge-grupper, så kravet hade låst kön permanent. Skyddet ligger
-i stället i `code_scanning`-regeln, som verkar på PR-nivå före kön.
+Repot använder inte merge queue. Required CI behöver därför svara på `pull_request`;
+CI kan även köras på push till `main` för efter-merge-verifiering. Workflowen använder
+inte `merge_group`.
 
 ## Selektiv CI
 
@@ -50,6 +26,9 @@ Routing ska vara deterministisk och konservativ:
 - Dependency- eller CI-konfiguration som kan påverka flera delar => kör berörda delar, och vid osäkerhet båda.
 - Dokumentation/processfiler ska inte behöva starta språkbyggen.
 - Okända käll-/konfigurationsändringar ska fail-open till mer CI, inte riskera falskt negativt.
+
+`CI / required` är den stabila check som rulesetet kräver. Den ska alltid köras och
+får bara lyckas när impact-analysen lyckas och alla relevanta språkaggregat lyckas.
 
 ## Docker-impact
 
