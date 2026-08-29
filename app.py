@@ -30,6 +30,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("describer")
 
 
+def _safe_log_value(value):
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
 JOBS_FILE = OUTPUT_DIR / "jobs.json"
@@ -75,7 +79,9 @@ def handle_unexpected_error(exc):
     """
     if isinstance(exc, HTTPException):
         return exc
-    log.exception("Unhandled error handling %s %s", request.method, request.path)
+    method = _safe_log_value(request.method)
+    path = _safe_log_value(request.path)
+    log.exception("Unhandled error handling %s %s", method, path)
     report_error_to_github(
         "Avkroken/produkter",
         f"Oväntat fel: {request.method} {request.path}",
@@ -455,7 +461,7 @@ def set_settings_key():
     try:
         provider_config.set_provider_config(session["account_id"], provider, {"api_key": api_key, **extra})
     except RuntimeError:
-        log.exception("Failed to save provider configuration for provider '%s'", provider)
+        log.exception("Failed to save provider configuration")
         return jsonify({"error": "Ett internt fel uppstod"}), 500
     return jsonify({"ok": True})
 
