@@ -185,8 +185,8 @@ def get_configs():
     try:
         resp = engine_request('GET', '/config')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Engine error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while listing configs")
         return jsonify([]), 200
 
 @app.route('/api/configs', methods=['POST'])
@@ -194,8 +194,8 @@ def create_config():
     try:
         resp = engine_request('POST', '/config', json=request.json)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Create config error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while creating config")
         return jsonify({'error': 'Internal server error'}), 503
 
 @app.route('/api/configs/<int:config_id>', methods=['DELETE'])
@@ -203,8 +203,8 @@ def delete_config(config_id):
     try:
         resp = engine_request('DELETE', f'/config/{config_id}')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Delete config error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while deleting config")
         return jsonify({'error': 'Internal server error'}), 503
 
 @app.route('/api/scrape', methods=['POST'])
@@ -212,8 +212,8 @@ def trigger_scrape():
     try:
         resp = engine_request('POST', '/scrape')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Trigger scrape error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while triggering scrape")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
 
 @app.route('/api/test', methods=['POST'])
@@ -221,8 +221,8 @@ def test_scrape():
     try:
         resp = engine_request('POST', '/test', json=request.json)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Test scrape error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while testing scrape")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
 
 @app.route('/api/stats')
@@ -230,7 +230,7 @@ def get_stats():
     try:
         resp = api_request('GET', '/stats')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError):
         return jsonify({'total_products': 0, 'updated_24h': 0, 'active_configs': 0})
 
 @app.route('/api/products')
@@ -238,7 +238,7 @@ def get_products():
     try:
         resp = api_request('GET', '/products', params=request.args)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError):
         return jsonify({'products': [], 'total': 0})
 
 @app.route('/api/products/<int:product_id>/history')
@@ -246,7 +246,7 @@ def get_product_history(product_id):
     try:
         resp = api_request('GET', f'/products/{product_id}/history')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError):
         return jsonify({'history': []}), 200
 
 @app.route('/api/deals')
@@ -254,7 +254,7 @@ def get_deals():
     try:
         resp = api_request('GET', '/deals', params=request.args)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError):
         return jsonify({'deals': []}), 200
 
 @app.route('/api/detect', methods=['POST'])
@@ -262,8 +262,8 @@ def detect_selectors():
     try:
         resp = engine_request('POST', '/detect', json=request.json, timeout=110)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Detect error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while detecting selectors")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
 
 @app.route('/api/export/csv')
@@ -277,8 +277,8 @@ def export_csv():
             mimetype='text/csv',
             headers={'Content-Disposition': resp.headers.get('Content-Disposition', 'attachment; filename=products.csv')}
         )
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Export error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while exporting CSV")
         return jsonify({'error': 'Export failed'}), 503
 
 @app.route('/api/settings', methods=['GET'])
@@ -286,8 +286,8 @@ def get_settings():
     try:
         resp = engine_request('GET', '/settings')
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Settings error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while reading settings")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
 
 
@@ -296,8 +296,8 @@ def update_setting(key):
     try:
         resp = engine_request('PUT', f'/settings/{key}', json=request.json)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Settings update error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while updating settings")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
 
 
@@ -310,6 +310,6 @@ def update_credential(subpath):
     try:
         resp = engine_request('PUT', f'/credentials/{subpath}', json=request.json)
         return jsonify(resp.json()), resp.status_code
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Credentials update error: {e}")
+    except (requests.exceptions.RequestException, ValueError):
+        logger.error("Engine request failed while updating credentials")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 503
