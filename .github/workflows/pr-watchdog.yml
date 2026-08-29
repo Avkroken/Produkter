@@ -43,7 +43,75 @@ jobs:
             let state={}, original='{}\n';
             try{const loaded=await github.rest.repos.getContent({owner,repo,path:statePath,ref:stateBranch});if(Array.isArray(loaded.data)||!loaded.data.content)throw new Error('Ogiltig watchdog-state');original=Buffer.from(loaded.data.content,'base64').toString('utf8');state=JSON.parse(original);}catch(error){if(error.status!==404)throw error;}
             const next={};
+            const branchErrors=[];
             const branches=await github.paginate(github.rest.repos.listBranches,{owner,repo,per_page:100});
-            for(const branch of branches){const name=branch.name;if(name===base||name.startsWith('gh-readonly-queue/')||isPermanent(name))continue;core.startGroup(name);try{const headSha=branch.commit.sha;const comparison=await github.rest.repos.compareCommitsWithBasehead({owner,repo,basehead:`${base}...${name}`});if(comparison.data.ahead_by===0)continue;const open=await github.paginate(github.rest.pulls.list,{owner,repo,state:'open',head:`${owner}:${name}`,base,per_page:100});let pr=open[0];if(pr){if(!(pr.body||'').includes(marker))continue;}else{const closed=await github.paginate(github.rest.pulls.list,{owner,repo,state:'closed',head:`${owner}:${name}`,base,per_page:100});if(closed.some((candidate)=>candidate.head?.sha===headSha))continue;const previous=state[name];const firstSeenAt=previous?.firstSeenAt||new Date(now).toISOString();next[name]={headSha,firstSeenAt};const firstSeenMs=Date.parse(firstSeenAt);if(!Number.isFinite(firstSeenMs)||now-firstSeenMs<=maxAgeMs)continue;const currentBranch=await github.rest.repos.getBranch({owner,repo,branch:name});if(currentBranch.data.commit.sha!==headSha)continue;const tip=await github.rest.repos.getCommit({owner,repo,ref:headSha});const ageMinutes=Math.floor((now-firstSeenMs)/60000);const title=(tip.data.commit.message||'').split('\n')[0].trim()||`auto: öppna PR för ${name}`;const body=[marker,'',`Branch \`${name}\` har saknat öppen PR med unika commits i ${ageMinutes} minuter.`,`Watchdog-tip: \`${headSha.slice(0,7)}\`.`, '', 'Watchdoggen bedömer inte om arbetet ska mergas. Auto-merge armeras direkt; required checks, relevanta review-trådar och merge queue måste fortfarande passera före squash merge.'].join('\n');try{pr=(await github.rest.pulls.create({owner,repo,head:name,base,title,body,draft:false,maintainer_can_modify:true})).data;}catch(error){if(error.status!==422)throw error;const raced=await github.rest.pulls.list({owner,repo,state:'open',head:`${owner}:${name}`,base,per_page:100});pr=raced.data[0];if(!pr||!(pr.body||'').includes(marker)){delete next[name];continue;}}delete next[name];}const node=await github.graphql(`query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){id autoMergeRequest{enabledAt}}}}`,{owner,repo,number:pr.number});if(node.repository.pullRequest.autoMergeRequest)continue;await github.graphql(`mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}){pullRequest{number}}}`,{id:node.repository.pullRequest.id});}finally{core.endGroup();}}
-            const canonical=Object.fromEntries(Object.entries(next).sort(([a],[b])=>a.localeCompare(b)));const serialized=JSON.stringify(canonical,null,2)+'\n';
-            if(serialized!==original){let stateSha;try{const existing=await github.rest.repos.getContent({owner,repo,path:statePath,ref:stateBranch});if(!Array.isArray(existing.data))stateSha=existing.data.sha;}catch(error){if(error.status!==404)throw error;try{await github.rest.git.getRef({owner,repo,ref:`heads/${stateBranch}`});}catch(refError){if(refError.status!==404)throw refError;const mainRef=await github.rest.git.getRef({owner,repo,ref:'heads/main'});await github.rest.git.createRef({owner,repo,ref:`refs/heads/${stateBranch}`,sha:mainRef.data.object.sha});}}await github.rest.repos.createOrUpdateFileContents({owner,repo,path:statePath,branch:stateBranch,message:'chore: update PR watchdog state',content:Buffer.from(serialized).toString('base64'),...(stateSha?{sha:stateSha}:{})});}
+            for(const branch of branches){
+              const name=branch.name;
+              if(name===base||name.startsWith('gh-readonly-queue/')||isPermanent(name))continue;
+              core.startGroup(name);
+              try{
+                const headSha=branch.commit.sha;
+                const comparison=await github.rest.repos.compareCommitsWithBasehead({owner,repo,basehead:`${base}...${name}`});
+                if(comparison.data.ahead_by===0)continue;
+                const open=await github.paginate(github.rest.pulls.list,{owner,repo,state:'open',head:`${owner}:${name}`,base,per_page:100});
+                let pr=open[0];
+                if(pr){
+                  if(!(pr.body||'').includes(marker))continue;
+                }else{
+                  const closed=await github.paginate(github.rest.pulls.list,{owner,repo,state:'closed',head:`${owner}:${name}`,base,per_page:100});
+                  if(closed.some((candidate)=>candidate.head?.sha===headSha))continue;
+                  const previous=state[name];
+                  const firstSeenAt=previous?.firstSeenAt||new Date(now).toISOString();
+                  next[name]={headSha,firstSeenAt};
+                  const firstSeenMs=Date.parse(firstSeenAt);
+                  if(!Number.isFinite(firstSeenMs)||now-firstSeenMs<=maxAgeMs)continue;
+                  const currentBranch=await github.rest.repos.getBranch({owner,repo,branch:name});
+                  if(currentBranch.data.commit.sha!==headSha)continue;
+                  const tip=await github.rest.repos.getCommit({owner,repo,ref:headSha});
+                  const ageMinutes=Math.floor((now-firstSeenMs)/60000);
+                  const title=(tip.data.commit.message||'').split('\n')[0].trim()||`auto: öppna PR för ${name}`;
+                  const body=[marker,'',`Branch \`${name}\` har saknat öppen PR med unika commits i ${ageMinutes} minuter.`,`Watchdog-tip: \`${headSha.slice(0,7)}\`.`, '', 'Watchdoggen bedömer inte om arbetet ska mergas. Auto-merge armeras direkt; required checks, relevanta review-trådar och merge queue måste fortfarande passera före squash merge.'].join('\n');
+                  try{
+                    pr=(await github.rest.pulls.create({owner,repo,head:name,base,title,body,draft:false,maintainer_can_modify:true})).data;
+                  }catch(error){
+                    if(error.status!==422)throw error;
+                    const raced=await github.rest.pulls.list({owner,repo,state:'open',head:`${owner}:${name}`,base,per_page:100});
+                    pr=raced.data[0];
+                    if(!pr||!(pr.body||'').includes(marker)){delete next[name];continue;}
+                  }
+                  delete next[name];
+                }
+                if(pr.head?.sha!==headSha){
+                  core.notice(`${name} ändrades från ${headSha.slice(0,7)} till ${(pr.head?.sha||'okänd').slice(0,7)}; auto-merge skjuts upp.`);
+                  continue;
+                }
+                const node=await github.graphql(`query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){id autoMergeRequest{enabledAt}}}}`,{owner,repo,number:pr.number});
+                if(node.repository.pullRequest.autoMergeRequest)continue;
+                await github.graphql(`mutation($id:ID!,$headSha:GitObjectID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$headSha}){pullRequest{number}}}`,{id:node.repository.pullRequest.id,headSha});
+              }catch(error){
+                const message=error instanceof Error?error.message:String(error);
+                core.error(`${name}: ${message}`);
+                branchErrors.push(`${name}: ${message}`);
+              }finally{
+                core.endGroup();
+              }
+            }
+            const canonical=Object.fromEntries(Object.entries(next).sort(([a],[b])=>a.localeCompare(b)));
+            const serialized=JSON.stringify(canonical,null,2)+'\n';
+            if(serialized!==original){
+              let stateSha;
+              try{
+                const existing=await github.rest.repos.getContent({owner,repo,path:statePath,ref:stateBranch});
+                if(!Array.isArray(existing.data))stateSha=existing.data.sha;
+              }catch(error){
+                if(error.status!==404)throw error;
+                try{await github.rest.git.getRef({owner,repo,ref:`heads/${stateBranch}`});}
+                catch(refError){
+                  if(refError.status!==404)throw refError;
+                  const mainRef=await github.rest.git.getRef({owner,repo,ref:'heads/main'});
+                  await github.rest.git.createRef({owner,repo,ref:`refs/heads/${stateBranch}`,sha:mainRef.data.object.sha});
+                }
+              }
+              await github.rest.repos.createOrUpdateFileContents({owner,repo,path:statePath,branch:stateBranch,message:'chore: update PR watchdog state',content:Buffer.from(serialized).toString('base64'),...(stateSha?{sha:stateSha}:{})});
+            }
+            if(branchErrors.length)throw new Error(`PR watchdog misslyckades för ${branchErrors.length} branch(er): ${branchErrors.join('; ')}`);
