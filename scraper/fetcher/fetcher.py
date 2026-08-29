@@ -207,8 +207,9 @@ def lease(n):
     return r.json().get("jobs", [])
 
 
-def post_result(job_id, payload):
-    r = requests.post(f"{ENGINE_URL}/jobs/{job_id}/result", json=payload, headers=_headers(), timeout=30)
+def post_result(job_id, attempt, payload):
+    body = {**payload, "attempt": attempt}
+    r = requests.post(f"{ENGINE_URL}/jobs/{job_id}/result", json=body, headers=_headers(), timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -311,23 +312,24 @@ async def render_list(context, job):
 async def process(context, sem, job):
     async with sem:
         try:
+            attempt = job["attempt"]
             jtype = job.get("type")
             if jtype == "detail":
                 result = await render_detail(context, job)
-                await asyncio.to_thread(post_result, job["id"], result)
+                await asyncio.to_thread(post_result, job["id"], attempt, result)
                 logger.info("jobb %s (detail): %s tecken source_text", job["id"], len(result["source_text"]))
             elif jtype == "list":
                 result = await render_list(context, job)
-                await asyncio.to_thread(post_result, job["id"], result)
+                await asyncio.to_thread(post_result, job["id"], attempt, result)
                 logger.info("jobb %s (list): %s produkter upptäckta", job["id"], len(result["items"]))
             else:
                 logger.info("hoppar över jobb %s (typ %s ej implementerad)", job["id"], jtype)
-                await asyncio.to_thread(post_result, job["id"], {"error": f"typ {jtype} ej implementerad i fetchern"})
+                await asyncio.to_thread(post_result, job["id"], attempt, {"error": f"typ {jtype} ej implementerad i fetchern"})
                 return
         except Exception as e:  # noqa: BLE001 — rapportera tillbaka, låt engine retry:a
             logger.warning("jobb %s misslyckades: %s", job["id"], e)
             try:
-                await asyncio.to_thread(post_result, job["id"], {"error": str(e)[:400]})
+                await asyncio.to_thread(post_result, job["id"], job["attempt"], {"error": str(e)[:400]})
             except Exception:
                 pass
         await asyncio.sleep(random.uniform(1, 3))  # artighet mot målsajten

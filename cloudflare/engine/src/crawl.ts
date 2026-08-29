@@ -209,7 +209,7 @@ async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, err
   await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'list', 'pending', ?3, ?4, ?4
-     WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased'))`,
+     WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased','processing'))`,
   ).bind(site.base_url, siteId, `${PLAYWRIGHT_FALLBACK_MARKER}${error}`.slice(0, 500), now).run();
 }
 
@@ -218,7 +218,7 @@ async function skapaDetailFallback(env: CrawlEnv, siteId: number, url: string, n
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'detail', 'pending', ?3, ?4, ?4
      WHERE NOT EXISTS (
-       SELECT 1 FROM render_jobs WHERE url=?1 AND type='detail' AND status IN ('pending','leased')
+       SELECT 1 FROM render_jobs WHERE url=?1 AND type='detail' AND status IN ('pending','leased','processing')
      )`,
   ).bind(url, siteId, `${PLAYWRIGHT_FALLBACK_MARKER}${error}`.slice(0, 500), now).run();
 }
