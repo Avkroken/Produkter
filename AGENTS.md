@@ -16,6 +16,13 @@ Repot innehåller tre delar av samma produkt: Python-appen i roten, Cloudflare W
 
 Undvik versionspinnar om de inte behövs. Nödvändiga pinnar ska dokumenteras med orsak och villkor för borttagning. Dependabot ska hantera normala dependency-uppdateringar via PR; auto-merge får användas enligt repots regler när alla krav är uppfyllda.
 
+## Review signal
+
+- Prioritera funktionell korrekthet, säkerhet, tillförlitlighet, kompatibilitet, tester och underhållbarhet.
+- Rapportera normalt inte rena stavnings-, grammatik-, interpunktions-, formulerings- eller stilfel i människoläsbar text som dokumentation, Markdown, README, kommentarer eller docstrings.
+- Rapportera sådana textfel när de materiellt ändrar teknisk betydelse, säkerhet, korrekthet, användarbeteende eller en bindande instruktion.
+- Rapportera fortsatt typos i körbar eller maskinbetydande text när de kan påverka beteende, till exempel identifierare, strängkonstanter, paths, konfigurationsnycklar, API-fält, kommandon, selectors och protokollvärden.
+
 ## GitHub-arbetsflöde
 
 Arbete sker via tillfälliga arbetsgrenar och pull requests till `main`. Arbetsgrenar får använda repo- eller agentvalda namn som `claude/*`, `codex/*`, `feature/*`, `fix/*` eller motsvarande; de återanvändbara `work/feature`, `work/fix` och `work/chore` får fortfarande användas men är inte obligatoriska.
