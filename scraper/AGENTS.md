@@ -45,5 +45,5 @@ supervisord.conf
 
 - `entrypoint.sh` sets restrictive permissions on the scraper credentials directory at every startup.
 - Do not bake scraper credentials into the container image.
-- Use `set -euo pipefail` at the top of shell scripts.
+- Bash-skript ska använda `set -euo pipefail`. POSIX `sh`-skript ska i stället använda de felhanteringsflaggor som faktiskt stöds av den deklarerade shellen; lägg inte till `pipefail` i ett `#!/bin/sh`-skript utan att först verifiera att runtime-shellen stöder det.
 - Unexpected exceptions in api/webui/scraper/alerts use the repository's existing `report_error_to_github()` mechanism best-effort when `GITHUB_ERROR_REPORT_TOKEN` is configured. Preserve the implementation's existing redaction behavior and verify that behavior before changing what data is reported.
