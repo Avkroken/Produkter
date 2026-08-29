@@ -43,8 +43,7 @@ supervisord.conf
 
 ## Conventions
 
-- `entrypoint.sh` sets restrictive permissions on the credentials directory at every startup.
-- All secrets (DB credentials, API keys) come from environment variables.
-- Never store credentials in the image or commit them.
+- `entrypoint.sh` sets restrictive permissions on the scraper credentials directory at every startup.
+- Do not bake scraper credentials into the container image.
 - Use `set -euo pipefail` at the top of shell scripts.
-- Unexpected exceptions in api/webui/scraper/alerts call `report_error_to_github()` best-effort when `GITHUB_ERROR_REPORT_TOKEN` is configured; secrets, emails and paths must be redacted. The shared module lives as one `github_report.py` at image root and the Dockerfile sets `PYTHONPATH=/app` so supervisord processes can import it.
+- Unexpected exceptions in api/webui/scraper/alerts use the repository's existing `report_error_to_github()` mechanism best-effort when `GITHUB_ERROR_REPORT_TOKEN` is configured. Preserve the implementation's existing redaction behavior and verify that behavior before changing what data is reported.
