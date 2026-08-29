@@ -9,6 +9,7 @@ export interface WebblasareEnv {
 
 type RenderJobb = {
   id: number;
+  attempt: number;
   url: string;
   type: "detail" | "list" | string;
   site_id: number | null;
@@ -212,9 +213,11 @@ async function hamtaJobb(env: WebblasareEnv, antal: number): Promise<RenderJobb[
   return (await leasaRenderJobb(env, antal)) as RenderJobb[];
 }
 
-async function rapporteraResultat(env: WebblasareEnv, jobbId: number, resultat: RenderResultat): Promise<void> {
-  const response = await rapporteraRenderResultat(jobbId, resultat, env);
+async function rapporteraResultat(env: WebblasareEnv, jobb: RenderJobb, resultat: RenderResultat): Promise<boolean> {
+  const response = await rapporteraRenderResultat(jobb.id, { ...resultat, attempt: jobb.attempt }, env);
+  if (response.status === 409) return false;
   if (!response.ok) throw new Error(`Resultatrapportering misslyckades: HTTP ${response.status}`);
+  return true;
 }
 
 async function accepteraKakor(page: any): Promise<void> {
@@ -369,13 +372,17 @@ export async function bearbetaRenderKo(env: WebblasareEnv, limit: number): Promi
 
       try {
         const resultat = await renderaJobb(context, env, aktuelltJobb, deadline);
-        await rapporteraResultat(env, aktuelltJobb.id, resultat);
+        const accepterat = await rapporteraResultat(env, aktuelltJobb, resultat);
+        if (!accepterat) {
+          console.info("browser_run_stale_lease", { jobbId: aktuelltJobb.id, attempt: aktuelltJobb.attempt });
+          continue;
+        }
         klara++;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("browser_run_jobb_fel", { jobbId: aktuelltJobb.id, siteId: aktuelltJobb.site_id, fel: message });
         try {
-          await rapporteraResultat(env, aktuelltJobb.id, { error: message.slice(0, 400) });
+          await rapporteraResultat(env, aktuelltJobb, { error: message.slice(0, 400) });
         } catch {
           // Leasen löper ut och kan återtas av core-handlern vid nästa cron.
         }

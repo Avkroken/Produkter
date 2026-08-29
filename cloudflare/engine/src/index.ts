@@ -53,6 +53,7 @@ export interface RenderKoEnv {
 }
 
 const REPO = "Avkroken/produkter";
+export const PLAYWRIGHT_FALLBACK_MARKER = "playwright-fallback:";
 
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
@@ -61,6 +62,7 @@ const MAX_LEASE = 50; // tak per lease-anrop
 
 export interface LeasedJob {
   id: number;
+  attempt: number;
   url: string;
   type: string;
   site_id: number | null;
@@ -92,8 +94,8 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
   const now = Date.now();
 
   // Atomiskt: markera de N äldsta leasbara jobben som leased och returnera dem.
-  // Leasbar = pending, eller leased vars lease gått ut (självläkande). List-jobb
-  // (crawl) får längre lease då de kan ta många minuter.
+  // Leasbar = pending, eller ett utgånget leased/processing-jobb (självläkande).
+  // List-jobb (crawl) får längre lease då de kan ta många minuter.
   const leased = await env.DB.prepare(
     `UPDATE render_jobs
        SET status = 'leased',
@@ -101,15 +103,15 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
            attempts = attempts + 1, updated_at = ?1
      WHERE id IN (
        SELECT id FROM render_jobs
-       WHERE status = 'pending' OR (status = 'leased' AND lease_until < ?2)
+       WHERE status = 'pending' OR (status IN ('leased','processing') AND lease_until < ?2)
        -- List-jobb (crawl) prioriteras: de är få och tidskänsliga (färska priser/
        -- upptäckt) och ska inte svältas bakom en lång detail-backlog.
        ORDER BY CASE type WHEN 'list' THEN 0 ELSE 1 END, id LIMIT ?3
      )
-     RETURNING id, url, type, site_id`,
+     RETURNING id, url, type, site_id, attempts`,
   )
     .bind(now, now, n, LIST_LEASE_MS, LEASE_MS)
-    .all<{ id: number; url: string; type: string; site_id: number | null }>();
+    .all<{ id: number; url: string; type: string; site_id: number | null; attempts: number }>();
 
   const rows = leased.results ?? [];
   if (rows.length === 0) return [];
@@ -141,6 +143,7 @@ export async function leasaRenderJobb(env: RenderKoEnv, antal = 10): Promise<Lea
     const site = r.site_id != null ? siteMap.get(r.site_id) : undefined;
     const base: LeasedJob = {
       id: r.id,
+      attempt: r.attempts,
       url: r.url,
       type: r.type,
       site_id: r.site_id,
@@ -169,6 +172,7 @@ async function leaseJobs(req: Request, env: Env): Promise<Response> {
 }
 
 export interface ResultBody {
+  attempt: number;
   error?: string;
   title?: string | null;
   price?: number | null;
@@ -178,24 +182,50 @@ export interface ResultBody {
   items?: { url: string; title?: string | null; price?: number | null; category?: string | null }[]; // list-jobb: strukturerat
 }
 
+type ClaimedRenderJob = {
+  id: number;
+  url: string;
+  type: string;
+  site_id: number | null;
+  attempts: number;
+  last_error: string | null;
+};
+
 // POST /jobs/:id/result
 export async function rapporteraRenderResultat(id: number, body: ResultBody, env: RenderKoEnv): Promise<Response> {
   const now = Date.now();
+  const attempt = Number(body.attempt);
+  if (!Number.isInteger(attempt) || attempt < 1) return json({ error: "ogiltig lease-generation" }, 400);
 
-  const job = await env.DB.prepare(
-    "SELECT id, url, type, site_id, attempts FROM render_jobs WHERE id = ?1",
+  // Claim resultatet atomiskt. Bara den worker som fortfarande äger exakt den
+  // aktiva leasingen får mutera produktdata eller jobbstatus. Claimen förnyar
+  // leasefönstret medan sidoeffekterna appliceras; utgångna eller re-leasade
+  // workers får 409 innan några produktmutationer sker.
+  const claimed = await env.DB.prepare(
+    `UPDATE render_jobs
+     SET status='processing',
+         lease_until=?1 + CASE type WHEN 'list' THEN ?4 ELSE ?5 END,
+         updated_at=?1
+     WHERE id=?2 AND status='leased' AND attempts=?3 AND lease_until >= ?1
+     RETURNING id, url, type, site_id, attempts, last_error`,
   )
-    .bind(id)
-    .first<{ id: number; url: string; type: string; site_id: number | null; attempts: number }>();
-  if (!job) return json({ error: "okänt jobb" }, 404);
+    .bind(now, id, attempt, LIST_LEASE_MS, LEASE_MS)
+    .all<ClaimedRenderJob>();
+  const job = claimed.results?.[0];
+  if (!job) return json({ error: "stale eller inaktiv lease" }, 409);
 
   // Misslyckande: försök igen tills MAX_ATTEMPTS, sedan parkera som 'error'.
   if (body.error) {
     const dead = job.attempts >= MAX_ATTEMPTS;
+    const error = job.last_error?.startsWith(PLAYWRIGHT_FALLBACK_MARKER)
+      ? `${PLAYWRIGHT_FALLBACK_MARKER}${body.error}`
+      : body.error;
     await env.DB.prepare(
-      "UPDATE render_jobs SET status = ?1, last_error = ?2, updated_at = ?3 WHERE id = ?4",
+      `UPDATE render_jobs
+       SET status=?1, lease_until=NULL, last_error=?2, updated_at=?3
+       WHERE id=?4 AND status='processing' AND attempts=?5`,
     )
-      .bind(dead ? "error" : "pending", body.error.slice(0, 500), now, id)
+      .bind(dead ? "error" : "pending", error.slice(0, 500), now, id, attempt)
       .run();
     return json({ ok: true, retried: !dead });
   }
@@ -268,8 +298,9 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
       env.DB.prepare(
         `INSERT INTO render_jobs (url, site_id, type, created_at, updated_at)
          SELECT ?1, ?2, 'detail', ?3, ?3
-         WHERE NOT EXISTS (
-           SELECT 1 FROM render_jobs WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased')
+         WHERE EXISTS (SELECT 1 FROM products WHERE url = ?1 AND source_text IS NULL)
+           AND NOT EXISTS (
+           SELECT 1 FROM render_jobs WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased','processing')
          )`,
       ).bind(link, job.site_id, now),
     );
@@ -313,15 +344,19 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
          SELECT ?1, ?2, 'detail', ?3, ?3
          WHERE EXISTS (SELECT 1 FROM products WHERE url = ?1 AND source_text IS NULL)
            AND NOT EXISTS (
-             SELECT 1 FROM render_jobs WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased')
+             SELECT 1 FROM render_jobs WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased','processing')
            )`,
       ).bind(item.url, job.site_id, now),
     );
   }
 
-  // Markera jobbet klart.
+  // Markera bara den claimade lease-generationen klar.
   stmts.push(
-    env.DB.prepare("UPDATE render_jobs SET status = 'done', updated_at = ?1 WHERE id = ?2").bind(now, id),
+    env.DB.prepare(
+      `UPDATE render_jobs
+       SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
+       WHERE id=?2 AND status='processing' AND attempts=?3`,
+    ).bind(now, id, attempt),
   );
 
   await env.DB.batch(stmts);
@@ -399,26 +434,49 @@ function buildChainFromEnv(env: Env): ProviderChain | null {
   return specs.length > 0 ? new ProviderChain(specs) : null;
 }
 
-// 1. Utgångna leases -> pending (självläkande om fetchern dog mitt i ett jobb).
+// 1. Utgångna leases/claims -> pending (självläkande om en worker dog mitt i ett jobb).
 async function reclaimLeases(env: Env, now: number): Promise<number> {
   const r = await env.DB.prepare(
-    "UPDATE render_jobs SET status='pending', updated_at=?1 WHERE status='leased' AND lease_until < ?1",
+    "UPDATE render_jobs SET status='pending', updated_at=?1 WHERE status IN ('leased','processing') AND lease_until < ?1",
   )
     .bind(now)
     .run();
   return r.meta.changes ?? 0;
 }
 
+// Avsluta väntande detail-jobb som inte längre behövs. Ett jobb kan ha skapats medan
+// source_text saknades och sedan bli redundant när /crawl eller ett annat
+// renderjobb fyller fältet. Utan den här städningen dränerar Browser Run gamla
+// jobb i onödan. Leasade/claimade jobb lämnas till sin worker och uttryckliga
+// Playwright-fallbackjobb bevaras eftersom de även kan reparera titel/pris.
+export async function completeRedundantDetailJobs(env: RenderKoEnv, now: number): Promise<number> {
+  const r = await env.DB.prepare(
+    `UPDATE render_jobs
+     SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
+     WHERE type='detail' AND status='pending'
+       AND COALESCE(last_error, '') NOT LIKE ?2
+       AND EXISTS (
+         SELECT 1 FROM products p
+         WHERE p.url=render_jobs.url AND p.source_text IS NOT NULL
+       )`,
+  )
+    .bind(now, `${PLAYWRIGHT_FALLBACK_MARKER}%`)
+    .run();
+  return r.meta.changes ?? 0;
+}
+
 // 2. Skapa detail-jobb för produkter som saknar source_text och inte redan har
-//    ett aktivt jobb. Cappat per tick.
+//    ett aktivt jobb. Kategori är metadata som Browser Run hämtar när den finns,
+//    men en saknad kategori får inte ensam orsaka evig omrendering. Cappat per
+//    tick.
 async function scheduleDetailJobs(env: Env, now: number, limit: number): Promise<number> {
   const r = await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, created_at, updated_at)
      SELECT p.url, p.site_id, 'detail', 'pending', ?1, ?1 FROM products p
-     WHERE (p.source_text IS NULL OR p.category IS NULL)
+     WHERE p.source_text IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM render_jobs rj
-         WHERE rj.url = p.url AND rj.type = 'detail' AND rj.status IN ('pending','leased')
+         WHERE rj.url = p.url AND rj.type = 'detail' AND rj.status IN ('pending','leased','processing')
        )
      LIMIT ?2`,
   )
@@ -437,7 +495,7 @@ async function scheduleDueCrawls(env: Env, now: number): Promise<number> {
        AND (last_crawled IS NULL OR last_crawled + scrape_interval * 1000 < ?1)
        AND NOT EXISTS (
          SELECT 1 FROM render_jobs rj
-         WHERE rj.site_id = sites.id AND rj.type = 'list' AND rj.status IN ('pending','leased')
+         WHERE rj.site_id = sites.id AND rj.type = 'list' AND rj.status IN ('pending','leased','processing')
        )`,
   )
     .bind(now)
@@ -728,6 +786,12 @@ export default {
       // direkt när en produkt faktiskt visas/väljs, oavsett var bakgrunds-
       // loopen befinner sig.
       const reclaimed = await reclaimLeases(env, now);
+      let redundant = 0;
+      try {
+        redundant = await completeRedundantDetailJobs(env, now);
+      } catch (err) {
+        console.warn("redundant_cleanup_fel", err instanceof Error ? err.message : String(err));
+      }
       const crawls = await scheduleDueCrawls(env, now);
       const scheduled = await scheduleDetailJobs(env, now, Number(env.SCHEDULE_LIMIT) || 200);
       const alerts = await checkPriceDrops(env, now);
@@ -736,7 +800,7 @@ export default {
       if (chain) {
         described = await describeMissing(env, chain, now, Number(env.DESCRIBE_LIMIT) || 10, Number(env.DESCRIBE_WORKERS) || 2);
       }
-      console.log(`cron: reclaimed=${reclaimed} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
+      console.log(`cron: reclaimed=${reclaimed} redundant=${redundant} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
     } catch (err) {
       console.error("cron misslyckades:", err);
       await reportErrorToGitHub(REPO, "Engine cron misslyckades", err, env);

@@ -1,3 +1,5 @@
+import { PLAYWRIGHT_FALLBACK_MARKER } from "./index";
+
 export interface CrawlEnv {
   DB: D1Database;
   CLOUDFLARE_ACCOUNT_ID?: string;
@@ -65,7 +67,6 @@ const STANDARD_SAJTER_PER_TICK = 2;
 const STANDARD_SIDTAK = 100;
 const ABSOLUT_SIDTAK = 1000;
 const MAX_RUN_AGE_MS = 30 * 60 * 1000;
-const FALLBACK_MARKOR = "playwright-fallback:";
 
 function apiBas(env: CrawlEnv): string {
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID ?? "")}/browser-rendering/crawl`;
@@ -208,8 +209,8 @@ async function skapaListFallback(env: CrawlEnv, siteId: number, now: number, err
   await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'list', 'pending', ?3, ?4, ?4
-     WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased'))`,
-  ).bind(site.base_url, siteId, `${FALLBACK_MARKOR}${error}`.slice(0, 500), now).run();
+     WHERE NOT EXISTS (SELECT 1 FROM render_jobs WHERE site_id=?2 AND type='list' AND status IN ('pending','leased','processing'))`,
+  ).bind(site.base_url, siteId, `${PLAYWRIGHT_FALLBACK_MARKER}${error}`.slice(0, 500), now).run();
 }
 
 async function skapaDetailFallback(env: CrawlEnv, siteId: number, url: string, now: number, error: string): Promise<void> {
@@ -217,9 +218,9 @@ async function skapaDetailFallback(env: CrawlEnv, siteId: number, url: string, n
     `INSERT INTO render_jobs (url, site_id, type, status, last_error, created_at, updated_at)
      SELECT ?1, ?2, 'detail', 'pending', ?3, ?4, ?4
      WHERE NOT EXISTS (
-       SELECT 1 FROM render_jobs WHERE url=?1 AND type='detail' AND status IN ('pending','leased')
+       SELECT 1 FROM render_jobs WHERE url=?1 AND type='detail' AND status IN ('pending','leased','processing')
      )`,
-  ).bind(url, siteId, `${FALLBACK_MARKOR}${error}`.slice(0, 500), now).run();
+  ).bind(url, siteId, `${PLAYWRIGHT_FALLBACK_MARKER}${error}`.slice(0, 500), now).run();
 }
 
 async function importeraRecord(
@@ -436,7 +437,7 @@ async function delegeraListJobb(env: CrawlEnv): Promise<number> {
      WHERE r.type='list' AND r.status='pending' AND s.enabled=1
        AND COALESCE(r.last_error, '') NOT LIKE ?1
      ORDER BY r.id LIMIT ?2`,
-  ).bind(`${FALLBACK_MARKOR}%`, antal).all<CrawlSite>();
+  ).bind(`${PLAYWRIGHT_FALLBACK_MARKER}%`, antal).all<CrawlSite>();
   let startade = 0;
   for (const site of pending.results ?? []) {
     const active = await env.DB.prepare("SELECT crawl_id FROM crawl_runs WHERE site_id=?1").bind(site.site_id).first<{ crawl_id: string }>();

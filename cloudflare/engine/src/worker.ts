@@ -1,4 +1,4 @@
-import core from "./index";
+import core, { completeRedundantDetailJobs } from "./index";
 import { bearbetaCrawlKo, type CrawlEnv } from "./crawl";
 import { bearbetaRenderKo, type WebblasareEnv } from "./webblasare";
 
@@ -31,6 +31,15 @@ export default {
     } catch (err) {
       // Ett fel i primärvägen får inte hindra Playwright-fallbacken.
       console.error("crawl_cron_fel", err);
+    }
+
+    // /crawl kan ha fyllt source_text för jobb som core-handlern nyss hann
+    // schemalägga. Städa dem innan Browser Run leasar nästa batch.
+    try {
+      const redundant = await completeRedundantDetailJobs(env, Date.now());
+      if (redundant > 0) console.log("browser_run_redundanta_stadade", { redundant });
+    } catch (err) {
+      console.error("browser_run_stadning_fel", err);
     }
 
     const limit = Math.min(Math.max(1, Number(env.BROWSER_RENDER_LIMIT) || 3), 10);
