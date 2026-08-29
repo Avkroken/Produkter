@@ -53,6 +53,7 @@ export interface RenderKoEnv {
 }
 
 const REPO = "Avkroken/produkter";
+export const PLAYWRIGHT_FALLBACK_MARKER = "playwright-fallback:";
 
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
@@ -183,19 +184,22 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
   const now = Date.now();
 
   const job = await env.DB.prepare(
-    "SELECT id, url, type, site_id, attempts FROM render_jobs WHERE id = ?1",
+    "SELECT id, url, type, site_id, attempts, last_error FROM render_jobs WHERE id = ?1",
   )
     .bind(id)
-    .first<{ id: number; url: string; type: string; site_id: number | null; attempts: number }>();
+    .first<{ id: number; url: string; type: string; site_id: number | null; attempts: number; last_error: string | null }>();
   if (!job) return json({ error: "okänt jobb" }, 404);
 
   // Misslyckande: försök igen tills MAX_ATTEMPTS, sedan parkera som 'error'.
   if (body.error) {
     const dead = job.attempts >= MAX_ATTEMPTS;
+    const error = job.last_error?.startsWith(PLAYWRIGHT_FALLBACK_MARKER)
+      ? `${PLAYWRIGHT_FALLBACK_MARKER}${body.error}`
+      : body.error;
     await env.DB.prepare(
       "UPDATE render_jobs SET status = ?1, last_error = ?2, updated_at = ?3 WHERE id = ?4",
     )
-      .bind(dead ? "error" : "pending", body.error.slice(0, 500), now, id)
+      .bind(dead ? "error" : "pending", error.slice(0, 500), now, id)
       .run();
     return json({ ok: true, retried: !dead });
   }
@@ -415,18 +419,18 @@ async function reclaimLeases(env: Env, now: number): Promise<number> {
 // renderjobb fyller fältet. Utan den här städningen dränerar Browser Run gamla
 // jobb i onödan. Leasade jobb lämnas till sin worker och uttryckliga
 // Playwright-fallbackjobb bevaras eftersom de även kan reparera titel/pris.
-async function completeRedundantDetailJobs(env: Env, now: number): Promise<number> {
+export async function completeRedundantDetailJobs(env: RenderKoEnv, now: number): Promise<number> {
   const r = await env.DB.prepare(
     `UPDATE render_jobs
      SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
      WHERE type='detail' AND status='pending'
-       AND COALESCE(last_error, '') NOT LIKE 'playwright-fallback:%'
+       AND COALESCE(last_error, '') NOT LIKE ?2
        AND EXISTS (
          SELECT 1 FROM products p
          WHERE p.url=render_jobs.url AND p.source_text IS NOT NULL
        )`,
   )
-    .bind(now)
+    .bind(now, `${PLAYWRIGHT_FALLBACK_MARKER}%`)
     .run();
   return r.meta.changes ?? 0;
 }
