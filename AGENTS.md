@@ -109,7 +109,9 @@ Föredra befintliga GitHub/Copilot-native mekanismer framför nya workflows, bot
 
 ## Definition of done
 
-En agentuppgift är inte klar förrän implementationen är färdig och avgränsad till uppgiften, relevanta tester och lokala checks har körts eller en konkret begränsning har dokumenterats, den slutliga diffen har självgranskats, legitima review-findings har åtgärdats, PR-status har verifierats mot aktuell HEAD, PR:n antingen har mergats därför att alla gates är uppfyllda eller har auto-merge aktiverat därför att endast väntande obligatoriska gates återstår, och ingen repositoryregel har kringgåtts.
+För en uppgift som skapar eller uppdaterar en pull request är arbetet inte klart förrän implementationen är färdig och avgränsad till uppgiften, relevanta tester och lokala checks har körts eller en konkret begränsning har dokumenterats, den slutliga diffen har självgranskats, legitima review-findings har åtgärdats, PR-status har verifierats mot aktuell HEAD, PR:n antingen har mergats därför att alla gates är uppfyllda eller har auto-merge aktiverat därför att endast väntande obligatoriska gates återstår, och ingen repositoryregel har kringgåtts.
+
+För read-only reviews, investigations, frågor eller live-konfigurationsuppgifter som inte skapar eller uppdaterar en PR gäller inte PR-/mergekraven ovan. En sådan uppgift är klar när den efterfrågade undersökningen eller live-ändringen är genomförd och relevant resulterande status har verifierats.
 
 <!-- AVKROKEN-COMMON:END -->
 
@@ -137,7 +139,7 @@ Arbete sker via tillfälliga arbetsgrenar och pull requests till `main`. Arbetsg
 
 Kör relevanta Python-tester, Node-typechecks och andra komponentkontroller innan push.
 
-`.github/workflows/pr-watchdog.yml` bevakar alla lokala branches utom `main`, merge-köns `gh-readonly-queue/*`, den interna permanenta state-branchen `automation/pr-watchdog-state` och uttryckliga permanenta undantag. När en branch med unika commits först observeras utan öppen PR sparas `firstSeen` beständigt på state-branchen. Perioden fortsätter även om HEAD ändras och nollställs först när en öppen PR finns eller branchen inte längre har unika commits mot `main`. Efter mer än 60 minuter skapas en ready PR till `main`. Exakt samma HEAD öppnas inte på nytt om den redan har behandlats i en stängd PR. Watchdoggen avgör inte om arbetet är önskvärt eller mergebart; CI, review och merge-gates gör det.
+`.github/workflows/pr-watchdog.yml` bevakar alla lokala branches utom `main`, merge-köns `gh-readonly-queue/*`, den interna permanenta state-branchen `automation/pr-watchdog-state` och uttryckliga permanenta undantag. När en branch med unika commits först observeras utan öppen PR sparas `firstSeen` beständigt på state-branchen. Perioden fortsätter även om HEAD ändras och nollställs först när en öppen PR finns eller branchen inte längre har unika commits mot `main`. Efter mer än 60 minuter skapas en ready PR till `main` och workflowen aktiverar auto-merge enligt repositoryts tillåtna metod; required CI, review och andra live gates fortsätter att blockera faktisk merge tills de är uppfyllda. Exakt samma HEAD öppnas inte på nytt om den redan har behandlats i en stängd PR. Watchdoggen avgör inte om arbetet är önskvärt eller mergebart; CI, review och merge-gates gör det.
 
 `.github/workflows/sync-pool.yml` får fortsätta synka de uttryckliga återanvändbara `work/*`-slotsen men får aldrig resetta godtyckliga agent- eller arbetsgrenar.
 
