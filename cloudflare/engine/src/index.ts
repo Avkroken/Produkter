@@ -268,7 +268,8 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
       env.DB.prepare(
         `INSERT INTO render_jobs (url, site_id, type, created_at, updated_at)
          SELECT ?1, ?2, 'detail', ?3, ?3
-         WHERE NOT EXISTS (
+         WHERE EXISTS (SELECT 1 FROM products WHERE url = ?1 AND source_text IS NULL)
+           AND NOT EXISTS (
            SELECT 1 FROM render_jobs WHERE url = ?1 AND type = 'detail' AND status IN ('pending','leased')
          )`,
       ).bind(link, job.site_id, now),
@@ -409,16 +410,17 @@ async function reclaimLeases(env: Env, now: number): Promise<number> {
   return r.meta.changes ?? 0;
 }
 
-// Avsluta detail-jobb som inte längre behövs. Ett jobb kan ha skapats medan
+// Avsluta väntande detail-jobb som inte längre behövs. Ett jobb kan ha skapats medan
 // source_text saknades och sedan bli redundant när /crawl eller ett annat
 // renderjobb fyller fältet. Utan den här städningen dränerar Browser Run gamla
-// jobb i onödan och en stor backlog skymmer de få produkter som verkligen
-// behöver renderas.
+// jobb i onödan. Leasade jobb lämnas till sin worker och uttryckliga
+// Playwright-fallbackjobb bevaras eftersom de även kan reparera titel/pris.
 async function completeRedundantDetailJobs(env: Env, now: number): Promise<number> {
   const r = await env.DB.prepare(
     `UPDATE render_jobs
      SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
-     WHERE type='detail' AND status IN ('pending','leased')
+     WHERE type='detail' AND status='pending'
+       AND COALESCE(last_error, '') NOT LIKE 'playwright-fallback:%'
        AND EXISTS (
          SELECT 1 FROM products p
          WHERE p.url=render_jobs.url AND p.source_text IS NOT NULL
