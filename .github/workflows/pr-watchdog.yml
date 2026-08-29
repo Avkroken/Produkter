@@ -70,7 +70,7 @@ jobs:
                   const tip=await github.rest.repos.getCommit({owner,repo,ref:headSha});
                   const ageMinutes=Math.floor((now-firstSeenMs)/60000);
                   const title=(tip.data.commit.message||'').split('\n')[0].trim()||`auto: öppna PR för ${name}`;
-                  const body=[marker,'',`Branch \`${name}\` har saknat öppen PR med unika commits i ${ageMinutes} minuter.`,`Watchdog-tip: \`${headSha.slice(0,7)}\`.`, '', 'Watchdoggen bedömer inte om arbetet ska mergas. Auto-merge armeras direkt; required checks, relevanta review-trådar och merge queue måste fortfarande passera före squash merge.'].join('\n');
+                  const body=[marker,'',`Branch \`${name}\` har saknat öppen PR med unika commits i ${ageMinutes} minuter.`,`Watchdog-tip: \`${headSha.slice(0,7)}\`.`, '', 'Watchdoggen bedömer inte om arbetet ska mergas. Auto-merge armeras direkt; required checks, relevanta review-trådar och övriga live-regler måste fortfarande vara uppfyllda före squash merge.'].join('\n');
                   try{
                     pr=(await github.rest.pulls.create({owner,repo,head:name,base,title,body,draft:false,maintainer_can_modify:true})).data;
                   }catch(error){
