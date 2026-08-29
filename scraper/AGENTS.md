@@ -1,10 +1,8 @@
-# scraper/ — AI Agent Guide
+# Scraper-specifika agentinstruktioner
 
-The part of produkter that produces the product data. Repo-wide rules
-live in the root `CLAUDE.md`; this document covers `scraper/` and every path
-below is relative to it.
+Repositoryövergripande policy finns i `/AGENTS.md` och gäller även här. Den här filen lägger endast till instruktioner för `scraper/`; alla paths nedan är relativa till den katalogen.
 
-A web scraper with a REST API and web UI. Scrapes product data and exposes it for consumption by the describer (the root Python app and `cloudflare/`).
+En web scraper med REST API och web UI. Scrapar produktdata och exponerar den för describer-kedjan i root-appen och `cloudflare/`.
 
 ## Tech Stack
 
@@ -34,7 +32,7 @@ docker compose up -d
 
 ## Project Structure
 
-```
+```text
 scraper/        # Scraper modules
 api/            # FastAPI REST API
 webui/          # Flask web UI
@@ -45,14 +43,7 @@ supervisord.conf
 
 ## Conventions
 
-- `entrypoint.sh` sets restrictive permissions on the credentials directory at every startup
-- All secrets (DB credentials, API keys) via environment variables
-- Never store credentials in the image or commit them
-- `set -euo pipefail` at the top of all shell scripts
-- Unexpected exceptions in api/webui/scraper/alerts call
-  `report_error_to_github()` — best-effort, opens a `@claude`-tagged GitHub
-  issue with secrets/emails/paths redacted if `GITHUB_ERROR_REPORT_TOKEN` is
-  set, no-ops otherwise. It lives in a single `github_report.py` at the image
-  root; supervisord starts each process from a different directory, so the
-  Dockerfile sets `PYTHONPATH=/app` to make the shared module importable
-  rather than keeping a copy beside every entrypoint
+- `entrypoint.sh` sets restrictive permissions on the scraper credentials directory at every startup.
+- Do not bake scraper credentials into the container image.
+- Bevara befintliga shell-konventioner om uppgiften inte kräver annat. Befintliga Bash-entrypoints använder `set -e`; skärp inte globala shell-flaggor enbart av stilskäl. Om felhantering ändras ska flaggorna stödjas av den deklarerade runtime-shellen; använd inte `pipefail` i `#!/bin/sh` utan verifierat stöd.
+- Unexpected exceptions in api/webui/scraper/alerts use the repository's existing `report_error_to_github()` mechanism best-effort when `GITHUB_ERROR_REPORT_TOKEN` is configured. Preserve the implementation's existing redaction behavior and verify that behavior before changing what data is reported.
