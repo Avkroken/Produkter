@@ -409,13 +409,35 @@ async function reclaimLeases(env: Env, now: number): Promise<number> {
   return r.meta.changes ?? 0;
 }
 
+// Avsluta detail-jobb som inte längre behövs. Ett jobb kan ha skapats medan
+// source_text saknades och sedan bli redundant när /crawl eller ett annat
+// renderjobb fyller fältet. Utan den här städningen dränerar Browser Run gamla
+// jobb i onödan och en stor backlog skymmer de få produkter som verkligen
+// behöver renderas.
+async function completeRedundantDetailJobs(env: Env, now: number): Promise<number> {
+  const r = await env.DB.prepare(
+    `UPDATE render_jobs
+     SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
+     WHERE type='detail' AND status IN ('pending','leased')
+       AND EXISTS (
+         SELECT 1 FROM products p
+         WHERE p.url=render_jobs.url AND p.source_text IS NOT NULL
+       )`,
+  )
+    .bind(now)
+    .run();
+  return r.meta.changes ?? 0;
+}
+
 // 2. Skapa detail-jobb för produkter som saknar source_text och inte redan har
-//    ett aktivt jobb. Cappat per tick.
+//    ett aktivt jobb. Kategori är metadata som Browser Run hämtar när den finns,
+//    men en saknad kategori får inte ensam orsaka evig omrendering. Cappat per
+//    tick.
 async function scheduleDetailJobs(env: Env, now: number, limit: number): Promise<number> {
   const r = await env.DB.prepare(
     `INSERT INTO render_jobs (url, site_id, type, status, created_at, updated_at)
      SELECT p.url, p.site_id, 'detail', 'pending', ?1, ?1 FROM products p
-     WHERE (p.source_text IS NULL OR p.category IS NULL)
+     WHERE p.source_text IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM render_jobs rj
          WHERE rj.url = p.url AND rj.type = 'detail' AND rj.status IN ('pending','leased')
@@ -728,6 +750,7 @@ export default {
       // direkt när en produkt faktiskt visas/väljs, oavsett var bakgrunds-
       // loopen befinner sig.
       const reclaimed = await reclaimLeases(env, now);
+      const redundant = await completeRedundantDetailJobs(env, now);
       const crawls = await scheduleDueCrawls(env, now);
       const scheduled = await scheduleDetailJobs(env, now, Number(env.SCHEDULE_LIMIT) || 200);
       const alerts = await checkPriceDrops(env, now);
@@ -736,7 +759,7 @@ export default {
       if (chain) {
         described = await describeMissing(env, chain, now, Number(env.DESCRIBE_LIMIT) || 10, Number(env.DESCRIBE_WORKERS) || 2);
       }
-      console.log(`cron: reclaimed=${reclaimed} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
+      console.log(`cron: reclaimed=${reclaimed} redundant=${redundant} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
     } catch (err) {
       console.error("cron misslyckades:", err);
       await reportErrorToGitHub(REPO, "Engine cron misslyckades", err, env);
