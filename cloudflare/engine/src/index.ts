@@ -203,11 +203,13 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
   // ett jobb som cron redan har städat eller en ny worker har tagit över.
   const claimed = await env.DB.prepare(
     `UPDATE render_jobs
-     SET status='processing', updated_at=?1
+     SET status='processing',
+         lease_until=?1 + CASE type WHEN 'list' THEN ?4 ELSE ?5 END,
+         updated_at=?1
      WHERE id=?2 AND status='leased' AND attempts=?3
      RETURNING id, url, type, site_id, attempts, last_error`,
   )
-    .bind(now, id, attempt)
+    .bind(now, id, attempt, LIST_LEASE_MS, LEASE_MS)
     .all<ClaimedRenderJob>();
   const job = claimed.results?.[0];
   if (!job) return json({ error: "stale eller inaktiv lease" }, 409);
