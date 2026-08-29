@@ -33,13 +33,19 @@ from github_report import report_error_to_github
 app = Flask(__name__)
 
 
+def _safe_log_value(value):
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(exc):
     from werkzeug.exceptions import HTTPException
 
     if isinstance(exc, HTTPException):
         return exc
-    logger.exception("Unhandled error handling %s %s", request.method, request.path)
+    method = _safe_log_value(request.method)
+    path = _safe_log_value(request.path)
+    logger.exception("Unhandled error handling %s %s", method, path)
     report_error_to_github(
         "Avkroken/produkter",
         f"Oväntat fel: {request.method} {request.path}",
