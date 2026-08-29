@@ -198,15 +198,15 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
   if (!Number.isInteger(attempt) || attempt < 1) return json({ error: "ogiltig lease-generation" }, 400);
 
   // Claim resultatet atomiskt. Bara den worker som fortfarande äger exakt den
-  // aktuella leasingen får mutera produktdata eller jobbstatus. Ett sent svar
-  // från en reclaimad/re-leasad worker får därmed 409 och kan inte återuppliva
-  // ett jobb som cron redan har städat eller en ny worker har tagit över.
+  // aktiva leasingen får mutera produktdata eller jobbstatus. Claimen förnyar
+  // leasefönstret medan sidoeffekterna appliceras; utgångna eller re-leasade
+  // workers får 409 innan några produktmutationer sker.
   const claimed = await env.DB.prepare(
     `UPDATE render_jobs
      SET status='processing',
          lease_until=?1 + CASE type WHEN 'list' THEN ?4 ELSE ?5 END,
          updated_at=?1
-     WHERE id=?2 AND status='leased' AND attempts=?3
+     WHERE id=?2 AND status='leased' AND attempts=?3 AND lease_until >= ?1
      RETURNING id, url, type, site_id, attempts, last_error`,
   )
     .bind(now, id, attempt, LIST_LEASE_MS, LEASE_MS)
