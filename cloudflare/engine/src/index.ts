@@ -29,6 +29,7 @@ import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-r
 
 interface Env extends GitHubReportEnv {
   DB: D1Database;
+  AI: Ai;
   INGEST_API_KEY: string;
   // AI-leverantörer (Wrangler secrets) — samma som sync-Workern. Operatörens
   // egna nycklar, inte kontobaserat.
@@ -414,8 +415,18 @@ async function ingest(req: Request, env: Env): Promise<Response> {
 // ── Cron-handlerns hjälpfunktioner ──────────────────────────────────────────
 
 // Bygger leverantörskedjan ur miljövariabler — samma som sync-Workern.
-function buildChainFromEnv(env: Env): ProviderChain | null {
+async function buildChainFromEnv(env: Env): Promise<ProviderChain | null> {
   const specs: ProviderSpec[] = [];
+  const gateway = env.AI.gateway("default");
+  const gatewayHeaders = {
+    "cf-aig-collect-log-payload": "false",
+    "cf-aig-skip-cache": "true",
+  };
+  const gatewayProviders: Partial<Record<ProviderName, string>> = {
+    anthropic: "anthropic",
+    openai: "openai",
+    gemini: "google-ai-studio",
+  };
   const keys: Record<ProviderName, string | undefined> = {
     anthropic: env.ANTHROPIC_API_KEY,
     openai: env.OPENAI_API_KEY,
@@ -433,7 +444,11 @@ function buildChainFromEnv(env: Env): ProviderChain | null {
       });
       continue;
     }
-    specs.push({ provider: name, creds: { apiKey }, model: DEFAULT_MODELS[name][0] });
+    const gatewayProvider = gatewayProviders[name];
+    const route = gatewayProvider
+      ? { baseUrl: await gateway.getUrl(gatewayProvider), headers: gatewayHeaders }
+      : undefined;
+    specs.push({ provider: name, creds: { apiKey }, model: DEFAULT_MODELS[name][0], route });
   }
   return specs.length > 0 ? new ProviderChain(specs) : null;
 }
@@ -632,7 +647,7 @@ async function describeProduct(req: Request, env: Env): Promise<Response> {
     return json({ beskrivning: p.description, varför: p.description_why ?? "", cached: true });
   }
 
-  const chain = buildChainFromEnv(env);
+  const chain = await buildChainFromEnv(env);
   if (!chain) return json({ error: "ingen AI-leverantör konfigurerad" }, 503);
 
   let parts: { beskrivning: string; varför: string };
@@ -800,7 +815,7 @@ export default {
       const scheduled = await scheduleDetailJobs(env, now, Number(env.SCHEDULE_LIMIT) || 200);
       const alerts = await checkPriceDrops(env, now);
       let described = 0;
-      const chain = buildChainFromEnv(env);
+      const chain = await buildChainFromEnv(env);
       if (chain) {
         described = await describeMissing(env, chain, now, Number(env.DESCRIBE_LIMIT) || 10, Number(env.DESCRIBE_WORKERS) || 2);
       }

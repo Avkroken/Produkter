@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "produkter-motor",
+  "ai": { "binding": "AI" },
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   // @cloudflare/playwright requires nodejs_compat and a compatibility date >= 2025-09-15.

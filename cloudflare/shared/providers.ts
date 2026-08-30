@@ -53,6 +53,11 @@ export interface ProviderCreds {
   deployment?: string; // azure_openai
 }
 
+export interface ProviderRoute {
+  baseUrl: string;
+  headers?: Record<string, string>;
+}
+
 // Returnerar rå textsvar från modellen. Kastar RateLimitExceeded så
 // ProviderChain kan byta till nästa leverantör i kedjan.
 export async function generate(
@@ -61,28 +66,41 @@ export async function generate(
   systemPrompt: string,
   userMessage: string,
   model: string,
+  route?: ProviderRoute,
 ): Promise<string> {
   switch (providerName) {
     case "anthropic":
-      return generateAnthropic(creds, systemPrompt, userMessage, model);
+      return generateAnthropic(creds, systemPrompt, userMessage, model, route);
     case "openai":
-      return generateOpenAI(creds, systemPrompt, userMessage, model, "https://api.openai.com/v1/chat/completions", {
-        Authorization: `Bearer ${creds.apiKey}`,
-      });
+      return generateOpenAI(
+        creds,
+        systemPrompt,
+        userMessage,
+        model,
+        route ? `${route.baseUrl}/chat/completions` : "https://api.openai.com/v1/chat/completions",
+        { Authorization: `Bearer ${creds.apiKey}`, ...route?.headers },
+      );
     case "gemini":
-      return generateGemini(creds, systemPrompt, userMessage, model);
+      return generateGemini(creds, systemPrompt, userMessage, model, route);
     case "azure_openai":
       return generateAzure(creds, systemPrompt, userMessage, model);
   }
 }
 
-async function generateAnthropic(creds: ProviderCreds, systemPrompt: string, userMessage: string, model: string): Promise<string> {
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+async function generateAnthropic(
+  creds: ProviderCreds,
+  systemPrompt: string,
+  userMessage: string,
+  model: string,
+  route?: ProviderRoute,
+): Promise<string> {
+  const resp = await fetch(route ? `${route.baseUrl}/v1/messages` : "https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": creds.apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
       "content-type": "application/json",
+      ...route?.headers,
     },
     body: JSON.stringify({
       model,
@@ -120,11 +138,18 @@ async function generateOpenAI(
   return data.choices[0]?.message.content ?? "";
 }
 
-async function generateGemini(creds: ProviderCreds, systemPrompt: string, userMessage: string, model: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${creds.apiKey}`;
+async function generateGemini(
+  creds: ProviderCreds,
+  systemPrompt: string,
+  userMessage: string,
+  model: string,
+  route?: ProviderRoute,
+): Promise<string> {
+  const baseUrl = route?.baseUrl ?? "https://generativelanguage.googleapis.com";
+  const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${creds.apiKey}`;
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...route?.headers },
     body: JSON.stringify({
       contents: [{ parts: [{ text: userMessage }] }],
       systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -164,6 +189,7 @@ export interface ProviderSpec {
   provider: ProviderName;
   creds: ProviderCreds;
   model: string;
+  route?: ProviderRoute;
 }
 
 const JSON_BLOCK = /\{[\s\S]*\}/;
@@ -215,7 +241,7 @@ export class ProviderChain {
       if (idx === null) throw new AllProvidersExhausted(this.nextResumeAt());
       const spec = this.specs[idx];
       try {
-        return await generate(spec.provider, spec.creds, systemPrompt, userMessage, spec.model);
+        return await generate(spec.provider, spec.creds, systemPrompt, userMessage, spec.model, spec.route);
       } catch (err) {
         if (err instanceof RateLimitExceeded) {
           this.exhaustedUntil.set(idx, nextReset(err.retryAfterSeconds));
