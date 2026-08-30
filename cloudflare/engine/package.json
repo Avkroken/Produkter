@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
+    "deploy:production": "node ../scripts/deploy-production.mjs",
     "typecheck": "tsc --noEmit",
     "secret:set-ingest-key": "wrangler secret put INGEST_API_KEY"
   },
