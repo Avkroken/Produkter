@@ -100,6 +100,11 @@ jobs:
         run: npm ci
       - name: Typkontroll
         run: npx tsc --noEmit
+      - name: Validera Worker bundle och Wrangler-konfiguration
+        run: npx wrangler deploy --dry-run --outdir .wrangler/dry-run
+      - name: Testa production deploy-garden
+        if: ${{ matrix.worker == 'app' }}
+        run: node ../scripts/deploy-production.test.mjs
 
   node:
     name: node

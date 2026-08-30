@@ -49,13 +49,19 @@ Om auto-merge inte sker trots gröna required checks och lösta trådar ska den 
 
 Om full lokal validering inte är möjlig ska begränsningen beskrivas konkret i PR:n.
 
-## GitHub Actions
+## GitHub Actions och Cloudflare
 
 - `.github/workflows/ci.yml` producerar de required checkarna `python` och `node`. Impact-routingen får hoppa över dyra komponentjobb men de två wrapper-checkarna ska alltid ge ett slutligt resultat.
+- Node-CI ska typkontrollera varje Worker, köra Wrangler dry-run och testa den gemensamma production-deploy-garden.
 - `.github/workflows/docker.yml`, `dependency-review.yml` och `osv-scanner.yml` ger kompletterande build- och säkerhetskontroller men är inte required contexts i nuvarande ruleset.
 - `.github/workflows/pr-watchdog.yml` kan öppna en PR för en lokal branch med unika commits som saknat PR för länge och armerar squash auto-merge direkt. Dess state ligger på `automation/pr-watchdog-state`.
 - `.github/workflows/auto-fix-review.yml` får begära en Codex-fix för feedback från uttryckligen betrodda review-botar. Den får inte lösa review-tråden åt implementationen.
-- Cloudflare Workers deployas från `main` via Workers Builds, inte via ett GitHub Actions deploy-workflow.
+- Cloudflare Workers Builds äger normal produktionsdeploy från `main`; GitHub Actions ska inte deploya produktion.
+- Varje Worker-root (`cloudflare/app`, `cloudflare/engine`, `cloudflare/processor`) ska använda `npm run deploy:production` som Workers Builds deploy command.
+- `cloudflare/scripts/deploy-production.mjs` failar stängt på fel Workers Builds-branch eller ogiltig build-SHA, använder `wrangler deploy --strict` och märker deploymenten med Git-SHA.
+- Efter deploy verifieras bara verkliga publika ytor: appens huvuddomän och motorns `/health`. Processorn är en privat Queue-konsument och ska inte få en konstgjord publik health-route.
+- `wrangler.jsonc` är source of truth för Worker-bindings, routes, cron och övrig versionshanterad Worker-konfiguration. Build watch paths ska även omfatta relevant `cloudflare/shared/**` och `cloudflare/scripts/**`.
+- D1 `produkter` delas av flera Workers. Repositoryt saknar för närvarande en Wrangler `migrations/`-kedja och de separata Workers Builds får därför inte var för sig applicera `cloudflare/infra/*.sql` automatiskt. Inför först en entydig migrationsägare och idempotent migrationskedja innan schemaändringar läggs i production deploy.
 
 GitHub Actions ska pinnas till commit-SHA när praktiskt möjligt. Nödvändiga versionspinnar ska ha en tydlig anledning och normala dependency-uppdateringar ska hanteras via PR.
 

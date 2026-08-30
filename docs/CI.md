@@ -25,7 +25,7 @@ Routing är konservativ:
 - dokumentation/processfiler behöver normalt inte språkbyggen
 - okänd påverkan väljer mer verifiering framför risk för falskt negativt
 
-Node-workers använder respektive `package-lock.json` med `npm ci` och npm-cache.
+Node-workers använder respektive `package-lock.json` med `npm ci` och npm-cache. För varje Worker kör CI typkontroll och Wrangler dry-run. Den gemensamma production-deploy-garden under `cloudflare/scripts/` kör dessutom Node-tester i app-matrisbenet.
 
 ## Docker och säkerhet
 
@@ -41,15 +41,25 @@ Docker/Trivy, Dependency Review och OSV är kompletterande verifiering men är i
 
 ## Deploy
 
-Cloudflare Workers deployas av Workers Builds från `main`, inte av GitHub Actions. Varje Worker använder sin egen root directory:
+Cloudflare Workers Builds äger normal produktionsdeploy från `main`; GitHub Actions deployar inte produktion. Varje Worker använder sin egen root directory och samma versionshanterade production-command:
 
-| Worker | Root directory |
-| --- | --- |
-| `produkter` | `cloudflare/app` |
-| `produkter-motor` | `cloudflare/engine` |
-| `produkter-bearbetare` | `cloudflare/processor` |
+| Worker | Root directory | Deploy command |
+| --- | --- | --- |
+| `produkter` | `cloudflare/app` | `npm run deploy:production` |
+| `produkter-motor` | `cloudflare/engine` | `npm run deploy:production` |
+| `produkter-bearbetare` | `cloudflare/processor` | `npm run deploy:production` |
 
-`wrangler.jsonc` i respektive katalog är sanningskällan för Worker-namn, bindings, routes och cron-triggers. Delad kod under `cloudflare/shared/` måste ingå i relevanta build watch paths.
+`deploy:production` kör `cloudflare/scripts/deploy-production.mjs`. I Workers Builds failar skriptet stängt om branchen inte är `main` eller om `WORKERS_CI_COMMIT_SHA` saknas/är ogiltig. Wrangler deployas med `--strict` och buildens Git-SHA sparas i deployment-meddelandet.
+
+Efter deploy verifieras bara ytor som faktiskt finns:
+
+- `produkter`: huvuddomänen måste svara HTTP 200.
+- `produkter-motor`: `https://motor.denied.se/health` måste svara HTTP 200 med `{ "ok": true }`.
+- `produkter-bearbetare`: ingen HTTP-check skapas eftersom Workern är en privat Queue-konsument utan publik route.
+
+`wrangler.jsonc` i respektive katalog är sanningskällan för Worker-namn, bindings, routes och cron-triggers. Build watch paths måste omfatta respektive Worker-root samt `cloudflare/shared/**` och `cloudflare/scripts/**` när de används av Workern/deploykedjan.
+
+D1-databasen `produkter` delas av flera Workers och repositoryt har i nuläget ingen Wrangler `migrations/`-kedja, endast versionshanterade SQL-filer under `cloudflare/infra/`. Därför ska de tre separata Workers Builds **inte** automatiskt applicera D1-schema vid deploy. Schemaändringar ska hanteras separat tills en entydig migrationsägare och idempotent migrationskedja införs.
 
 Secrets sätts utanför repositoryt och får inte committas. Ändra inte Worker-secrets eller bindings som en del av CI-städning utan uttryckligt behov och efter verifiering av runtime-konfigurationen.
 
