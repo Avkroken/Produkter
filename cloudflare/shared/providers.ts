@@ -145,11 +145,10 @@ async function generateGemini(
   model: string,
   route?: ProviderRoute,
 ): Promise<string> {
-  const baseUrl = route?.baseUrl ?? "https://generativelanguage.googleapis.com";
-  const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${creds.apiKey}`;
-  const resp = await fetch(url, {
+  const request = buildGeminiRequest(creds.apiKey, model, route);
+  const resp = await fetch(request.url, {
     method: "POST",
-    headers: { "content-type": "application/json", ...route?.headers },
+    headers: request.headers,
     body: JSON.stringify({
       contents: [{ parts: [{ text: userMessage }] }],
       systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -158,6 +157,23 @@ async function generateGemini(
   if (!resp.ok) await handleProviderError("gemini", resp);
   const data = await resp.json<{ candidates: Array<{ content: { parts: Array<{ text?: string }> } }> }>();
   return data.candidates[0]?.content.parts.map((p) => p.text ?? "").join("") ?? "";
+}
+
+export function buildGeminiRequest(
+  apiKey: string,
+  model: string,
+  route?: ProviderRoute,
+): { url: string; headers: Record<string, string> } {
+  if (route) {
+    return {
+      url: `${route.baseUrl}/v1beta/models/${model}:generateContent`,
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey, ...route.headers },
+    };
+  }
+  return {
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    headers: { "content-type": "application/json" },
+  };
 }
 
 async function generateAzure(creds: ProviderCreds, systemPrompt: string, userMessage: string, model: string): Promise<string> {
