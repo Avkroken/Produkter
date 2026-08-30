@@ -14,6 +14,11 @@ av [produkter](https://github.com/Avkroken/produkter)
   invocation, så varje rad blir ett eget kö-meddelande istället
 - Katalog-/beskrivningsloopen (f.d. `sync --watch` mot scraper-API:et) → en
   **Cron Trigger** i `engine/` var 5:e minut, mot D1 istället för scraper-API:et
+- Operatörens AI-anrop från `engine/` går via **Cloudflare AI Gateway**
+  (`default`) för central statistik och felanalys. Prompt- och svarsinnehåll
+  samlas inte in och gateway-cachen är avstängd. Kontonas egna krypterade
+  provider-nycklar i `app/`/`processor/` går fortsatt direkt till respektive
+  leverantör.
 - JavaScript-rendering och Playwright-skrapning → **Cloudflare Browser Run**
   från `engine/`; ingen egen Chromium-server krävs i den primära driftvägen
 
@@ -24,6 +29,11 @@ Workers:
 - `app/` — webb-UI + API (auth, inställningar, filuppladdning, jobblista/nedladdning, katalog, prisbevakning, bistånds-underlag, admin-panel). Lägger en `extract`-kö-post per uppladdning, gör inget extraktions-/AI-arbete själv.
 - `processor/` — kö-konsument. Extraherar produktrader ur uppladdade filer (CSV/XLSX/TXT/DOCX/PDF) och genererar en beskrivning per rad. Paus/återupptagning vid leverantörskvot hanteras via `queueMsg.retry({delaySeconds})`, inte en persisterad bakgrundstråd.
 - `engine/` — katalogmotorn. En Cron Trigger var 5:e minut driver crawl/discovery, schemaläggning av detaljjobb och prisbevakning mot D1. Samma Worker konsumerar `render_jobs` via Browser Run/Playwright och återanvänder en browsersession per cron-tick. HTTP-endpoints för lease/result finns kvar som kanonisk jobbväg och som rollback-gränssnitt. On-demand-beskrivning via `POST /describe`.
+
+`app/` anropar `engine/` genom en Worker Service Binding (`ENGINE`), inte via
+den publika domänen. Den externa Python-fetchern använder däremot fortfarande
+motorns autentiserade HTTPS-gränssnitt eftersom processer utanför Workers inte
+kan använda Service Bindings.
 
 `shared/` — kod gemensam för flera Workers (kryptering, AI-providers, prompts, kontoinställningar). OBS: `extractors.ts` ligger i `processor/src/` istället för `shared/` trots att den konceptuellt är delad logik — TypeScripts modulupplösning för tredjepartsbibliotek (xlsx/mammoth/unpdf) söker bara uppåt i katalogträdet, så filer i `shared/` (ett syskon till `processor/`) kan inte hitta paket som bara finns i `processor/node_modules`.
 
