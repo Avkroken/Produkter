@@ -212,7 +212,11 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
     .bind(now, id, attempt, LIST_LEASE_MS, LEASE_MS)
     .all<ClaimedRenderJob>();
   const job = claimed.results?.[0];
-  if (!job) return json({ error: "stale eller inaktiv lease" }, 409);
+  if (!job) {
+    const existing = await env.DB.prepare("SELECT id FROM render_jobs WHERE id=?1").bind(id).first<{ id: number }>();
+    if (!existing) return json({ error: "okänt jobb" }, 404);
+    return json({ error: "stale eller inaktiv lease" }, 409);
+  }
 
   // Misslyckande: försök igen tills MAX_ATTEMPTS, sedan parkera som 'error'.
   if (body.error) {
