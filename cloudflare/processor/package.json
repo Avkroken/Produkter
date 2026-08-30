@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
+    "deploy:production": "node ../scripts/deploy-production.mjs",
     "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
   },
   "devDependencies": {
