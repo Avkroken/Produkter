@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --remote",
-    "deploy": "wrangler deploy",
-    "deploy:production": "node ../scripts/deploy-production.mjs",
+    "deploy": "wrangler deploy --strict",
+    "verify:production": "node ../scripts/verify-production.mjs app",
     "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
   },
   "devDependencies": {
