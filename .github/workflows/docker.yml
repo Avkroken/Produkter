@@ -1,8 +1,8 @@
 name: Docker build & Trivy
 
 # Bygg och skanna bara images som påverkas av diffen. Schema/manual kör båda.
-# Docker/Trivy är kompletterande verifiering; live-rulesetet kräver `python` och
-# `node`, inte ett separat Docker-wrapperjobb.
+# Terminaljobbet `docker` är den stabila PR-gaten och verifierar explicit
+# impact-routing, imagebyggen och Trivy-resultat.
 
 on:
   push:
@@ -117,3 +117,35 @@ jobs:
         run: |
           docker push ghcr.io/avkroken/scraper:latest
           docker push ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
+
+  required:
+    name: docker
+    if: ${{ always() }}
+    needs: [impact, produkter-image, scraper-image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kontrollera Docker/Trivy
+        env:
+          IMPACT_RESULT: ${{ needs.impact.result }}
+          APP_IMPACT: ${{ needs.impact.outputs.docker_app }}
+          APP_RESULT: ${{ needs.produkter-image.result }}
+          SCRAPER_IMPACT: ${{ needs.impact.outputs.docker_scraper }}
+          SCRAPER_RESULT: ${{ needs.scraper-image.result }}
+        run: |
+          test "$IMPACT_RESULT" = "success"
+          case "$APP_IMPACT" in
+            true) test "$APP_RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Docker-app-impactvärde: '$APP_IMPACT'"
+              exit 1
+              ;;
+          esac
+          case "$SCRAPER_IMPACT" in
+            true) test "$SCRAPER_RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Docker-scraper-impactvärde: '$SCRAPER_IMPACT'"
+              exit 1
+              ;;
+          esac

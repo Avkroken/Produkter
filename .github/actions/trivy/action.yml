@@ -1,7 +1,8 @@
 name: Trivy
 description: >-
-  Skannar en redan byggd, lokalt laddad image och laddar upp fynden till Code
-  Scanning utan att göra skanningen till en separat merge-gate.
+  Skannar en redan byggd, lokalt laddad image, rapporterar alla relevanta fynd
+  till Code Scanning och gör fixerbara HIGH/CRITICAL-fynd blockerande via
+  anropande jobb.
 
 inputs:
   image-ref:
@@ -14,20 +15,31 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Skanna imagen
+    - name: Skanna imagen för rapportering
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
       with:
         scan-type: image
         image-ref: ${{ inputs.image-ref }}
         format: sarif
         output: trivy-results.sarif
-        ignore-unfixed: true
+        ignore-unfixed: false
         severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
         limit-severities-for-sarif: true
         exit-code: '0'
+
     - name: Ladda upp resultatet
       uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # codeql-bundle-v2.26.4
       if: always()
       with:
         sarif_file: trivy-results.sarif
         category: ${{ inputs.category }}
+
+    - name: Blockera fixerbara HIGH/CRITICAL-fynd
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.image-ref }}
+        format: table
+        ignore-unfixed: true
+        severity: HIGH,CRITICAL
+        exit-code: '1'
