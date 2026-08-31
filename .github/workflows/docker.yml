@@ -133,9 +133,19 @@ jobs:
           SCRAPER_RESULT: ${{ needs.scraper-image.result }}
         run: |
           test "$IMPACT_RESULT" = "success"
-          if [ "$APP_IMPACT" = "true" ]; then
-            test "$APP_RESULT" = "success"
-          fi
-          if [ "$SCRAPER_IMPACT" = "true" ]; then
-            test "$SCRAPER_RESULT" = "success"
-          fi
+          case "$APP_IMPACT" in
+            true) test "$APP_RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Docker-app-impactvärde: '$APP_IMPACT'"
+              exit 1
+              ;;
+          esac
+          case "$SCRAPER_IMPACT" in
+            true) test "$SCRAPER_RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Docker-scraper-impactvärde: '$SCRAPER_IMPACT'"
+              exit 1
+              ;;
+          esac

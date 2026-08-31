@@ -73,8 +73,14 @@ jobs:
           IMPACT: ${{ needs.impact.outputs.python }}
           RESULT: ${{ needs.python-tests.result }}
         run: |
-          if [ "$IMPACT" != "true" ]; then exit 0; fi
-          test "$RESULT" = "success"
+          case "$IMPACT" in
+            true) test "$RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Python-impactvärde: '$IMPACT'"
+              exit 1
+              ;;
+          esac
 
   node-workers:
     needs: impact
@@ -117,8 +123,14 @@ jobs:
           IMPACT: ${{ needs.impact.outputs.node }}
           RESULT: ${{ needs.node-workers.result }}
         run: |
-          if [ "$IMPACT" != "true" ]; then exit 0; fi
-          test "$RESULT" = "success"
+          case "$IMPACT" in
+            true) test "$RESULT" = "success" ;;
+            false) ;;
+            *)
+              echo "::error::Ogiltigt Node-impactvärde: '$IMPACT'"
+              exit 1
+              ;;
+          esac
 
   required:
     name: CI / required

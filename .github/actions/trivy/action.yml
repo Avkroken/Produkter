@@ -1,8 +1,7 @@
 name: Trivy
 description: >-
   Skannar en redan byggd, lokalt laddad image, laddar upp alla relevanta fynd
-  till Code Scanning och gör fixerbara HIGH/CRITICAL-fynd blockerande via
-  anropande jobb.
+  till Code Scanning och gör HIGH/CRITICAL-fynd blockerande via anropande jobb.
 
 inputs:
   image-ref:
@@ -22,7 +21,7 @@ runs:
         image-ref: ${{ inputs.image-ref }}
         format: sarif
         output: trivy-results.sarif
-        ignore-unfixed: true
+        ignore-unfixed: false
         severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
         limit-severities-for-sarif: true
         exit-code: '0'
@@ -40,6 +39,6 @@ runs:
         scan-type: image
         image-ref: ${{ inputs.image-ref }}
         format: table
-        ignore-unfixed: true
+        ignore-unfixed: false
         severity: HIGH,CRITICAL
         exit-code: '1'

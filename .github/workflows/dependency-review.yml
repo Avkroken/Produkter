@@ -20,4 +20,4 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
-          retry-on-snapshot-warnings: false
+          retry-on-snapshot-warnings: true
