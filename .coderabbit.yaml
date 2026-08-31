@@ -3,8 +3,9 @@
 inheritance: true
 
 reviews:
-  review_progress: false
-  commit_status: true
+  # Legacy commit-status kan rapportera success vid rate limit och får därför
+  # inte användas som mergebevis.
+  review_progress: true
   fail_commit_status: true
   auto_review:
     enabled: true
