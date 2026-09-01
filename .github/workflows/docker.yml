@@ -14,80 +14,121 @@ permissions:
   packages: write
   security-events: write
 
+concurrency:
+  group: docker-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publisher' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  docker:
+  app:
     runs-on: ubuntu-latest
     env:
-      APP_IMAGE: ghcr.io/avkroken/produkter
-      SCRAPER_IMAGE: ghcr.io/avkroken/scraper
+      IMAGE: ghcr.io/avkroken/produkter
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - name: Build images
-        run: |
-          docker build --pull -t "$APP_IMAGE:$GITHUB_SHA" .
-          docker build --pull -t "$SCRAPER_IMAGE:$GITHUB_SHA" scraper
-      - name: Report app vulnerabilities
+      - name: Build image
+        run: docker build --pull -t "$IMAGE:$GITHUB_SHA" .
+      - name: Report vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.APP_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scanners: vuln
           format: sarif
           output: trivy-app.sarif
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          limit-severities-for-sarif: true
           exit-code: "0"
-      - name: Upload app results
-        if: always()
+      - name: Upload results
+        if: ${{ always() && hashFiles('trivy-app.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # codeql-bundle-v2.26.4
         with:
           sarif_file: trivy-app.sarif
           category: trivy-product-describer
-      - name: Gate app vulnerabilities
+      - name: Gate vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.APP_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scanners: vuln
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           exit-code: "1"
-      - name: Report scraper vulnerabilities
+      - name: Publish image
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: |
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+
+  scraper:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/avkroken/scraper
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build image
+        run: docker build --pull -t "$IMAGE:$GITHUB_SHA" scraper
+      - name: Report vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.SCRAPER_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scanners: vuln
           format: sarif
           output: trivy-scraper.sarif
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          limit-severities-for-sarif: true
           exit-code: "0"
-      - name: Upload scraper results
-        if: always()
+      - name: Upload results
+        if: ${{ always() && hashFiles('trivy-scraper.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # codeql-bundle-v2.26.4
         with:
           sarif_file: trivy-scraper.sarif
           category: trivy-scraper
-      - name: Gate scraper vulnerabilities
+      - name: Gate vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.SCRAPER_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scanners: vuln
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           exit-code: "1"
-      - name: Publish images
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+      - name: Publish image
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
-          docker tag "$APP_IMAGE:$GITHUB_SHA" "$APP_IMAGE:latest"
-          docker tag "$SCRAPER_IMAGE:$GITHUB_SHA" "$SCRAPER_IMAGE:latest"
-          docker push "$APP_IMAGE:$GITHUB_SHA"
-          docker push "$APP_IMAGE:latest"
-          docker push "$SCRAPER_IMAGE:$GITHUB_SHA"
-          docker push "$SCRAPER_IMAGE:latest"
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+
+  docker:
+    name: docker
+    if: ${{ always() }}
+    needs: [app, scraper]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify image gates
+        env:
+          APP_RESULT: ${{ needs.app.result }}
+          SCRAPER_RESULT: ${{ needs.scraper.result }}
+        run: |
+          test "$APP_RESULT" = "success"
+          test "$SCRAPER_RESULT" = "success"
