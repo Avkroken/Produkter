@@ -35,12 +35,11 @@ jobs:
           password: ${{ github.token }}
       - name: Build image
         run: docker build --pull -t "$IMAGE:$GITHUB_SHA" .
-      - name: Report vulnerabilities
+      - name: Report vulnerabilities and secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE }}:${{ github.sha }}
-          scanners: vuln
           format: sarif
           output: trivy-app.sarif
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
@@ -52,12 +51,11 @@ jobs:
         with:
           sarif_file: trivy-app.sarif
           category: trivy-product-describer
-      - name: Gate vulnerabilities
+      - name: Gate HIGH/CRITICAL findings
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE }}:${{ github.sha }}
-          scanners: vuln
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL
@@ -85,12 +83,11 @@ jobs:
           password: ${{ github.token }}
       - name: Build image
         run: docker build --pull -t "$IMAGE:$GITHUB_SHA" scraper
-      - name: Report vulnerabilities
+      - name: Report vulnerabilities and secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE }}:${{ github.sha }}
-          scanners: vuln
           format: sarif
           output: trivy-scraper.sarif
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
@@ -102,12 +99,11 @@ jobs:
         with:
           sarif_file: trivy-scraper.sarif
           category: trivy-scraper
-      - name: Gate vulnerabilities
+      - name: Gate HIGH/CRITICAL findings
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE }}:${{ github.sha }}
-          scanners: vuln
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL
