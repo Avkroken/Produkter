@@ -20,18 +20,19 @@ jobs:
           PACKAGE: ${{ matrix.package }}
         with:
           script: |
-            const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
-              org: context.repo.owner,
-              package_type: 'container',
-              package_name: process.env.PACKAGE,
-              per_page: 100,
-            });
+            const versions = await github.paginate(
+              github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser,
+              {
+                package_type: 'container',
+                package_name: process.env.PACKAGE,
+                per_page: 100,
+              },
+            );
 
             for (const version of versions) {
               const tags = version.metadata?.container?.tags ?? [];
               if (tags.includes('latest')) continue;
-              await github.rest.packages.deletePackageVersionForOrg({
-                org: context.repo.owner,
+              await github.rest.packages.deletePackageVersionForAuthenticatedUser({
                 package_type: 'container',
                 package_name: process.env.PACKAGE,
                 package_version_id: version.id,
