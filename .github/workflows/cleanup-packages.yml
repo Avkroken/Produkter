@@ -12,6 +12,7 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         package: [produkter, scraper]
     steps:
