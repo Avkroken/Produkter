@@ -4,8 +4,7 @@ updates:
     assignees: ["blixten85"]
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "00:00"
       timezone: "Europe/Stockholm"
     groups:
@@ -21,8 +20,7 @@ updates:
       - "/"
       - "/scraper"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "00:30"
       timezone: "Europe/Stockholm"
 
@@ -30,8 +28,7 @@ updates:
     assignees: ["blixten85"]
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "01:00"
       timezone: "Europe/Stockholm"
     groups:
@@ -44,8 +41,7 @@ updates:
       - "/"
       - "/scraper"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "00:10"
       timezone: "Europe/Stockholm"
     groups:
@@ -60,8 +56,7 @@ updates:
       - "/scraper"
       - "/scraper/*"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "00:00"
       timezone: "Europe/Stockholm"
     groups:
@@ -76,8 +71,7 @@ updates:
       - "/cloudflare/engine"
       - "/cloudflare/processor"
     schedule:
-      interval: "weekly"
-      day: "tuesday"
+      interval: "daily"
       time: "00:20"
       timezone: "Europe/Stockholm"
     groups:
