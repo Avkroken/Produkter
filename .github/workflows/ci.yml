@@ -7,34 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
 jobs:
-  impact:
-    runs-on: ubuntu-latest
-    outputs:
-      python: ${{ steps.impact.outputs.python }}
-      node: ${{ steps.impact.outputs.node }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Bestäm komponentpåverkan
-        id: impact
-        env:
-          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: bash .github/scripts/ci-impact.sh
-
-  python-tests:
-    needs: impact
-    if: ${{ needs.impact.outputs.python == 'true' }}
+  required:
+    name: CI / required
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,108 +20,35 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.x'
+          python-version: "3.x"
           cache: pip
-      - name: Installera beroenden
-        run: |
-          python -m pip install --upgrade pip
-          find . -path './.git' -prune -o -path './cloudflare' -prune -o \
-            -name 'requirements.txt' -print0 | xargs -0 -r -n1 python -m pip install -r
-          if [ -f pyproject.toml ]; then python -m pip install -e '.[test]' || python -m pip install -e .; fi
-          python -m pip install pytest
-      - name: Kompilera
-        run: python -m compileall . -x '^\./cloudflare/'
-      - name: Kör tester
-        run: |
-          for d in . scraper; do
-            if [ -d "$d/tests" ]; then
-              echo "--- $d"
-              (cd "$d" && python -m pytest)
-            fi
-          done
-
-  python:
-    name: python
-    needs: [impact, python-tests]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Sammanfatta Python-CI
-        env:
-          IMPACT: ${{ needs.impact.outputs.python }}
-          RESULT: ${{ needs.python-tests.result }}
-        run: |
-          case "$IMPACT" in
-            true) test "$RESULT" = "success" ;;
-            false) ;;
-            *)
-              echo "::error::Ogiltigt Python-impactvärde: '$IMPACT'"
-              exit 1
-              ;;
-          esac
-
-  node-workers:
-    needs: impact
-    if: ${{ needs.impact.outputs.node == 'true' }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        worker: [app, engine, processor]
-    defaults:
-      run:
-        working-directory: cloudflare/${{ matrix.worker }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: cloudflare/${{ matrix.worker }}/package-lock.json
-      - name: Installera beroenden
-        run: npm ci
-      - name: Typkontroll
-        run: npx tsc --noEmit
-      - name: Validera Worker bundle och Wrangler-konfiguration
-        run: npx wrangler deploy --dry-run --outdir .wrangler/dry-run
-      - name: Testa produktionsverifiering
-        if: ${{ matrix.worker == 'app' }}
-        run: node ../scripts/verify-production.test.mjs
-
-  node:
-    name: node
-    needs: [impact, node-workers]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Sammanfatta Node-CI
-        env:
-          IMPACT: ${{ needs.impact.outputs.node }}
-          RESULT: ${{ needs.node-workers.result }}
+          cache-dependency-path: |
+            cloudflare/app/package-lock.json
+            cloudflare/engine/package-lock.json
+            cloudflare/processor/package-lock.json
+      - name: Test Python
         run: |
-          case "$IMPACT" in
-            true) test "$RESULT" = "success" ;;
-            false) ;;
-            *)
-              echo "::error::Ogiltigt Node-impactvärde: '$IMPACT'"
-              exit 1
-              ;;
-          esac
-
-  required:
-    name: CI / required
-    if: ${{ always() }}
-    needs: [impact, python, node]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Kontrollera aggregate CI
-        env:
-          IMPACT_RESULT: ${{ needs.impact.result }}
-          PYTHON_RESULT: ${{ needs.python.result }}
-          NODE_RESULT: ${{ needs.node.result }}
+          python -m pip install --upgrade pip
+          find . -path './.git' -prune -o -path './cloudflare' -prune -o -name 'requirements.txt' -print0 \
+            | xargs -0 -r -n1 python -m pip install -r
+          if [ -f pyproject.toml ]; then python -m pip install -e '.[test]' || python -m pip install -e .; fi
+          python -m pip install pytest
+          python -m compileall . -x '^\./cloudflare/'
+          for d in . scraper; do
+            if [ -d "$d/tests" ]; then (cd "$d" && python -m pytest); fi
+          done
+      - name: Test Workers
         run: |
-          test "$IMPACT_RESULT" = "success"
-          test "$PYTHON_RESULT" = "success"
-          test "$NODE_RESULT" = "success"
+          for worker in app engine processor; do
+            (
+              cd "cloudflare/$worker"
+              npm ci
+              npx tsc --noEmit
+              npx wrangler deploy --dry-run --outdir .wrangler/dry-run
+            )
+          done
+          node cloudflare/scripts/verify-production.test.mjs

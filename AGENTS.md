@@ -24,13 +24,13 @@ Credentials, provider-nycklar och andra secrets får aldrig hårdkodas eller com
 
 Repositoryts live-konfiguration är sanningskällan. Dokumentation ersätter inte rulesets.
 
-För `main` gäller för närvarande rulesetet `Protect main`:
+För `main` gäller för närvarande organisationsrulesets med följande gates:
 
 - required status checks: `CI / required`, `docker`, `dependency-review` och `scan-pr / osv-scan`
 - required checks körs med strict latest-base-verifiering
 - Code Scanning kräver `CodeQL` med `errors_and_warnings` för alerts och `medium_or_higher` för security alerts
+- en approval krävs; stale reviews avvisas efter push och den senaste pushen måste godkännas av någon annan
 - olösta review-trådar blockerar merge
-- generella approvals krävs inte (`0` required approvals)
 - Copilot Code Review körs vid push till PR-grenen men är inte en required status check
 - CodeRabbit är best-effort review och är inte en required status check; relevanta faktiska review-fynd måste ändå utvärderas och åtgärdas
 - squash är enda tillåtna merge-metod
@@ -55,15 +55,13 @@ Om full lokal validering inte är möjlig ska begränsningen beskrivas konkret i
 
 ## GitHub Actions och Cloudflare
 
-- `.github/workflows/ci.yml` producerar den required terminalchecken `CI / required`. Impact-routingen får hoppa över dyra komponentjobb, men routing och terminalcheck ska faila stängt vid okänd eller ofullständig state.
-- Node-CI ska typkontrollera varje Worker, köra Wrangler dry-run och testa den gemensamma produktionsverifieraren. CI ska inte innehålla produktionsdeploylogik.
-- `.github/workflows/docker.yml` producerar den required terminalchecken `docker`. Imagebyggen får vara impact-styrda, men terminalchecken ska alltid ge ett entydigt resultat och faila stängt vid routingfel.
-- Trivy ska rapportera alla relevanta fynd till Code Scanning. Docker-gaten blockerar fixerbara HIGH/CRITICAL-fynd; ofixade upstream/base-image-fynd ska fortfarande rapporteras men får inte permanent deadlocka merge.
-- `.github/workflows/dependency-review.yml` producerar den required checken `dependency-review` och ska tåla fördröjda dependency snapshots utan att behandla en saknad snapshot som verifierad dependency-diff.
-- `.github/workflows/osv-scanner.yml` producerar den required checken `scan-pr / osv-scan` och rapporterar dessutom OSV-resultat till Code Scanning.
-- CodeQL körs via GitHub Code Scanning/default setup och verkställs av rulesetets Code Scanning-regel, inte som en av de fyra required status contexts ovan.
-- `.github/workflows/pr-watchdog.yml` kan öppna en PR för en lokal branch med unika commits som saknat PR för länge. Auto-merge får inte kringgå kravet att live-ruleset och aktuella merge-gates först ska vara verifierade. Dess state ligger på `automation/pr-watchdog-state`.
-- `.github/workflows/auto-fix-review.yml` får begära en Codex-fix för feedback från uttryckligen betrodda review-botar. Den får inte lösa review-tråden åt implementationen.
+- `.github/workflows/ci.yml` producerar den required checken `CI / required` och verifierar Python-delarna samt samtliga tre Worker-paket. CI ska inte innehålla produktionsdeploylogik.
+- Node-CI ska typkontrollera varje Worker, köra Wrangler dry-run och testa den gemensamma produktionsverifieraren.
+- `.github/workflows/docker.yml` producerar den required checken `docker`, bygger båda images och kör Trivy. Alla relevanta fynd rapporteras till Code Scanning och fixerbara HIGH/CRITICAL-fynd blockerar jobbet.
+- `.github/workflows/dependency-review.yml` producerar den required checken `dependency-review`.
+- `.github/workflows/osv-scanner.yml` är repositoryts egen OSV-definition, producerar `scan-pr / osv-scan` på pull requests och rapporterar resultat till Code Scanning.
+- CodeQL körs via GitHub Code Scanning/default setup och verkställs av rulesetets Code Scanning-regel.
+- Repositoryts workflows får inte skapa eller uppdatera pull requests eller branches, arma eller genomföra merge, automatisera review, delegera arbete till AI-agenter eller lagra säkerhetsalert-snapshots i repositoryt.
 - Cloudflare Workers Builds äger normal produktionsdeploy från `main`; GitHub Actions ska inte deploya produktion.
 - Varje produktions-Worker ska ha en egen Workers Builds production trigger med branch `main`, sin Worker-root som root directory, tomt build command och avstängda non-production branch builds.
 - `cloudflare/app` ska använda deploy command `npm run deploy && npm run verify:production`.

@@ -1,151 +1,138 @@
-name: Docker build & Trivy
-
-# Bygg och skanna bara images som påverkas av diffen. Schema/manual kör båda.
-# Terminaljobbet `docker` är den stabila PR-gaten och verifierar explicit
-# impact-routing, imagebyggen och Trivy-resultat.
+name: Docker
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   schedule:
-    - cron: '40 5 * * 1'
+    - cron: "40 5 * * 1"
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
+concurrency:
+  group: docker-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publisher' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  impact:
-    runs-on: ubuntu-latest
-    outputs:
-      docker_app: ${{ steps.impact.outputs.docker_app }}
-      docker_scraper: ${{ steps.impact.outputs.docker_scraper }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Bestäm Docker-påverkan
-        id: impact
-        env:
-          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: bash .github/scripts/ci-impact.sh
-
-  produkter-image:
-    needs: impact
-    if: ${{ needs.impact.outputs.docker_app == 'true' }}
+  app:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       security-events: write
+    env:
+      IMAGE: ghcr.io/avkroken/produkter
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+          password: ${{ github.token }}
+      - name: Build image
+        run: docker build --pull -t "$IMAGE:$GITHUB_SHA" .
+      - name: Report vulnerabilities and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          context: .
-          push: false
-          load: true
-          tags: |
-            ghcr.io/avkroken/produkter:latest
-            ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
-      - name: Trivy
-        uses: ./.github/actions/trivy
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy-app.sarif
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "0"
+      - name: Upload results
+        if: ${{ always() && hashFiles('trivy-app.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
-          image-ref: ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
+          sarif_file: trivy-app.sarif
           category: trivy-product-describer
-      - name: Publicera imagen
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+      - name: Gate HIGH/CRITICAL findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: table
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Publish image
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
-          docker push ghcr.io/avkroken/produkter:latest
-          docker push ghcr.io/avkroken/produkter:sha-${{ steps.sha.outputs.short }}
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
 
-  scraper-image:
-    needs: impact
-    if: ${{ needs.impact.outputs.docker_scraper == 'true' }}
+  scraper:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       security-events: write
+    env:
+      IMAGE: ghcr.io/avkroken/scraper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+          password: ${{ github.token }}
+      - name: Build image
+        run: docker build --pull -t "$IMAGE:$GITHUB_SHA" scraper
+      - name: Report vulnerabilities and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          context: scraper
-          push: false
-          load: true
-          tags: |
-            ghcr.io/avkroken/scraper:latest
-            ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
-      - name: Trivy
-        uses: ./.github/actions/trivy
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy-scraper.sarif
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "0"
+      - name: Upload results
+        if: ${{ always() && hashFiles('trivy-scraper.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
-          image-ref: ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
+          sarif_file: trivy-scraper.sarif
           category: trivy-scraper
-      - name: Publicera imagen
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+      - name: Gate HIGH/CRITICAL findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: table
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Publish image
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
-          docker push ghcr.io/avkroken/scraper:latest
-          docker push ghcr.io/avkroken/scraper:sha-${{ steps.sha.outputs.short }}
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
 
-  required:
+  docker:
     name: docker
     if: ${{ always() }}
-    needs: [impact, produkter-image, scraper-image]
+    needs: [app, scraper]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Kontrollera Docker/Trivy
+      - name: Verify image gates
         env:
-          IMPACT_RESULT: ${{ needs.impact.result }}
-          APP_IMPACT: ${{ needs.impact.outputs.docker_app }}
-          APP_RESULT: ${{ needs.produkter-image.result }}
-          SCRAPER_IMPACT: ${{ needs.impact.outputs.docker_scraper }}
-          SCRAPER_RESULT: ${{ needs.scraper-image.result }}
+          APP_RESULT: ${{ needs.app.result }}
+          SCRAPER_RESULT: ${{ needs.scraper.result }}
         run: |
-          test "$IMPACT_RESULT" = "success"
-          case "$APP_IMPACT" in
-            true) test "$APP_RESULT" = "success" ;;
-            false) ;;
-            *)
-              echo "::error::Ogiltigt Docker-app-impactvärde: '$APP_IMPACT'"
-              exit 1
-              ;;
-          esac
-          case "$SCRAPER_IMPACT" in
-            true) test "$SCRAPER_RESULT" = "success" ;;
-            false) ;;
-            *)
-              echo "::error::Ogiltigt Docker-scraper-impactvärde: '$SCRAPER_IMPACT'"
-              exit 1
-              ;;
-          esac
+          test "$APP_RESULT" = "success"
+          test "$SCRAPER_RESULT" = "success"

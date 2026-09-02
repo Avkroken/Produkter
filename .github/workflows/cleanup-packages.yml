@@ -1,11 +1,8 @@
-name: Cleanup old package versions
-
-# Varje push till main lägger en sha-taggad version i ghcr. Utan städning
-# växer paketen obegränsat; här behålls bara latest.
+name: Cleanup packages
 
 on:
   schedule:
-    - cron: '0 3 * * 0' # söndagar 03:00
+    - cron: "0 3 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -19,32 +16,50 @@ jobs:
       matrix:
         package: [produkter, scraper]
     steps:
-      - name: Radera otaggade och gamla sha-versioner
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           PACKAGE: ${{ matrix.package }}
         with:
           script: |
-            const package_name = process.env.PACKAGE;
-            const { data: versions } =
-              await github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser({
+            const org = context.repo.owner;
+            const versions = await github.paginate(
+              github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
+              {
+                org,
                 package_type: 'container',
-                package_name,
+                package_name: process.env.PACKAGE,
                 per_page: 100,
-              });
+              },
+            );
 
-            const keep = new Set(['latest']);
-            let deleted = 0;
+            for (const version of versions) {
+              const tags = version.metadata?.container?.tags ?? [];
+              if (tags.includes('latest')) continue;
 
-            for (const v of versions) {
-              const tags = v.metadata?.container?.tags ?? [];
-              if (tags.some(t => keep.has(t))) continue;
-              await github.rest.packages.deletePackageVersionForAuthenticatedUser({
-                package_type: 'container',
-                package_name,
-                package_version_id: v.id,
-              });
-              deleted++;
+              try {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  org,
+                  package_type: 'container',
+                  package_name: process.env.PACKAGE,
+                  package_version_id: version.id,
+                });
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const protectedPublicVersion = /5,?000|downloads/i.test(message);
+
+                if (protectedPublicVersion) {
+                  core.warning(
+                    `Skipping package version ${version.id}: GitHub does not allow deleting this public version (${message})`,
+                  );
+                  continue;
+                }
+
+                if (error?.status === 401 || error?.status === 403) {
+                  throw error;
+                }
+
+                core.warning(
+                  `Failed to delete package version ${version.id}; continuing with remaining versions: ${message}`,
+                );
+              }
             }
-
-            console.log(`${package_name}: raderade ${deleted} gamla versioner`);
