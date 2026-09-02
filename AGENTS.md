@@ -61,7 +61,7 @@ Om full lokal validering inte är möjlig ska begränsningen beskrivas konkret i
 - `.github/workflows/dependency-review.yml` producerar den required checken `dependency-review`.
 - `.github/workflows/osv-scanner.yml` är repositoryts egen OSV-definition, producerar `scan-pr / osv-scan` på pull requests och rapporterar resultat till Code Scanning.
 - CodeQL körs via GitHub Code Scanning/default setup och verkställs av rulesetets Code Scanning-regel.
-- Repositoryts workflows får inte skapa eller uppdatera pull requests eller branches, arma eller genomföra merge, automatisera review, delegera arbete till AI-agenter eller lagra säkerhetsalert-snapshots i repositoryt.
+- Repositoryts workflows får inte skapa eller uppdatera pull requests eller branches, arma eller genomföra merge, automatisera review, delegera remediation/kodarbete till AI-agenter eller lagra säkerhetsalert-snapshots i repositoryt. De två centrala metadata-callers som beskrivs nedan är det enda metadata-only-undantaget och får inte ändra branch, review eller merge-state.
 - Cloudflare Workers Builds äger normal produktionsdeploy från `main`; GitHub Actions ska inte deploya produktion.
 - Varje produktions-Worker ska ha en egen Workers Builds production trigger med branch `main`, sin Worker-root som root directory, tomt build command och avstängda non-production branch builds.
 - `cloudflare/app` ska använda deploy command `npm run deploy && npm run verify:production`.
@@ -74,6 +74,19 @@ Om full lokal validering inte är möjlig ska begränsningen beskrivas konkret i
 - D1 `produkter` delas av flera Workers. Repositoryt saknar för närvarande en Wrangler `migrations/`-kedja och de separata Workers Builds får därför inte var för sig applicera `cloudflare/infra/*.sql` automatiskt. Inför först en entydig migrationsägare och idempotent migrationskedja innan schemaändringar läggs i production deploy.
 
 GitHub Actions ska pinnas till commit-SHA när praktiskt möjligt. Nödvändiga versionspinnar ska ha en tydlig anledning och normala dependency-uppdateringar ska hanteras via PR.
+
+## Metadata-only AI triage exception
+
+Repositoryägaren har uttryckligen godkänt metadata-only issue triage via GitHub Agentic Workflows. Detta är ett smalt undantag från bredare förbud mot AI-delegering och gäller inte kodarbete eller remediation.
+
+- `.github/workflows/metadata-routing.yml` får endast anropa Avkrokens centrala deterministiska metadata-routing för assignee och labels.
+- `.github/workflows/issue-classification.yml` får endast trigga på öppnade/återöppnade issues och anropa den SHA-pinnade centrala `issue-classification.lock.yml`.
+- AI-delen får läsa det triggande issuet och read-only repositorykontext som behövs för klassificering.
+- `gh-aw` safe outputs får endast lägga till exakt en `difficulty:*` och en `security:*` label från den centrala allowlisten.
+- Workflowen får inte kommentera, assigna coding agents, skapa/ändra branches eller PR:er, reviewa, mergea, deploya eller utföra/föreslå remediation.
+- Copilot-auth får komma från organization billing eller GitHub Actions-secreten `COPILOT_GITHUB_TOKEN`. Credentialvärden får aldrig committas, loggas eller kopieras till dokumentation.
+
+Detta undantag ändrar inte Cloudflare-, säkerhets-, CI-, review- eller mergepolicyn.
 
 ## Definition of done
 
