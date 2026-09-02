@@ -3,6 +3,8 @@ name: Dependency review
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -15,3 +17,5 @@ jobs:
         with:
           fail-on-severity: high
           retry-on-snapshot-warnings: true
+          base-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
+          head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
