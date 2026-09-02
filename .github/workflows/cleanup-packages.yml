@@ -35,10 +35,31 @@ jobs:
             for (const version of versions) {
               const tags = version.metadata?.container?.tags ?? [];
               if (tags.includes('latest')) continue;
-              await github.rest.packages.deletePackageVersionForOrg({
-                org,
-                package_type: 'container',
-                package_name: process.env.PACKAGE,
-                package_version_id: version.id,
-              });
+
+              try {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  org,
+                  package_type: 'container',
+                  package_name: process.env.PACKAGE,
+                  package_version_id: version.id,
+                });
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const protectedPublicVersion = /5,?000|downloads/i.test(message);
+
+                if (protectedPublicVersion) {
+                  core.warning(
+                    `Skipping package version ${version.id}: GitHub does not allow deleting this public version (${message})`,
+                  );
+                  continue;
+                }
+
+                if (error?.status === 401 || error?.status === 403) {
+                  throw error;
+                }
+
+                core.warning(
+                  `Failed to delete package version ${version.id}; continuing with remaining versions: ${message}`,
+                );
+              }
             }
