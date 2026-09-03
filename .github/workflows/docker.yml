@@ -50,7 +50,7 @@ jobs:
           limit-severities-for-sarif: true
           exit-code: "0"
       - name: Upload results
-        if: ${{ always() && hashFiles('trivy-app.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ always() && github.event_name != 'merge_group' && hashFiles('trivy-app.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-app.sarif
@@ -102,7 +102,7 @@ jobs:
           limit-severities-for-sarif: true
           exit-code: "0"
       - name: Upload results
-        if: ${{ always() && hashFiles('trivy-scraper.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ always() && github.event_name != 'merge_group' && hashFiles('trivy-scraper.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-scraper.sarif
