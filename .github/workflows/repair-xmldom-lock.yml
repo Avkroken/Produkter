@@ -29,7 +29,10 @@ jobs:
           cd ../..
           git diff --check
           git diff --exit-code -- cloudflare/processor/package.json
-          git diff --quiet -- cloudflare/processor/package-lock.json && { echo 'Expected package-lock.json to change' >&2; exit 1; }
+          if git diff --quiet -- cloudflare/processor/package-lock.json; then
+            echo 'Expected package-lock.json to change' >&2
+            exit 1
+          fi
       - name: Commit lockfile only
         shell: bash
         run: |
