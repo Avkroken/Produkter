@@ -1,6 +1,6 @@
 # PRODUKTER.md
 
-Repository-specific instructions for `Avkroken/Produkter`. These instructions supplement the canonical Avkroken policy in `Avkroken/.github/AGENTS.md`.
+This is the repository governance document for `Avkroken/Produkter`. Binding AI coding-agent policy is defined only in `Avkroken/.github/AGENTS.md`. This document records repository-specific technical contracts, invariants, validation requirements, and operational context required by that policy; it must not define, supplement, narrow, or override agent policy.
 
 ## Repository
 
