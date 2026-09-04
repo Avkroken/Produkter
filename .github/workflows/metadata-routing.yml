@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           mapfile -t prs < <(
             gh api --paginate "repos/$REPOSITORY/pulls?state=open&per_page=100" \
-              | jq -r --arg owner "$OWNER_ASSIGNEE" '.[] | select(([.assignees[]?.login] | index($owner)) == null) | .number'
+              | jq -rs --arg owner "$OWNER_ASSIGNEE" 'add | .[] | select(([.assignees[]?.login] | index($owner)) == null) | .number'
           )
           for pr in "${prs[@]}"; do
             gh api --method POST "repos/$REPOSITORY/issues/$pr/assignees" \
