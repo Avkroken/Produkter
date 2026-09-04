@@ -3,9 +3,8 @@ name: Central metadata routing
 on:
   issues:
     types: [opened, reopened, labeled, unlabeled]
-  schedule:
-    - cron: '13 * * * *'
-  workflow_dispatch:
+  pull_request_target:
+    types: [opened, reopened]
 
 permissions:
   issues: write
@@ -22,37 +21,13 @@ jobs:
       item-kind: issue
       item-number: ${{ github.event.issue.number }}
 
-  pull-request-reconcile:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  pull-request:
+    if: github.event_name == 'pull_request_target'
     permissions:
       contents: read
       issues: write
       pull-requests: write
-    steps:
-      - name: Reconcile open pull-request owners
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          OWNER_ASSIGNEE: blixten85
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t prs < <(
-            gh api --paginate "repos/$REPOSITORY/pulls?state=open&per_page=100" \
-              | jq -rs --arg owner "$OWNER_ASSIGNEE" '
-                  def prs:
-                    if length == 0 then []
-                    elif (.[0] | type) == "array" then map(.[])
-                    else .
-                    end;
-                  prs[]
-                  | select(([.assignees[]?.login] | index($owner)) == null)
-                  | .number
-                '
-          )
-          for pr in "${prs[@]}"; do
-            gh api --method POST "repos/$REPOSITORY/issues/$pr/assignees" \
-              -f "assignees[]=$OWNER_ASSIGNEE" >/dev/null
-          done
+    uses: Avkroken/.github/.github/workflows/metadata-routing.yml@66f97c6481cc3c005407675d68898c3074f0d7c1
+    with:
+      item-kind: pull_request
+      item-number: ${{ github.event.pull_request.number }}
