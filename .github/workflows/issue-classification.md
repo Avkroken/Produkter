@@ -5,7 +5,7 @@ description: >-
   canonical difficulty and security labels.
 on:
   workflow_call:
-  roles: all
+roles: all
 engine: copilot
 permissions:
   contents: read
