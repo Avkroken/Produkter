@@ -2,13 +2,14 @@
 
 inheritance: true
 
+# CodeRabbit reviews are dispatched by Avkroken's label-driven review router.
+# Keep local overrides limited to the router contract; organization settings own
+# shared review/status behavior.
 reviews:
-  # Legacy commit-status kan rapportera success vid rate limit och får därför
-  # inte användas som mergebevis.
-  review_progress: true
-  fail_commit_status: true
   auto_review:
-    enabled: true
-    auto_incremental_review: true
+    enabled: false
+    auto_incremental_review: false
     auto_pause_after_reviewed_commits: 0
-    drafts: false
+    drafts: true
+    labels:
+      - review:coderabbit
