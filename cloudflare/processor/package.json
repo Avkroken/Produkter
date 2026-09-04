@@ -16,5 +16,8 @@
     "mammoth": "^1.12.2",
     "read-excel-file": "^9.3.10",
     "unpdf": "^1.8.1"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.15"
   }
 }
