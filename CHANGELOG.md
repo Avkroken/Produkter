@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/Avkroken/Produkter/compare/v1.4.0...v1.4.1) (2026-09-05)
+
+
+### Documentation
+
+* rename governance file to REPO.md ([#645](https://github.com/Avkroken/Produkter/issues/645)) ([ca1007d](https://github.com/Avkroken/Produkter/commit/ca1007d1268b889b431ea398f939f490111b1dff))
+
 ## [1.4.0](https://github.com/Avkroken/Produkter/compare/v1.3.0...v1.4.0) (2026-09-05)
 
 
