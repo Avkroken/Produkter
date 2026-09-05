@@ -1,6 +1,7 @@
 import core, { completeRedundantDetailJobs } from "./index";
 import { bearbetaCrawlKo, type CrawlEnv } from "./crawl";
 import { bearbetaRenderKo, type WebblasareEnv } from "./webblasare";
+import { withD1Session } from "../../shared/d1-session";
 
 interface Env extends WebblasareEnv, CrawlEnv {
   DB: D1Database;
@@ -19,6 +20,7 @@ const coreHandler = core as unknown as CoreHandler;
 
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    env = withD1Session(env, "first-primary");
     // Core-handlern är sanningskälla för schemaläggning, lease-recovery,
     // prisbevakning och AI-beskrivningar. List-jobb delegeras därefter i första
     // hand till Cloudflares /crawl. De som inte kan delegeras ligger kvar och
@@ -52,6 +54,6 @@ export default {
   },
 
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    return coreHandler.fetch(request, env, ctx);
+    return coreHandler.fetch(request, withD1Session(env, "first-primary"), ctx);
   },
 } satisfies ExportedHandler<Env>;

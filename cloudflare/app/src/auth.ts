@@ -5,6 +5,7 @@
 // helt ny Cloudflare-installation).
 
 import { hashPassword, verifyPassword, randomId, sha256Hex } from "../../shared/crypto";
+import { withD1Session } from "../../shared/d1-session";
 import { createAccount, getAccountByEmail, getAccountById, type Env } from "./db";
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 dagar, samma som politiker-webapp
@@ -80,7 +81,7 @@ export async function getAccountFromSession(env: Env, sessionToken: string | nul
   }
 
   if (!accountId) return null;
-  return getAccountById(env.DB, accountId);
+  return getAccountById(withD1Session(env, "first-primary").DB, accountId);
 }
 
 function getSessionTokenFromCookie(request: Request): string | null {
