@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/Avkroken/Produkter/compare/v1.3.0...v1.4.0) (2026-09-05)
+
+
+### Features
+
+* use D1 sessions for read replication ([#640](https://github.com/Avkroken/Produkter/issues/640)) ([775487c](https://github.com/Avkroken/Produkter/commit/775487cfc0c1c3e45decc249b5f7b2c46e16037e))
+
 ## [1.3.0](https://github.com/Avkroken/Produkter/compare/v1.2.32...v1.3.0) (2026-09-04)
 
 
