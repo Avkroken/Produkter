@@ -54,3 +54,4 @@ jobs:
             )
           done
           node cloudflare/scripts/verify-production.test.mjs
+          node cloudflare/scripts/d1-session.test.mjs
