@@ -4,14 +4,14 @@ import type { Env } from "./db";
 import { withD1Session } from "../../shared/d1-session";
 
 type AppHandler = {
-  fetch(request: Request, env: Env): Promise<Response>;
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 };
 
 const appHandler = app as unknown as AppHandler;
 
 export default {
-  fetch(request: Request, env: Env): Promise<Response> {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const pathname = new URL(request.url).pathname;
-    return appHandler.fetch(request, withD1Session(env, appD1SessionConstraint(request.method, pathname)));
+    return appHandler.fetch(request, withD1Session(env, appD1SessionConstraint(request.method, pathname)), ctx);
   },
 } satisfies ExportedHandler<Env>;

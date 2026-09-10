@@ -15,16 +15,17 @@
 
     <form id="login-form">
       <h2>Logga in</h2>
-      <input type="email" name="email" placeholder="E-postadress" required>
-      <input type="password" name="password" placeholder="Lösenord" required>
+      <input type="email" name="email" placeholder="E-postadress" aria-label="E-postadress" autocomplete="username" required>
+      <input type="password" name="password" placeholder="Lösenord" aria-label="Lösenord" autocomplete="current-password" required>
       <button type="submit">Logga in</button>
-      <p id="login-msg" class="error"></p>
+      <p id="login-msg" class="error" role="alert"></p>
+      <p><a href="/forgot-password.html">Glömt lösenord?</a></p>
     </form>
 
     <form id="signup-form" hidden>
       <h2>Skapa konto</h2>
-      <input type="email" name="email" placeholder="E-postadress" required>
-      <input type="password" name="password" placeholder="Lösenord (minst 8 tecken)" required minlength="8">
+      <input type="email" name="email" placeholder="E-postadress" aria-label="E-postadress" autocomplete="username" required>
+      <input type="password" name="password" autocomplete="new-password" placeholder="Lösenord (minst 8 tecken)" required minlength="8">
       <button type="submit">Skapa konto</button>
       <p id="signup-msg" class="error"></p>
     </form>
