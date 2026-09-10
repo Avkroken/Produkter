@@ -7,6 +7,7 @@ CREATE TABLE accounts (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
+  auth_version INTEGER NOT NULL DEFAULT 0,
   role TEXT NOT NULL DEFAULT 'user', -- 'user' | 'admin' (operatörsverktyg gatas på admin)
   describe_mode TEXT NOT NULL DEFAULT 'auto', -- 'on-demand' | 'auto' (auto = beskriv underlaget automatiskt)
   created_at INTEGER NOT NULL
@@ -191,4 +192,18 @@ CREATE TABLE page_suggestions (
   description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
+);
+
+
+CREATE TABLE password_resets (
+  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  auth_version INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE auth_rate_limits (
+  key TEXT PRIMARY KEY,
+  hits INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
 );

@@ -1,3 +1,5 @@
+import { InvalidCredentials, AuthRequestError } from "./auth-errors";
+import { normalizeResetEmail, deliverPasswordReset, resetPassword, resetRateLimit, RESET_MESSAGE } from "./password-reset";
 // Motsvarar app.py:s Flask-rutter. Jobbkörningen själv (extraktion +
 // radvis beskrivningsgenerering) sker INTE här — den här Workern bara
 // validerar, sparar till R2/D1 och lägger ett "extract"-meddelande i kön;
@@ -34,10 +36,10 @@ const SUPPORTED_EXTENSIONS = [".csv", ".xlsx", ".txt", ".docx", ".pdf"];
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB, samma gräns som Flask-versionen
 
 export default {
-    async fetch(request: Request, env: Env): Promise<Response> {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       const url = new URL(request.url);
       try {
-        return await route(request, env, url);
+        return await route(request, env, url, ctx);
       } catch (err) {
         console.error(err);
         return json({ error: err instanceof Error ? err.message : "Ett internt fel uppstod" }, 500);
@@ -45,12 +47,15 @@ export default {
     },
   } satisfies ExportedHandler<Env>;
 
-async function route(request: Request, env: Env, url: URL): Promise<Response> {
+async function route(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = url;
 
   if (pathname === "/signup" && request.method === "POST") return handleSignup(request, env);
   if (pathname === "/login" && request.method === "POST") return handleLogin(request, env);
   if (pathname === "/logout" && request.method === "POST") return handleLogout(request, env);
+
+  if (pathname === "/api/auth/forgot-password" && request.method === "POST") return handlePasswordRecovery(request, env, ctx, false);
+  if (pathname === "/api/auth/reset-password" && request.method === "POST") return handlePasswordRecovery(request, env, ctx, true);
 
   // OAuth-inloggning (publik — sker före inloggning).
   const oauthStart = pathname.match(/^\/api\/oauth\/([a-z]+)$/);
@@ -302,18 +307,88 @@ async function handleSignup(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function readAuthBody(request: Request): Promise<Record<string, unknown>> {
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    throw new AuthRequestError("Använd formuläret för att skicka begäran.", 415);
+  }
+  // Bounded read, including chunked requests without Content-Length.
+  const reader = request.body?.getReader();
+  if (!reader) throw new AuthRequestError("Fyll i formuläret.");
+  const parts: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.length;
+    if (length > 16384) { await reader.cancel(); throw new AuthRequestError("Begäran är för stor.", 413); }
+    parts.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+  let data: unknown;
+  try { data = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new AuthRequestError("Ogiltig begäran."); }
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new AuthRequestError("Ogiltig begäran.");
+  return data as Record<string, unknown>;
+}
+
+function authFailure(err: unknown): Response {
+  if (err instanceof InvalidCredentials) return authJson({ error: err.message }, 401);
+  if (err instanceof AuthRequestError) return authJson({ error: err.message }, err.status);
+  console.error("authentication_service_unavailable");
+  return authJson({ error: "Inloggningstjänsten är tillfälligt otillgänglig. Försök igen senare. Ditt lösenord har inte ändrats." }, 503);
+}
+
+function authJson(body: unknown, status = 200): Response {
+  const response = json(body, status);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function verifyAuthOrigin(request: Request): void {
+  const origin = request.headers.get("Origin");
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
+    throw new AuthRequestError("Öppna formuläret på Produkter och försök igen.", 403);
+  }
+}
+
 async function handleLogin(request: Request, env: Env): Promise<Response> {
-  // Bromsa lösenordsgissning. Appen är publik (ingen Access-grind längre).
-  if (!(await allowRateLimited(env, "login", clientIp(request), 10, 600))) {
-    return json({ error: "För många inloggningsförsök. Försök igen om en stund." }, 429);
-  }
-  const data = await request.json<{ email?: string; password?: string }>().catch(() => ({}) as { email?: string; password?: string });
   try {
-    const { sessionToken } = await login(env, data.email ?? "", data.password ?? "");
-    return withSessionCookie({ ok: true }, sessionToken);
-  } catch (err) {
-    return json({ error: err instanceof Error ? err.message : "Inloggning misslyckades" }, 401);
-  }
+    verifyAuthOrigin(request);
+    if (!(await allowRateLimited(env, "login", clientIp(request), 10, 600))) {
+      throw new AuthRequestError("För många inloggningsförsök. Försök igen om en stund.", 429);
+    }
+    const data = await readAuthBody(request);
+    if (typeof data.email !== "string" || data.email.length > 254 || typeof data.password !== "string" || data.password.length > 1024) {
+      throw new AuthRequestError("Ange e-postadress och lösenord.");
+    }
+    const { sessionToken } = await login(env, data.email, data.password);
+    const response = withSessionCookie({ ok: true }, sessionToken);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  } catch (err) { return authFailure(err); }
+}
+
+async function handlePasswordRecovery(request: Request, env: Env, ctx: ExecutionContext, complete: boolean): Promise<Response> {
+  try {
+    verifyAuthOrigin(request);
+    if (!complete && !env.RESEND_API_KEY) {
+      throw new AuthRequestError("Lösenordsåterställning via mejl är tillfälligt otillgänglig. Försök igen senare.", 503);
+    }
+    if (!await resetRateLimit(env, complete ? "reset-complete" : "reset-request", clientIp(request), complete ? 20 : 10)) {
+      throw new AuthRequestError("För många försök. Försök igen om en timme.", 429);
+    }
+    const data = await readAuthBody(request);
+    if (complete) {
+      await resetPassword(env, data.token, data.password);
+      const response = authJson({ ok: true, message: "Lösenordet är ändrat. Logga in med ditt nya lösenord. Tidigare sessioner har avslutats." });
+      response.headers.set("Set-Cookie", "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+      return response;
+    }
+    const email = normalizeResetEmail(data.email);
+    if (await resetRateLimit(env, "reset-email", email, 3)) ctx.waitUntil(deliverPasswordReset(env, email));
+    return authJson({ ok: true, message: RESET_MESSAGE }, 202);
+  } catch (err) { return authFailure(err); }
 }
 
 async function handleLogout(request: Request, env: Env): Promise<Response> {

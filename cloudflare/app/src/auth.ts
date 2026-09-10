@@ -8,6 +8,8 @@ import { hashPassword, verifyPassword, randomId, sha256Hex } from "../../shared/
 import { withD1Session } from "../../shared/d1-session";
 import { createAccount, getAccountByEmail, getAccountById, type Env } from "./db";
 
+import { InvalidCredentials } from "./auth-errors";
+
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 dagar, samma som politiker-webapp
 
 export async function signup(env: Env, email: string, password: string): Promise<{ accountId: string }> {
@@ -25,11 +27,11 @@ export async function signup(env: Env, email: string, password: string): Promise
 
 export async function login(env: Env, email: string, password: string): Promise<{ sessionToken: string }> {
   const account = await getAccountByEmail(env.DB, email);
-  if (!account) throw new Error("Fel e-post eller lösenord");
+  if (!account) throw new InvalidCredentials();
   const ok = await verifyPassword(password, account.password_hash, account.password_salt);
-  if (!ok) throw new Error("Fel e-post eller lösenord");
+  if (!ok) throw new InvalidCredentials();
 
-  return { sessionToken: await createSession(env, account.id) };
+  return { sessionToken: await createSession(env, account.id, account.auth_version) };
 }
 
 // KV-nycklar härleds alltid från en hash av sessionstoken, aldrig token direkt.
@@ -44,9 +46,11 @@ async function sessionKey(sessionToken: string): Promise<string> {
 }
 
 // Skapar en session för ett konto-id (delas av lösenordslogin och OAuth-callback).
-export async function createSession(env: Env, accountId: string): Promise<string> {
+export async function createSession(env: Env, accountId: string, expectedVersion?: number): Promise<string> {
+  const account = await getAccountById(withD1Session(env, "first-primary").DB, accountId);
+  if (!account || (expectedVersion !== undefined && account.auth_version !== expectedVersion)) throw new InvalidCredentials();
   const sessionToken = randomId() + randomId();
-  await env.SESSIONS.put(await sessionKey(sessionToken), accountId, { expirationTtl: SESSION_TTL_SECONDS });
+  await env.SESSIONS.put(await sessionKey(sessionToken), JSON.stringify({ accountId, authVersion: account.auth_version }), { expirationTtl: SESSION_TTL_SECONDS });
   return sessionToken;
 }
 
@@ -81,7 +85,17 @@ export async function getAccountFromSession(env: Env, sessionToken: string | nul
   }
 
   if (!accountId) return null;
-  return getAccountById(withD1Session(env, "first-primary").DB, accountId);
+  let version = 0;
+  if (accountId.startsWith("{")) {
+    try {
+      const stored = JSON.parse(accountId);
+      if (typeof stored.accountId !== "string" || !Number.isInteger(stored.authVersion)) return null;
+      accountId = stored.accountId;
+      version = stored.authVersion;
+    } catch { return null; }
+  }
+  const account = await getAccountById(withD1Session(env, "first-primary").DB, accountId!);
+  return account && account.auth_version === version ? account : null;
 }
 
 function getSessionTokenFromCookie(request: Request): string | null {

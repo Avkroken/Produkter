@@ -1,8 +1,9 @@
 async function api(path, options = {}) {
-  const resp = await fetch(path, {
+  let resp;
+  try { resp = await fetch(path, {
     ...options,
     headers: { ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}), ...options.headers },
-  });
+  }); } catch { throw new Error("Kunde inte nå tjänsten. Kontrollera anslutningen och försök igen."); }
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.error || `Fel (${resp.status})`);
   return data;
@@ -25,7 +26,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   const form = new FormData(e.target);
   try {
     await api("/login", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password") }) });
-    showApp();
+    await showApp();
   } catch (err) {
     document.getElementById("login-msg").textContent = err.message;
   }
@@ -36,7 +37,7 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
   const form = new FormData(e.target);
   try {
     await api("/signup", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password") }) });
-    showApp();
+    await showApp();
   } catch (err) {
     document.getElementById("signup-msg").textContent = err.message;
   }
