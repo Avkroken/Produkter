@@ -68,7 +68,7 @@
     // och båda client_secret sätts som wrangler secrets. Callback-URL:er registrerade i
     // respektive OAuth-app: produkter.denied.se/api/oauth/<provider>/callback.
     "OAUTH_GOOGLE_CLIENT_ID": "551393755081-gtbd45b203icbbp0cu0q0p4meppli2fu.apps.googleusercontent.com",
-    "MAIL_FROM": "noreply@send.denied.se",
+    "MAIL_FROM": "noreply@denied.se",
     "ADMIN_EMAIL": "anders.eriksson@denied.se"
   }
 }
