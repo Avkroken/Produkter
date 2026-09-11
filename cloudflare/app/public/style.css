@@ -25,6 +25,18 @@ body {
   max-width: 700px;
 }
 .auth-card { max-width: 360px; margin-top: 80px; }
+.auth-card a:not(.oauth-btn),
+.auth-card a:not(.oauth-btn):visited {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.auth-card a:not(.oauth-btn):hover { color: var(--text); }
+.auth-card a:not(.oauth-btn):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-bottom: 8px; }
 .hint { color: var(--hint); font-size: 0.9rem; }
