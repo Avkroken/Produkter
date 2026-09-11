@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ensureAuthSchema } from "./migrate-app-auth.mjs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 const require = createRequire(new URL("../app/package.json", import.meta.url));
@@ -10,10 +11,10 @@ const schema = await readFile(new URL("../infra/schema.sql", import.meta.url), "
 const cryptoBundle = await build({ entryPoints: [new URL("../shared/crypto.ts", import.meta.url).pathname], bundle: true, write: false, format: "esm", platform: "node" });
 const { hashPassword, sha256Hex } = await import(`data:text/javascript;base64,${Buffer.from(cryptoBundle.outputFiles[0].text).toString("base64")}`);
 
-async function fixture({ mail = true, dbReady = true } = {}) {
+async function fixture({ mail = true, dbReady = true, mailStatus = 200 } = {}) {
   const messages = [];
   const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: outputFiles[0].text, compatibilityDate: "2026-06-01", d1Databases: ["DB"], kvNamespaces: ["SESSIONS"], bindings: mail ? { RESEND_API_KEY: "test-only", MAIL_FROM: "noreply@send.denied.se" } : {},
-    outboundService: async request => { assert.equal(new URL(request.url).hostname, "api.resend.com"); messages.push(await request.json()); return new Response('{"id":"test"}'); },
+    outboundService: async request => { assert.equal(new URL(request.url).hostname, "api.resend.com"); messages.push(await request.json()); return new Response('{"id":"test"}', { status: mailStatus }); },
   }));
   const db = await mf.getD1Database("DB");
   if (dbReady) {
@@ -85,5 +86,40 @@ test("per-address mail throttling stays generic and IP limit rejects excess", as
     for(let i=0;i<10;i++) assert.equal((await f.post("/api/auth/forgot-password",{email:"person@example.com"})).status,202);
     assert.equal(f.messages.length,3);
     assert.equal((await f.post("/api/auth/forgot-password",{email:"person@example.com"})).status,429);
+  } finally { await f.mf.dispose(); }
+});
+
+
+test("mail failure preserves a possibly delivered token until expiry", async () => {
+  const f = await fixture({ mailStatus: 500 });
+  try {
+    assert.equal((await f.post("/api/auth/forgot-password", { email: "person@example.com" })).status, 202);
+    const link = f.messages[0].text.match(/https:\/\/\S+/)[0];
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get("token");
+    assert.equal((await f.post("/api/auth/reset-password", { token, password: "new-password" })).status, 200);
+  } finally { await f.mf.dispose(); }
+});
+
+test("signup rejects passwords that subsequent login would reject", async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.post("/signup", { email: "new@example.com", password: "a".repeat(1025) })).status, 400);
+    assert.equal(await f.db.prepare("SELECT id FROM accounts WHERE email='new@example.com'").first(), null);
+  } finally { await f.mf.dispose(); }
+});
+
+test("deployment migration is additive, repeatable and indexes expiry cleanup", async () => {
+  const f = await fixture({ dbReady: false });
+  try {
+    const query = async sql => (await f.db.batch(sql.split(";").map(s => s.trim()).filter(Boolean).map(s => f.db.prepare(s)))).flatMap(r => r.results);
+    await assert.rejects(ensureAuthSchema(query), /Kontotabellen saknas/);
+    await f.db.exec("CREATE TABLE accounts (id TEXT PRIMARY KEY, password_hash TEXT NOT NULL); INSERT INTO accounts VALUES ('existing','unchanged');");
+    await ensureAuthSchema(query);
+    await ensureAuthSchema(query);
+    assert.deepEqual(await f.db.prepare("SELECT * FROM accounts").first(), { id: "existing", password_hash: "unchanged", auth_version: 0 });
+    for (const table of ["password_resets", "auth_rate_limits"]) {
+      const plan = await query(`EXPLAIN QUERY PLAN DELETE FROM ${table} WHERE expires_at < 1`);
+      assert.match(JSON.stringify(plan), /USING.*INDEX/);
+    }
   } finally { await f.mf.dispose(); }
 });

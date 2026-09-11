@@ -15,6 +15,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 dagar, samma som politiker-
 export async function signup(env: Env, email: string, password: string): Promise<{ accountId: string }> {
   email = email.trim().toLowerCase();
   if (!email || !email.includes("@")) throw new Error("Ogiltig e-postadress");
+  if (typeof password !== "string" || password.length > 1024) throw new Error("Lösenordet får vara högst 1024 tecken");
   if (password.length < 8) throw new Error("Lösenordet måste vara minst 8 tecken");
 
   const existing = await getAccountByEmail(env.DB, email);

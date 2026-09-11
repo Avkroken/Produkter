@@ -46,7 +46,7 @@ export async function deliverPasswordReset(env: Env, email: string): Promise<voi
     const sent = await sendEmail(env, account.email, "Återställ ditt lösenord på Produkter",
       `Välj ett nytt lösenord via länken nedan. Länken gäller i 20 minuter och kan användas en gång.\n\n${link}\n\nOm du inte begärde detta kan du ignorera mejlet. Ditt lösenord har inte ändrats.`);
     if (!sent) {
-      await env.DB.prepare("DELETE FROM password_resets WHERE token_hash = ?").bind(digest).run();
+      // A timeout can occur after Resend accepted the message. Keep the token until expiry.
       console.error("password_reset_delivery_failed");
     }
   } catch { console.error("password_reset_delivery_failed"); }

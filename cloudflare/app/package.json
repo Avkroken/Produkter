@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --remote",
-    "deploy": "wrangler deploy --strict",
+    "deploy": "node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
     "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
   },
