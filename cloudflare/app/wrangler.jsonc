@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "produkter",
-  "main": "src/worker.ts",
+  "main": "src/access-worker.ts",
   "workers_dev": false,
   "preview_urls": false,
   "compatibility_date": "2026-06-01",
@@ -27,7 +27,7 @@
     "directory": "./public",
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/signup", "/login", "/logout", "/underlag"]
+    "run_worker_first": ["/", "/api/*", "/signup", "/login", "/logout", "/underlag", "/admin", "/admin/*"]
   },
   "services": [
     {
