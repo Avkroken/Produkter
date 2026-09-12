@@ -619,7 +619,7 @@ interface ProductRow {
   site_name: string | null;
 }
 
-async function describeProduct(req: Request, env: Env): Promise<Response> {
+export async function describeProduct(req: Request, env: Env): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { url?: unknown; id?: unknown; refresh?: unknown };
   // Validerar kontraktet innan SQL-predikatet väljs (CodeRabbit-fynd, PR #29)
   // — den gamla koden kastade inte typ på url/id och lät url tyst vinna om

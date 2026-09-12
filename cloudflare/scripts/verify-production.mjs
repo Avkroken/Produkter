@@ -14,7 +14,9 @@ const PROFILES = {
   engine: {
     name: "produkter-motor",
     checks: [
-      { kind: "json-ok", url: "https://motor.denied.se/health", status: 200 },
+      // Detta verifierar endast skyddet mot publik exponering. Intern RPC
+      // och databaskontakt verifieras separat; en blockerad URL är inte hälsa.
+      { kind: "protected", url: "https://motor.denied.se/health" },
     ],
   },
 };
@@ -26,6 +28,16 @@ export function productionProfile(key) {
 }
 
 export async function validateProductionResponse(check, response) {
+  if (check.kind === "protected") {
+    if (response.status === 401 || response.status === 403) return;
+    if (response.status === 302) {
+      const location = response.headers.get("location");
+      const destination = location ? new URL(location, check.url) : null;
+      if (destination?.protocol === "https:" && destination.hostname.endsWith(".cloudflareaccess.com")
+          && destination.pathname.startsWith("/cdn-cgi/access/login/")) return;
+    }
+    throw new Error(`${check.url} did not enforce the expected public access restriction (status ${response.status})`);
+  }
   if (response.status !== check.status) {
     throw new Error(`${check.url} returned ${response.status}, expected ${check.status}`);
   }
@@ -65,7 +77,7 @@ export async function checkProduction(profile, {
     }));
 
     if (failures.length === 0) {
-      console.log(`${profile.name}: production checks passed on attempt ${attempt}`);
+      console.log(`${profile.name}: production HTTP checks passed on attempt ${attempt}`);
       return;
     }
 

@@ -1,10 +1,12 @@
-import core, { completeRedundantDetailJobs } from "./index";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import core, { completeRedundantDetailJobs, describeProduct } from "./index";
 import { bearbetaCrawlKo, type CrawlEnv } from "./crawl";
 import { bearbetaRenderKo, type WebblasareEnv } from "./webblasare";
 import { withD1Session } from "../../shared/d1-session";
 
 interface Env extends WebblasareEnv, CrawlEnv {
   DB: D1Database;
+  AI: Ai;
   INGEST_API_KEY: string;
   BROWSER_RENDER_LIMIT?: string;
   BROWSER_MAX_LIST_PAGES?: string;
@@ -18,7 +20,7 @@ type CoreHandler = {
 
 const coreHandler = core as unknown as CoreHandler;
 
-export default {
+const handler = {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     env = withD1Session(env, "first-primary");
     // Core-handlern är sanningskälla för schemaläggning, lease-recovery,
@@ -57,3 +59,32 @@ export default {
     return coreHandler.fetch(request, withD1Session(env, "first-primary"), ctx);
   },
 } satisfies ExportedHandler<Env>;
+
+// RPC nås enbart via en uttrycklig Service Binding. Publik HTTP fortsätter
+// genom den separata fetch-handlerns autentisering och Access-policy.
+export default class Engine extends WorkerEntrypoint<Env> {
+  fetch(request: Request): Promise<Response> {
+    return handler.fetch(request, this.env, this.ctx);
+  }
+
+  scheduled(controller: ScheduledController): Promise<void> {
+    return handler.scheduled(controller, this.env, this.ctx);
+  }
+
+  async describe(id: number): Promise<Response> {
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return Response.json({ error: "ogiltigt produkt-id" }, { status: 400 });
+    }
+    try {
+      const request = new Request("https://produkter-motor.internal/describe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      return await describeProduct(request, withD1Session(this.env, "first-primary"));
+    } catch (error) {
+      console.error("engine rpc-fel:", error);
+      return Response.json({ error: "internt fel" }, { status: 500 });
+    }
+  }
+}
