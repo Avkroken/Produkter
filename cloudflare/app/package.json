@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --remote",
+    "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && wrangler deploy --dry-run",
     "deploy": "node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
     "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
