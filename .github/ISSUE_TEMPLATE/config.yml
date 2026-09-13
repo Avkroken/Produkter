@@ -1,5 +1,2 @@
 blank_issues_enabled: false
-contact_links:
-  - name: Report a security vulnerability privately
-    url: https://github.com/Avkroken/Produkter/security/advisories/new
-    about: Do not disclose new vulnerabilities in a public issue.
+contact_links: []
