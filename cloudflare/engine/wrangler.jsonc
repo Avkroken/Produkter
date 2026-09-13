@@ -4,6 +4,8 @@
   "ai": { "binding": "AI" },
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
+  "workers_dev": false,
+  "preview_urls": false,
   // @cloudflare/playwright requires nodejs_compat and a compatibility date >= 2025-09-15.
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
@@ -40,8 +42,8 @@
     "BROWSER_RENDER_LIMIT": "3",
     "BROWSER_MAX_LIST_PAGES": "20"
   },
-  // Custom domain — kontots workers.dev blockeras (403/1050); övriga Workers
-  // använder också custom domains. HTTP-endpoints skyddas av X-API-Key.
+  // Custom domain. workers.dev och preview-URL:er är avstängda.
+  // /health är publik; övriga HTTP-endpoints skyddas av X-API-Key.
   "routes": [
     { "pattern": "motor.denied.se", "custom_domain": true }
   ],
