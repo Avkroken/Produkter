@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { accessRoute } from "../app/src/access-routing.ts";
 
-test("public and admin shells are served from Workers Assets", () => {
+test("public and admin shells are served from Workers Assets without index redirect", () => {
   for (const [method, pathname] of [
     ["GET", "/"],
     ["HEAD", "/"],
@@ -16,7 +16,7 @@ test("public and admin shells are served from Workers Assets", () => {
   ]) {
     assert.deepEqual(accessRoute(method, pathname), {
       type: "asset",
-      pathname: "/index.html",
+      pathname,
     });
   }
 });
