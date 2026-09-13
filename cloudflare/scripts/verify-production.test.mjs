@@ -12,12 +12,19 @@ test("only Workers with public HTTP checks have verification profiles", () => {
   assert.throws(() => productionProfile("processor"), /No public production verification profile/);
 });
 
-test("status smoke check fails closed", async () => {
+test("status smoke check fails closed and reports redirect target", async () => {
   const check = { kind: "status", url: "https://example.invalid/", status: 200 };
   await validateProductionResponse(check, new Response("ok", { status: 200 }));
   await assert.rejects(
     validateProductionResponse(check, new Response("blocked", { status: 403 })),
     /expected 200/,
+  );
+  await assert.rejects(
+    validateProductionResponse(check, new Response(null, {
+      status: 307,
+      headers: { location: "/redirected" },
+    })),
+    /location https:\/\/example\.invalid\/redirected/,
   );
 });
 
@@ -37,23 +44,25 @@ test("JSON health check requires { ok: true }", async () => {
   );
 });
 
-test("engine verification checks protection, not a public health response", async () => {
+test("engine verification expects the intentionally public health endpoint", async () => {
   const check = productionProfile("engine").checks[0];
-  assert.equal(check.kind, "protected");
-  for (const status of [401, 403]) {
-    await validateProductionResponse(check, new Response("restricted", { status }));
-  }
-  await validateProductionResponse(check, new Response(null, {
-    status: 302,
-    headers: { location: "https://example-admin.cloudflareaccess.com/cdn-cgi/access/login/motor.example.org" },
+  assert.deepEqual(check, {
+    kind: "json-ok",
+    url: "https://motor.denied.se/health",
+    status: 200,
+  });
+
+  await validateProductionResponse(check, new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
   }));
+
   for (const response of [
-    Response.json({ ok: true }),
-    new Response("failed", { status: 500 }),
-    new Response(null, { status: 302 }),
-    new Response(null, { status: 302, headers: { location: "https://unrelated.example/" } }),
-    new Response(null, { status: 302, headers: { location: "https://example-admin.cloudflareaccess.com.evil.example/cdn-cgi/access/login/motor.example.org" } }),
+    new Response("restricted", { status: 401 }),
+    new Response("restricted", { status: 403 }),
+    new Response(null, { status: 302, headers: { location: "https://example-admin.cloudflareaccess.com/cdn-cgi/access/login/motor.example.org" } }),
+    new Response(JSON.stringify({ ok: false }), { status: 200, headers: { "content-type": "application/json" } }),
   ]) {
-    await assert.rejects(validateProductionResponse(check, response), /expected public access restriction/);
+    await assert.rejects(validateProductionResponse(check, response));
   }
 });
