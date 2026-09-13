@@ -30,6 +30,21 @@ test("ordinary canonical admin API paths rewrite to existing handlers", () => {
   });
 });
 
+test("critical admin shell serves the SPA after Access challenge", () => {
+  assert.deepEqual(accessRoute("GET", "/admin/critical"), {
+    type: "asset",
+    pathname: "/index.html",
+  });
+  assert.deepEqual(accessRoute("GET", "/admin/critical/"), {
+    type: "asset",
+    pathname: "/index.html",
+  });
+  assert.deepEqual(accessRoute("HEAD", "/admin/critical"), {
+    type: "asset",
+    pathname: "/index.html",
+  });
+});
+
 test("critical admin mutations are forced into /admin/critical", () => {
   const cases = [
     ["POST", "/admin/api/accounts/abc/role", "/admin/critical/api/accounts/abc/role"],
@@ -115,7 +130,6 @@ test("public and normal signed-in APIs stay outside the admin namespace", () => 
     ["GET", "/api/status"],
     ["GET", "/api/oauth/google"],
     ["GET", "/underlag"],
-    ["GET", "/admin/critical"],
   ]) {
     assert.deepEqual(accessRoute(method, pathname), { type: "pass", pathname });
   }
