@@ -1,35 +1,21 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const adminApiPrefix = "/admin/api/";
-  const criticalAdminApiPrefix = "/admin/critical/api/";
   const isAdminPage = () => location.pathname === "/admin" || location.pathname.startsWith("/admin/");
-  const isCriticalAdminPage = () => location.pathname === "/admin/critical" || location.pathname.startsWith("/admin/critical/");
 
   function requestMethod(input, init) {
     return String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
   }
 
-  function isCriticalLegacyRequest(method, pathname) {
-    if (method === "POST" && /^\/api\/admin\/accounts\/[^/]+\/role$/.test(pathname)) return true;
-    if (method === "POST" && /^\/api\/admin\/sites\/\d+$/.test(pathname)) return true;
-    if (method === "POST" && pathname === "/api/settings/key") return true;
-    if (method === "DELETE" && /^\/api\/settings\/key\/[^/]+$/.test(pathname)) return true;
-    return false;
-  }
-
-  function protectedPrefix(method, legacyPathname) {
-    return isCriticalLegacyRequest(method, legacyPathname) ? criticalAdminApiPrefix : adminApiPrefix;
-  }
-
   function canonicalAdminPath(method, pathname) {
     if (pathname.startsWith("/api/admin/")) {
-      return `${protectedPrefix(method, pathname)}${pathname.slice("/api/admin/".length)}`;
+      return `${adminApiPrefix}${pathname.slice("/api/admin/".length)}`;
     }
 
     for (const root of ["settings", "upload", "jobs"]) {
       const prefix = `/api/${root}`;
       if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
-        return `${protectedPrefix(method, pathname)}${pathname.slice("/api/".length)}`;
+        return `${adminApiPrefix}${pathname.slice("/api/".length)}`;
       }
     }
 
@@ -48,11 +34,9 @@
     return new Promise(() => {});
   }
 
-  function enterCriticalAdmin() {
-    const target = new URL(location.href);
-    target.pathname = "/admin/critical";
-    location.assign(target.toString());
-    return new Promise(() => {});
+  if (location.pathname === "/admin/critical" || location.pathname.startsWith("/admin/critical/")) {
+    location.replace(`/admin${location.search}${location.hash}`);
+    return;
   }
 
   window.fetch = async (input, init) => {
@@ -66,12 +50,7 @@
 
     if (url.origin === location.origin) {
       const canonical = canonicalAdminPath(method, url.pathname);
-      if (canonical) {
-        if (canonical.startsWith(criticalAdminApiPrefix) && !isCriticalAdminPage()) {
-          return enterCriticalAdmin();
-        }
-        url.pathname = canonical;
-      }
+      if (canonical) url.pathname = canonical;
     }
 
     const rewritten = input instanceof Request

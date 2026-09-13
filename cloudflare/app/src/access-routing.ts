@@ -1,6 +1,7 @@
 const ADMIN_API_PREFIX = "/admin/api/";
-const CRITICAL_ADMIN_API_PREFIX = "/admin/critical/api/";
 const LEGACY_ADMIN_API_PREFIX = "/api/admin/";
+const LEGACY_CRITICAL_PAGE = "/admin/critical";
+const LEGACY_CRITICAL_API_PREFIX = "/admin/critical/api/";
 
 export type AccessRoute =
   | { type: "pass"; pathname: string }
@@ -8,32 +9,17 @@ export type AccessRoute =
   | { type: "redirect"; pathname: string }
   | { type: "asset"; pathname: string };
 
-function isCriticalLegacyRequest(method: string, pathname: string): boolean {
-  const upperMethod = method.toUpperCase();
-
-  if (upperMethod === "POST" && /^\/api\/admin\/accounts\/[^/]+\/role$/.test(pathname)) return true;
-  if (upperMethod === "POST" && /^\/api\/admin\/sites\/\d+$/.test(pathname)) return true;
-  if (upperMethod === "POST" && pathname === "/api/settings/key") return true;
-  if (upperMethod === "DELETE" && /^\/api\/settings\/key\/[^/]+$/.test(pathname)) return true;
-
-  return false;
-}
-
-function protectedPrefix(method: string, legacyPathname: string): string {
-  return isCriticalLegacyRequest(method, legacyPathname) ? CRITICAL_ADMIN_API_PREFIX : ADMIN_API_PREFIX;
-}
-
 function canonicalForLegacy(method: string, pathname: string): string | null {
   const upperMethod = method.toUpperCase();
 
   if (pathname.startsWith(LEGACY_ADMIN_API_PREFIX)) {
-    return `${protectedPrefix(method, pathname)}${pathname.slice(LEGACY_ADMIN_API_PREFIX.length)}`;
+    return `${ADMIN_API_PREFIX}${pathname.slice(LEGACY_ADMIN_API_PREFIX.length)}`;
   }
 
   for (const root of ["settings", "upload", "jobs"]) {
     const prefix = `/api/${root}`;
     if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
-      return `${protectedPrefix(method, pathname)}${pathname.slice("/api/".length)}`;
+      return `${ADMIN_API_PREFIX}${pathname.slice("/api/".length)}`;
     }
   }
 
@@ -48,10 +34,10 @@ function canonicalForLegacy(method: string, pathname: string): string | null {
   return null;
 }
 
-function internalForCanonical(method: string, pathname: string, prefix: string): string | null {
-  if (!pathname.startsWith(prefix)) return null;
+function internalForAdmin(method: string, pathname: string): string | null {
+  if (!pathname.startsWith(ADMIN_API_PREFIX)) return null;
 
-  const suffix = pathname.slice(prefix.length);
+  const suffix = pathname.slice(ADMIN_API_PREFIX.length);
   if (!suffix) return null;
 
   const root = suffix.split("/", 1)[0];
@@ -70,38 +56,27 @@ function internalForCanonical(method: string, pathname: string, prefix: string):
 function isSpaShellRequest(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return false;
-
-  return pathname === "/"
-    || pathname === "/admin"
-    || pathname === "/admin/"
-    || pathname === "/admin/critical"
-    || pathname === "/admin/critical/";
+  return pathname === "/" || pathname === "/admin" || pathname === "/admin/";
 }
 
 export function accessRoute(method: string, pathname: string): AccessRoute {
+  if (pathname === LEGACY_CRITICAL_PAGE || pathname === `${LEGACY_CRITICAL_PAGE}/`) {
+    return { type: "redirect", pathname: "/admin" };
+  }
+
+  if (pathname.startsWith(LEGACY_CRITICAL_API_PREFIX)) {
+    return {
+      type: "redirect",
+      pathname: `${ADMIN_API_PREFIX}${pathname.slice(LEGACY_CRITICAL_API_PREFIX.length)}`,
+    };
+  }
+
   if (isSpaShellRequest(method, pathname)) {
-    // Fetch the original route from Workers Assets. With SPA fallback enabled,
-    // this serves index.html without triggering the canonical /index.html -> / redirect.
     return { type: "asset", pathname };
   }
 
-  const criticalInternal = internalForCanonical(method, pathname, CRITICAL_ADMIN_API_PREFIX);
-  if (criticalInternal) {
-    const canonical = canonicalForLegacy(method, criticalInternal);
-    if (canonical && canonical.startsWith(CRITICAL_ADMIN_API_PREFIX)) {
-      return { type: "rewrite", pathname: criticalInternal };
-    }
-    if (canonical) return { type: "redirect", pathname: canonical };
-  }
-
-  const adminInternal = internalForCanonical(method, pathname, ADMIN_API_PREFIX);
-  if (adminInternal) {
-    const canonical = canonicalForLegacy(method, adminInternal);
-    if (canonical && canonical.startsWith(CRITICAL_ADMIN_API_PREFIX)) {
-      return { type: "redirect", pathname: canonical };
-    }
-    return { type: "rewrite", pathname: adminInternal };
-  }
+  const adminInternal = internalForAdmin(method, pathname);
+  if (adminInternal) return { type: "rewrite", pathname: adminInternal };
 
   const canonical = canonicalForLegacy(method, pathname);
   if (canonical) return { type: "redirect", pathname: canonical };
