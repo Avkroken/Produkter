@@ -67,10 +67,19 @@ function internalForCanonical(method: string, pathname: string, prefix: string):
   return `/api/admin/${suffix}`;
 }
 
-export function accessRoute(method: string, pathname: string): AccessRoute {
+function isSpaShellRequest(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
-  if ((upperMethod === "GET" || upperMethod === "HEAD")
-      && (pathname === "/admin/critical" || pathname === "/admin/critical/")) {
+  if (upperMethod !== "GET" && upperMethod !== "HEAD") return false;
+
+  return pathname === "/"
+    || pathname === "/admin"
+    || pathname === "/admin/"
+    || pathname === "/admin/critical"
+    || pathname === "/admin/critical/";
+}
+
+export function accessRoute(method: string, pathname: string): AccessRoute {
+  if (isSpaShellRequest(method, pathname)) {
     return { type: "asset", pathname: "/index.html" };
   }
 

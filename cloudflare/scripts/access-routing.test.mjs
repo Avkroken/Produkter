@@ -3,6 +3,24 @@ import test from "node:test";
 
 import { accessRoute } from "../app/src/access-routing.ts";
 
+test("public and admin shells are served from Workers Assets", () => {
+  for (const [method, pathname] of [
+    ["GET", "/"],
+    ["HEAD", "/"],
+    ["GET", "/admin"],
+    ["GET", "/admin/"],
+    ["HEAD", "/admin"],
+    ["GET", "/admin/critical"],
+    ["GET", "/admin/critical/"],
+    ["HEAD", "/admin/critical"],
+  ]) {
+    assert.deepEqual(accessRoute(method, pathname), {
+      type: "asset",
+      pathname: "/index.html",
+    });
+  }
+});
+
 test("ordinary canonical admin API paths rewrite to existing handlers", () => {
   assert.deepEqual(accessRoute("GET", "/admin/api/stats"), {
     type: "rewrite",
@@ -27,21 +45,6 @@ test("ordinary canonical admin API paths rewrite to existing handlers", () => {
   assert.deepEqual(accessRoute("PATCH", "/admin/api/suggestions/abc"), {
     type: "rewrite",
     pathname: "/api/suggestions/abc",
-  });
-});
-
-test("critical admin shell serves the SPA after Access challenge", () => {
-  assert.deepEqual(accessRoute("GET", "/admin/critical"), {
-    type: "asset",
-    pathname: "/index.html",
-  });
-  assert.deepEqual(accessRoute("GET", "/admin/critical/"), {
-    type: "asset",
-    pathname: "/index.html",
-  });
-  assert.deepEqual(accessRoute("HEAD", "/admin/critical"), {
-    type: "asset",
-    pathname: "/index.html",
   });
 });
 
