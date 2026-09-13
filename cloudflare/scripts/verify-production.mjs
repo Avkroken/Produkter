@@ -14,9 +14,9 @@ const PROFILES = {
   engine: {
     name: "produkter-motor",
     checks: [
-      // Detta verifierar endast skyddet mot publik exponering. Intern RPC
-      // och databaskontakt verifieras separat; en blockerad URL är inte hälsa.
-      { kind: "protected", url: "https://motor.denied.se/health" },
+      // /health är ett avsiktligt publikt M2M-undantag. Övriga HTTP-endpoints
+      // skyddas av egen X-API-Key och intern trafik använder Service Bindings.
+      { kind: "json-ok", url: "https://motor.denied.se/health", status: 200 },
     ],
   },
 };
@@ -38,8 +38,11 @@ export async function validateProductionResponse(check, response) {
     }
     throw new Error(`${check.url} did not enforce the expected public access restriction (status ${response.status})`);
   }
+
   if (response.status !== check.status) {
-    throw new Error(`${check.url} returned ${response.status}, expected ${check.status}`);
+    const location = response.headers.get("location");
+    const redirect = location ? `; location ${new URL(location, check.url).toString()}` : "";
+    throw new Error(`${check.url} returned ${response.status}, expected ${check.status}${redirect}`);
   }
 
   if (check.kind === "json-ok") {
