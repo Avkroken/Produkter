@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { accessRoute } from "../app/src/access-routing.ts";
 
-test("ordinary canonical admin API paths rewrite to existing handlers", () => {
+test("canonical admin API paths rewrite to existing handlers", () => {
   assert.deepEqual(accessRoute("GET", "/admin/api/stats"), {
     type: "rewrite",
     pathname: "/api/admin/stats",
@@ -30,68 +30,14 @@ test("ordinary canonical admin API paths rewrite to existing handlers", () => {
   });
 });
 
-test("critical admin mutations are forced into /admin/critical", () => {
-  const cases = [
-    ["POST", "/admin/api/accounts/abc/role", "/admin/critical/api/accounts/abc/role"],
-    ["POST", "/admin/api/sites/42", "/admin/critical/api/sites/42"],
-    ["POST", "/admin/api/settings/key", "/admin/critical/api/settings/key"],
-    ["DELETE", "/admin/api/settings/key/openai", "/admin/critical/api/settings/key/openai"],
-  ];
-
-  for (const [method, pathname, target] of cases) {
-    assert.deepEqual(accessRoute(method, pathname), {
-      type: "redirect",
-      pathname: target,
-    });
-  }
-});
-
-test("critical canonical APIs rewrite to existing internal handlers", () => {
-  assert.deepEqual(accessRoute("POST", "/admin/critical/api/accounts/abc/role"), {
-    type: "rewrite",
-    pathname: "/api/admin/accounts/abc/role",
-  });
-  assert.deepEqual(accessRoute("POST", "/admin/critical/api/sites/42"), {
-    type: "rewrite",
-    pathname: "/api/admin/sites/42",
-  });
-  assert.deepEqual(accessRoute("POST", "/admin/critical/api/settings/key"), {
-    type: "rewrite",
-    pathname: "/api/settings/key",
-  });
-  assert.deepEqual(accessRoute("DELETE", "/admin/critical/api/settings/key/openai"), {
-    type: "rewrite",
-    pathname: "/api/settings/key/openai",
-  });
-});
-
-test("ordinary operations cannot remain in the critical namespace", () => {
-  assert.deepEqual(accessRoute("GET", "/admin/critical/api/stats"), {
-    type: "redirect",
-    pathname: "/admin/api/stats",
-  });
-  assert.deepEqual(accessRoute("GET", "/admin/critical/api/settings"), {
-    type: "redirect",
-    pathname: "/admin/api/settings",
-  });
-});
-
-test("legacy privileged APIs redirect into the correct Access namespace", () => {
+test("legacy privileged APIs redirect into /admin", () => {
   assert.deepEqual(accessRoute("GET", "/api/admin/accounts"), {
     type: "redirect",
     pathname: "/admin/api/accounts",
   });
   assert.deepEqual(accessRoute("POST", "/api/settings/key"), {
     type: "redirect",
-    pathname: "/admin/critical/api/settings/key",
-  });
-  assert.deepEqual(accessRoute("POST", "/api/admin/accounts/abc/role"), {
-    type: "redirect",
-    pathname: "/admin/critical/api/accounts/abc/role",
-  });
-  assert.deepEqual(accessRoute("POST", "/api/admin/sites/42"), {
-    type: "redirect",
-    pathname: "/admin/critical/api/sites/42",
+    pathname: "/admin/api/settings/key",
   });
   assert.deepEqual(accessRoute("GET", "/api/jobs/abc/download"), {
     type: "redirect",
@@ -115,7 +61,6 @@ test("public and normal signed-in APIs stay outside the admin namespace", () => 
     ["GET", "/api/status"],
     ["GET", "/api/oauth/google"],
     ["GET", "/underlag"],
-    ["GET", "/admin/critical"],
   ]) {
     assert.deepEqual(accessRoute(method, pathname), { type: "pass", pathname });
   }
