@@ -2,6 +2,8 @@ import app from "./worker";
 import { accessRoute } from "./access-routing";
 import type { Env } from "./db";
 
+type AccessEnv = Env & { ASSETS: Fetcher };
+
 type AppHandler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 };
@@ -42,12 +44,16 @@ function injectAccessRouting(response: Response): Response {
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: AccessEnv, ctx: ExecutionContext): Promise<Response> {
     const externalUrl = new URL(request.url);
     const route = accessRoute(request.method, externalUrl.pathname);
 
     if (route.type === "redirect") {
       return redirectToCanonical(request, route.pathname);
+    }
+
+    if (route.type === "asset") {
+      return injectAccessRouting(await env.ASSETS.fetch(requestWithPath(request, route.pathname)));
     }
 
     const upstreamRequest = route.type === "rewrite"
@@ -60,4 +66,4 @@ export default {
     }
     return response;
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<AccessEnv>;

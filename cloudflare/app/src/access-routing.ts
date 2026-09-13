@@ -5,7 +5,8 @@ const LEGACY_ADMIN_API_PREFIX = "/api/admin/";
 export type AccessRoute =
   | { type: "pass"; pathname: string }
   | { type: "rewrite"; pathname: string }
-  | { type: "redirect"; pathname: string };
+  | { type: "redirect"; pathname: string }
+  | { type: "asset"; pathname: string };
 
 function isCriticalLegacyRequest(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
@@ -67,6 +68,12 @@ function internalForCanonical(method: string, pathname: string, prefix: string):
 }
 
 export function accessRoute(method: string, pathname: string): AccessRoute {
+  const upperMethod = method.toUpperCase();
+  if ((upperMethod === "GET" || upperMethod === "HEAD")
+      && (pathname === "/admin/critical" || pathname === "/admin/critical/")) {
+    return { type: "asset", pathname: "/index.html" };
+  }
+
   const criticalInternal = internalForCanonical(method, pathname, CRITICAL_ADMIN_API_PREFIX);
   if (criticalInternal) {
     const canonical = canonicalForLegacy(method, criticalInternal);
