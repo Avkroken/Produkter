@@ -1,18 +1,25 @@
-python:
+documentation:
   - changed-files:
-      - any-glob-to-any-file: ["**/*.py", "**/requirements*.txt"]
-javascript:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+enhancement:
   - changed-files:
-      - any-glob-to-any-file: "cloudflare/**"
-tests:
-  - changed-files:
-      - any-glob-to-any-file: ["tests/**", "scraper/tests/**", "**/*.test.mjs", "**/*.test.ts"]
-docker:
-  - changed-files:
-      - any-glob-to-any-file: ["**/Dockerfile", "docker-compose*.yml"]
-github_actions:
-  - changed-files:
-      - any-glob-to-any-file: ".github/**"
-dependencies:
-  - changed-files:
-      - any-glob-to-any-file: ["**/requirements*.txt", "**/package-lock.json", "**/package.json"]
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "CODEOWNERS"
+          - "src/**"
+          - "app/**"
+          - "lib/**"
+          - "test/**"
+          - "tests/**"
+          - "**/package.json"
+          - "**/package-lock.json"
+          - "**/pyproject.toml"
+          - "**/requirements*.txt"
+          - "**/Dockerfile"
+          - "**/Package.swift"
+          - "**/*.csproj"
+          - "**/*.gradle"
+          - "**/*.gradle.kts"
