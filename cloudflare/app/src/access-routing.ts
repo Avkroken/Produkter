@@ -80,7 +80,9 @@ function isSpaShellRequest(method: string, pathname: string): boolean {
 
 export function accessRoute(method: string, pathname: string): AccessRoute {
   if (isSpaShellRequest(method, pathname)) {
-    return { type: "asset", pathname: "/index.html" };
+    // Fetch the original route from Workers Assets. With SPA fallback enabled,
+    // this serves index.html without triggering the canonical /index.html -> / redirect.
+    return { type: "asset", pathname };
   }
 
   const criticalInternal = internalForCanonical(method, pathname, CRITICAL_ADMIN_API_PREFIX);
