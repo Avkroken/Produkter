@@ -7,21 +7,30 @@ updates:
     groups:
       python-dependencies:
         patterns: ["*"]
+
   - package-ecosystem: npm
     directories: ["/cloudflare/app", "/cloudflare/engine", "/cloudflare/processor"]
     schedule:
-      interval: weekly
+      interval: daily
+    open-pull-requests-limit: 10
     groups:
-      worker-dependencies:
+      worker-security-updates:
+        applies-to: security-updates
         patterns: ["*"]
+      worker-version-updates:
+        applies-to: version-updates
+        patterns: ["*"]
+
   - package-ecosystem: docker
     directories: ["/", "/scraper"]
     schedule:
       interval: weekly
+
   - package-ecosystem: docker-compose
     directory: "/"
     schedule:
       interval: weekly
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
