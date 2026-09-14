@@ -11,11 +11,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # dem, och apt-get upgrade nedan plockar upp rättningarna vid varje bygge.
 # Med uppströms python-image väntar man i stället på att imagen byggs om.
 #
-# Det löser också fyndklassen som fällde bygget i augusti: uppströms pip bär
-# med sig vendrade kopior av setuptools och msgpack och deklarerar dem i
-# pip/_vendor/bom.cdx.json, som Trivy läser som installerade paket. Debians
-# python3-pip vendrar samma bibliotek men skickar ingen SBOM — och patchar
-# dem via apt.
+# Det minskar också risken från uppströms pips vendrade kopior av setuptools
+# och msgpack. Debians python3-pip levereras och patchas via apt.
 #
 # Priset är Python 3.13 i stället för 3.14, vilket trixie ger. playwright
 # stödjer 3.10–3.14, så det är inget hinder.
