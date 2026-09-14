@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://produkter.denied.se/sitemap.xml
