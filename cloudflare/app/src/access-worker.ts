@@ -9,6 +9,8 @@ type AppHandler = {
 };
 
 const appHandler = app as unknown as AppHandler;
+const CANONICAL_ROOT = "https://produkter.denied.se/";
+const SEO_DESCRIPTION = "Produkter är en kostnadsfri tjänst för produktkatalog, prisbevakning, ansökningsunderlag och AI-genererade produktbeskrivningar.";
 
 function requestWithPath(request: Request, pathname: string): Request {
   const url = new URL(request.url);
@@ -30,17 +32,53 @@ function redirectToCanonical(request: Request, pathname: string): Response {
   });
 }
 
-function injectAccessRouting(response: Response): Response {
+function withRobotsHeader(response: Response, value: string): Response {
+  const headers = new Headers(response.headers);
+  headers.set("X-Robots-Tag", value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function applyHtmlIndexingPolicy(response: Response, pathname: string): Response {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/html")) return response;
+  return withRobotsHeader(response, pathname === "/" ? "index, follow" : "noindex, nofollow");
+}
+
+function injectAccessRouting(response: Response, pathname: string): Response {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("text/html")) return response;
 
-  return new HTMLRewriter()
+  const rewriter = new HTMLRewriter()
     .on('script[src="/app.js"]', {
       element(element) {
         element.before('<script src="/access-routing.js"></script>', { html: true });
       },
-    })
-    .transform(response);
+    });
+
+  if (pathname === "/") {
+    rewriter
+      .on("title", {
+        element(element) {
+          element.setInnerContent("Produkter – produktkatalog, prisbevakning och AI-beskrivningar");
+        },
+      })
+      .on("head", {
+        element(element) {
+          element.append(
+            `<meta name="description" content="${SEO_DESCRIPTION}">` +
+            '<meta name="robots" content="index,follow,max-image-preview:large">' +
+            `<link rel="canonical" href="${CANONICAL_ROOT}">`,
+            { html: true },
+          );
+        },
+      });
+  }
+
+  return applyHtmlIndexingPolicy(rewriter.transform(response), pathname);
 }
 
 export default {
@@ -53,7 +91,10 @@ export default {
     }
 
     if (route.type === "asset") {
-      return injectAccessRouting(await env.ASSETS.fetch(requestWithPath(request, route.pathname)));
+      return injectAccessRouting(
+        await env.ASSETS.fetch(requestWithPath(request, route.pathname)),
+        externalUrl.pathname,
+      );
     }
 
     const upstreamRequest = route.type === "rewrite"
@@ -62,8 +103,8 @@ export default {
     const response = await appHandler.fetch(upstreamRequest, env, ctx);
 
     if (externalUrl.pathname === "/" || externalUrl.pathname === "/admin" || externalUrl.pathname.startsWith("/admin/")) {
-      return injectAccessRouting(response);
+      return injectAccessRouting(response, externalUrl.pathname);
     }
-    return response;
+    return applyHtmlIndexingPolicy(response, externalUrl.pathname);
   },
 } satisfies ExportedHandler<AccessEnv>;
