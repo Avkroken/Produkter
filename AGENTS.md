@@ -2,6 +2,7 @@
 
 ## Scope
 These instructions apply to all AI coding agents working in this repository.
+References to named skills are conditional on the skill being available in the current agent environment. If a referenced skill is unavailable, follow the same workflow intent manually with repository-native tools and document any limitation that affects verification.
 
 ## Git workflow
 - Never make implementation commits directly on `main`.
