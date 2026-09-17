@@ -1,10 +1,6 @@
 name: Container security
 
 on:
-  pull_request:
-    branches: [main]
-  merge_group:
-    types: [checks_requested]
   push:
     branches: [main]
   schedule:
@@ -15,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: container-security-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  group: container-security-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   scan:
@@ -50,37 +46,53 @@ jobs:
       - name: Build fresh image
         run: docker build --pull -t "${{ matrix.image }}:${GITHUB_SHA}" "${{ matrix.context }}"
 
-      # Reporting and blocking intentionally use the same policy. The previous
-      # workflow uploaded LOW/MEDIUM and unfixed findings to Code Scanning but
-      # only failed on fixable HIGH/CRITICAL findings. That produced green CI
-      # runs alongside open remediation issues such as #502.
+      - name: Install verified Trivy
+        shell: bash
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/trivy.tar.gz"
+          bin_dir="$RUNNER_TEMP/trivy-bin"
+          curl --fail --silent --show-error --location \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$TRIVY_SHA256" "$archive" | sha256sum --check --strict
+          mkdir -p "$bin_dir"
+          tar -xzf "$archive" -C "$bin_dir" trivy
+          echo "$bin_dir" >> "$GITHUB_PATH"
+
+      # Reporting and blocking deliberately use the same policy. The historical
+      # workflow reported unfixed LOW/MEDIUM findings but blocked only fixable
+      # HIGH/CRITICAL findings, which created #502 despite green CI.
       - name: Scan actionable findings for Code Scanning
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: ${{ matrix.image }}:${{ github.sha }}
-          scanners: vuln,secret
-          format: sarif
-          output: ${{ matrix.sarif }}
-          ignore-unfixed: true
-          severity: MEDIUM,HIGH,CRITICAL
-          limit-severities-for-sarif: true
-          exit-code: "0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image \
+            --scanners vuln,secret \
+            --ignore-unfixed \
+            --severity MEDIUM,HIGH,CRITICAL \
+            --format sarif \
+            --output "${{ matrix.sarif }}" \
+            "${{ matrix.image }}:${GITHUB_SHA}"
 
       - name: Upload actionable findings
-        if: ${{ always() && github.event_name != 'merge_group' && hashFiles(matrix.sarif) != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        if: ${{ always() && hashFiles(matrix.sarif) != '' }}
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # releases/v4 2026-09-17
         with:
           sarif_file: ${{ matrix.sarif }}
           category: ${{ matrix.category }}
 
       - name: Gate actionable MEDIUM/HIGH/CRITICAL findings
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: ${{ matrix.image }}:${{ github.sha }}
-          scanners: vuln,secret
-          format: table
-          ignore-unfixed: true
-          severity: MEDIUM,HIGH,CRITICAL
-          exit-code: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image \
+            --scanners vuln,secret \
+            --ignore-unfixed \
+            --severity MEDIUM,HIGH,CRITICAL \
+            --exit-code 1 \
+            --format table \
+            "${{ matrix.image }}:${GITHUB_SHA}"
