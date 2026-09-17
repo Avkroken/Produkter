@@ -1,0 +1,102 @@
+name: Container security
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "40 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Container security / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: app
+            context: .
+            image: local/produkter
+            sarif: trivy-app.sarif
+            category: trivy-product-describer
+          - name: scraper
+            context: scraper
+            image: local/scraper
+            sarif: trivy-scraper.sarif
+            category: trivy-scraper
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build fresh image
+        run: docker build --pull -t "${{ matrix.image }}:${GITHUB_SHA}" "${{ matrix.context }}"
+
+      - name: Install verified Trivy
+        shell: bash
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/trivy.tar.gz"
+          bin_dir="$RUNNER_TEMP/trivy-bin"
+          curl --fail --silent --show-error --location \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$TRIVY_SHA256" "$archive" | sha256sum --check --strict
+          mkdir -p "$bin_dir"
+          tar -xzf "$archive" -C "$bin_dir" trivy
+          echo "$bin_dir" >> "$GITHUB_PATH"
+
+      # Reporting and blocking deliberately use the same policy. The historical
+      # workflow reported unfixed LOW/MEDIUM findings but blocked only fixable
+      # HIGH/CRITICAL findings, which created #502 despite green CI.
+      - name: Scan actionable findings for Code Scanning
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image \
+            --scanners vuln,secret \
+            --ignore-unfixed \
+            --severity MEDIUM,HIGH,CRITICAL \
+            --format sarif \
+            --output "${{ matrix.sarif }}" \
+            "${{ matrix.image }}:${GITHUB_SHA}"
+
+      - name: Upload actionable findings
+        if: ${{ always() && github.event_name != 'pull_request' && github.event_name != 'merge_group' && hashFiles(matrix.sarif) != '' }}
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # releases/v4 2026-09-17
+        with:
+          sarif_file: ${{ matrix.sarif }}
+          category: ${{ matrix.category }}
+
+      - name: Gate actionable MEDIUM/HIGH/CRITICAL findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image \
+            --scanners vuln,secret \
+            --ignore-unfixed \
+            --severity MEDIUM,HIGH,CRITICAL \
+            --exit-code 1 \
+            --format table \
+            "${{ matrix.image }}:${GITHUB_SHA}"
