@@ -1,6 +1,10 @@
 name: Container security
 
 on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   schedule:
@@ -79,7 +83,7 @@ jobs:
             "${{ matrix.image }}:${GITHUB_SHA}"
 
       - name: Upload actionable findings
-        if: ${{ always() && hashFiles(matrix.sarif) != '' }}
+        if: ${{ always() && github.event_name != 'pull_request' && github.event_name != 'merge_group' && hashFiles(matrix.sarif) != '' }}
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # releases/v4 2026-09-17
         with:
           sarif_file: ${{ matrix.sarif }}
