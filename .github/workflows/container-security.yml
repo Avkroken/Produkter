@@ -1,0 +1,86 @@
+name: Container security
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "40 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-security-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+jobs:
+  scan:
+    name: Container security / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: app
+            context: .
+            image: local/produkter
+            sarif: trivy-app.sarif
+            category: trivy-product-describer
+          - name: scraper
+            context: scraper
+            image: local/scraper
+            sarif: trivy-scraper.sarif
+            category: trivy-scraper
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build fresh image
+        run: docker build --pull -t "${{ matrix.image }}:${GITHUB_SHA}" "${{ matrix.context }}"
+
+      # Reporting and blocking intentionally use the same policy. The previous
+      # workflow uploaded LOW/MEDIUM and unfixed findings to Code Scanning but
+      # only failed on fixable HIGH/CRITICAL findings. That produced green CI
+      # runs alongside open remediation issues such as #502.
+      - name: Scan actionable findings for Code Scanning
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image }}:${{ github.sha }}
+          scanners: vuln,secret
+          format: sarif
+          output: ${{ matrix.sarif }}
+          ignore-unfixed: true
+          severity: MEDIUM,HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "0"
+
+      - name: Upload actionable findings
+        if: ${{ always() && github.event_name != 'merge_group' && hashFiles(matrix.sarif) != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: ${{ matrix.sarif }}
+          category: ${{ matrix.category }}
+
+      - name: Gate actionable MEDIUM/HIGH/CRITICAL findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image }}:${{ github.sha }}
+          scanners: vuln,secret
+          format: table
+          ignore-unfixed: true
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: "1"
