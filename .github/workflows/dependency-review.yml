@@ -1,5 +1,6 @@
 name: Dependency review
-# Delegates implementation to Avkroken/.github.
+# Delegates implementation to Avkroken/.github while preserving the required
+# standalone dependency-review check context used by this repository.
 
 on:
   pull_request:
@@ -11,5 +12,18 @@ permissions:
   contents: read
 
 jobs:
-  dependency-review:
+  central-dependency-review:
     uses: Avkroken/.github/.github/workflows/dependency-review-reusable.yml@814555cc95150b44b64ac2b64f0424c1c0e41260
+
+  dependency-review:
+    name: dependency-review
+    needs: central-dependency-review
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm central dependency review succeeded
+        if: ${{ needs.central-dependency-review.result == 'success' }}
+        run: echo "Central dependency review passed."
+      - name: Fail when central dependency review did not succeed
+        if: ${{ needs.central-dependency-review.result != 'success' }}
+        run: exit 1
