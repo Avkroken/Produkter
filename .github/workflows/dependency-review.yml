@@ -1,4 +1,6 @@
 name: Dependency review
+# Delegates implementation to Avkroken/.github while preserving the required
+# standalone dependency-review check context used by this repository.
 
 on:
   pull_request:
@@ -10,15 +12,18 @@ permissions:
   contents: read
 
 jobs:
+  central-dependency-review:
+    uses: Avkroken/.github/.github/workflows/dependency-review-reusable.yml@814555cc95150b44b64ac2b64f0424c1c0e41260
+
   dependency-review:
+    name: dependency-review
+    needs: central-dependency-review
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Dependency Review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          base-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
-          head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+      - name: Confirm central dependency review succeeded
+        if: ${{ needs.central-dependency-review.result == 'success' }}
+        run: echo "Central dependency review passed."
+      - name: Fail when central dependency review did not succeed
+        if: ${{ needs.central-dependency-review.result != 'success' }}
+        run: exit 1
