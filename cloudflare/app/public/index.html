@@ -6,6 +6,7 @@
 <title>Produkter</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
@@ -26,6 +27,7 @@
       <h2>Skapa konto</h2>
       <input type="email" name="email" placeholder="E-postadress" aria-label="E-postadress" autocomplete="username" required>
       <input type="password" name="password" autocomplete="new-password" placeholder="Lösenord (minst 8 tecken)" required minlength="8">
+      <div class="cf-turnstile" data-sitekey="0x4AAAAAADtfk0hF05HrDLLJ" data-action="signup"></div>
       <button type="submit">Skapa konto</button>
       <p id="signup-msg" class="error"></p>
     </form>
