@@ -12,4 +12,4 @@ permissions:
 
 jobs:
   dependency-review:
-    uses: Avkroken/.github/.github/workflows/dependency-review-reusable.yml@main
+    uses: Avkroken/.github/.github/workflows/dependency-review-reusable.yml@814555cc95150b44b64ac2b64f0424c1c0e41260
