@@ -4,7 +4,6 @@ export interface CrawlEnv {
   DB: D1Database;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN_W1?: string;
-  CLOUDFLARE_BROWSER_TOKEN?: string;
   CRAWL_SITE_LIMIT?: string;
   CRAWL_PAGE_LIMIT?: string;
 }
@@ -74,11 +73,11 @@ function apiBas(env: CrawlEnv): string {
 }
 
 function authHeaders(env: CrawlEnv): HeadersInit {
-  return { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN_W1 ?? env.CLOUDFLARE_BROWSER_TOKEN ?? ""}`, "content-type": "application/json" };
+  return { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN_W1 ?? ""}`, "content-type": "application/json" };
 }
 
 function harCrawlKonfiguration(env: CrawlEnv): boolean {
-  return Boolean(env.CLOUDFLARE_ACCOUNT_ID && (env.CLOUDFLARE_API_TOKEN_W1 || env.CLOUDFLARE_BROWSER_TOKEN));
+  return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN_W1);
 }
 
 async function sakerstallTabell(env: CrawlEnv): Promise<void> {
