@@ -1,13 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "produkter-motor",
-  "ai": { "binding": "AI" },
+  "ai": {
+    "binding": "AI"
+  },
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   "workers_dev": false,
   "preview_urls": false,
-  // @cloudflare/playwright requires nodejs_compat and a compatibility date >= 2025-09-15.
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "upload_source_maps": true,
   "observability": {
     "enabled": true,
@@ -24,11 +27,10 @@
       "persist": true
     }
   },
-  // EN cron (*/5). Core-handlern schemalägger arbetet. Den yttre Workern
-  // delegerar list-jobb till Cloudflare /crawl och använder Playwright endast
-  // som fallback för jobb som crawl inte kan hantera.
   "triggers": {
-    "crons": ["*/5 * * * *"]
+    "crons": [
+      "*/5 * * * *"
+    ]
   },
   "browser": {
     "binding": "BROWSER"
@@ -42,10 +44,11 @@
     "BROWSER_RENDER_LIMIT": "3",
     "BROWSER_MAX_LIST_PAGES": "20"
   },
-  // Custom domain. workers.dev och preview-URL:er är avstängda.
-  // /health är publik; övriga HTTP-endpoints skyddas av X-API-Key.
   "routes": [
-    { "pattern": "motor.denied.se", "custom_domain": true }
+    {
+      "pattern": "motor.denied.se",
+      "custom_domain": true
+    }
   ],
   "d1_databases": [
     {
@@ -53,10 +56,12 @@
       "database_name": "produkter",
       "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
     }
+  ],
+  "secrets_store_secrets": [
+    {
+      "binding": "CLOUDFLARE_API_TOKEN_W1",
+      "store_id": "293e79006fa649b8b182ef105a6b46d1",
+      "secret_name": "CLOUDFLARE_API_TOKEN_W1"
+    }
   ]
-  // Secrets (wrangler secret put):
-  //   INGEST_API_KEY
-  //   CLOUDFLARE_ACCOUNT_ID
-  //   CLOUDFLARE_API_TOKEN_W1  (canonical shared Developer Platform write credential)\n  //   CLOUDFLARE_BROWSER_TOKEN  (temporary migration fallback)
-  //   GEMINI_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY / AZURE_*
 }
