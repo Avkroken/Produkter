@@ -36,7 +36,7 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = new FormData(e.target);
   try {
-    await api("/signup", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password") }) });
+    await api("/signup", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password"), turnstileToken: form.get("cf-turnstile-response") }) });
     await showApp();
   } catch (err) {
     document.getElementById("signup-msg").textContent = err.message;

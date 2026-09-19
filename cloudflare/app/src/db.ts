@@ -3,6 +3,8 @@ import { randomId } from "../../shared/crypto";
 export type JobMessage = { type: "extract"; jobId: string } | { type: "describe"; jobId: string; rowIndex: number };
 
 export interface Env {
+  TURNSTILE_SECRET?: string;
+  TURNSTILE_HOSTNAMES?: string;
   DB: D1Database;
   UPLOADS: R2Bucket;
   SESSIONS: KVNamespace;
