@@ -1,4 +1,5 @@
 import { InvalidCredentials, AuthRequestError } from "./auth-errors";
+import { verifyTurnstile } from "./turnstile";
 import { normalizeResetEmail, deliverPasswordReset, resetPassword, resetRateLimit, RESET_MESSAGE } from "./password-reset";
 // Motsvarar app.py:s Flask-rutter. Jobbkörningen själv (extraktion +
 // radvis beskrivningsgenerering) sker INTE här — den här Workern bara
@@ -297,7 +298,10 @@ async function handleSignup(request: Request, env: Env): Promise<Response> {
   if (!(await allowRateLimited(env, "signup", clientIp(request), 5, 3600))) {
     return json({ error: "För många registreringar. Försök igen om en stund." }, 429);
   }
-  const data = await request.json<{ email?: string; password?: string }>().catch(() => ({}) as { email?: string; password?: string });
+  const data = await request.json<{ email?: string; password?: string; turnstileToken?: string }>().catch(() => ({}) as { email?: string; password?: string; turnstileToken?: string });
+  if (!(await verifyTurnstile(request, env.TURNSTILE_SECRET, env.TURNSTILE_HOSTNAMES, data.turnstileToken, "signup"))) {
+    return json({ error: "Turnstile-verifieringen misslyckades. Försök igen." }, 403);
+  }
   try {
     const { accountId } = await signup(env, data.email ?? "", data.password ?? "");
     const { sessionToken } = await login(env, data.email ?? "", data.password ?? "");
@@ -372,6 +376,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 async function handlePasswordRecovery(request: Request, env: Env, ctx: ExecutionContext, complete: boolean): Promise<Response> {
   try {
     verifyAuthOrigin(request);
+    if (!complete) {
+      const clone = request.clone();
+      const preview: Record<string, unknown> = await clone.json<Record<string, unknown>>().catch(() => ({}));
+      if (!(await verifyTurnstile(request, env.TURNSTILE_SECRET, env.TURNSTILE_HOSTNAMES, preview.turnstileToken, "password_recovery"))) {
+        throw new AuthRequestError("Turnstile-verifieringen misslyckades. Försök igen.", 403);
+      }
+    }
     if (!complete && !env.RESEND_API_KEY) {
       throw new AuthRequestError("Lösenordsåterställning via mejl är tillfälligt otillgänglig. Försök igen senare.", 503);
     }

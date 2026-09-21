@@ -30,7 +30,7 @@ async function submitRecovery(form, endpoint, body) {
 }
 forgotForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitRecovery(forgotForm, "/api/auth/forgot-password", { email: new FormData(forgotForm).get("email") });
+  await submitRecovery(forgotForm, "/api/auth/forgot-password", { email: new FormData(forgotForm).get("email"), turnstileToken: new FormData(forgotForm).get("cf-turnstile-response") });
 });
 resetForm?.addEventListener("submit", async (event) => {
   event.preventDefault();

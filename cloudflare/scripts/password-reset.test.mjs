@@ -13,8 +13,17 @@ const { hashPassword, sha256Hex } = await import(`data:text/javascript;base64,${
 
 async function fixture({ mail = true, dbReady = true, mailStatus = 200 } = {}) {
   const messages = [];
-  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: outputFiles[0].text, compatibilityDate: "2026-06-01", d1Databases: ["DB"], kvNamespaces: ["SESSIONS"], bindings: mail ? { RESEND_API_KEY: "test-only", MAIL_FROM: "noreply@send.denied.se" } : {},
-    outboundService: async request => { assert.equal(new URL(request.url).hostname, "api.resend.com"); messages.push(await request.json()); return new Response('{"id":"test"}', { status: mailStatus }); },
+  const bindings = { TURNSTILE_SECRET: "test-secret", TURNSTILE_HOSTNAMES: "produkter.denied.se", ...(mail ? { RESEND_API_KEY: "test-only", MAIL_FROM: "noreply@send.denied.se" } : {}) };
+  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: outputFiles[0].text, compatibilityDate: "2026-06-01", d1Databases: ["DB"], kvNamespaces: ["SESSIONS"], bindings,
+    outboundService: async request => {
+      const url = new URL(request.url);
+      if (url.hostname === "challenges.cloudflare.com") {
+        const body = new URLSearchParams(await request.text());
+        const action = body.get("response") === "test-signup-token" ? "signup" : "password_recovery";
+        return Response.json({ success: true, action, hostname: "produkter.denied.se" });
+      }
+      assert.equal(url.hostname, "api.resend.com"); messages.push(await request.json()); return new Response('{"id":"test"}', { status: mailStatus });
+    },
   }));
   const db = await mf.getD1Database("DB");
   if (dbReady) {
@@ -23,7 +32,12 @@ async function fixture({ mail = true, dbReady = true, mailStatus = 200 } = {}) {
     await db.prepare("INSERT INTO accounts (id,email,password_hash,password_salt,role,created_at) VALUES ('test-account','person@example.com',?,?,'admin',0)").bind(hash,salt).run();
   }
   async function post(path, body, extra = {}) {
-    const response = await mf.dispatchFetch(`https://produkter.denied.se${path}`, { method: "POST", headers: { "Content-Type": "application/json", "Origin": "https://produkter.denied.se", "CF-Connecting-IP": "192.0.2.1", ...extra }, body: JSON.stringify(body) });
+    const protectedBody = path === "/signup"
+      ? { ...body, turnstileToken: body.turnstileToken ?? "test-signup-token" }
+      : path === "/api/auth/forgot-password"
+        ? { ...body, turnstileToken: body.turnstileToken ?? "test-recovery-token" }
+        : body;
+    const response = await mf.dispatchFetch(`https://produkter.denied.se${path}`, { method: "POST", headers: { "Content-Type": "application/json", "Origin": "https://produkter.denied.se", "CF-Connecting-IP": "192.0.2.1", ...extra }, body: JSON.stringify(protectedBody) });
     return response;
   }
   return { mf, db, messages, post };

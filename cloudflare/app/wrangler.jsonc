@@ -63,6 +63,7 @@
     ]
   },
   "vars": {
+    "TURNSTILE_HOSTNAMES": "produkter.denied.se",
     // INGEST_API_KEY sätts som secret och används även på interna engine-anrop.
     // OAuth-inloggning — egna appar för produkter. Microsoft client_id
     // och båda client_secret sätts som wrangler secrets. Callback-URL:er registrerade i
