@@ -378,7 +378,7 @@ async function handlePasswordRecovery(request: Request, env: Env, ctx: Execution
     verifyAuthOrigin(request);
     if (!complete) {
       const clone = request.clone();
-      const preview = await clone.json<Record<string, unknown>>().catch(() => ({}));
+      const preview: Record<string, unknown> = await clone.json<Record<string, unknown>>().catch(() => ({}));
       if (!(await verifyTurnstile(request, env.TURNSTILE_SECRET, env.TURNSTILE_HOSTNAMES, preview.turnstileToken, "password_recovery"))) {
         throw new AuthRequestError("Turnstile-verifieringen misslyckades. Försök igen.", 403);
       }
