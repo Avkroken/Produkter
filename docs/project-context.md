@@ -66,7 +66,6 @@ R2 används för uploads/objekt; KV för sessionsstate. Queue separerar producer
 
 Cloudflare Browser Run ska inte återintroduceras i Produkter utan ett separat arkitekturbeslut. Lägg inte till Wrangler `browser` binding eller Browser Run `/crawl`-anrop i engine som lokal bekvämlighetsfix.
 
-Jobb är Avkroken-workloaden som behåller Browser Run.
 
 ## Observability
 
