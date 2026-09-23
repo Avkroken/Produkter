@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/deploy-free-first-once.yml"
+      - ".github/deploy-free-first-once.trigger"
 
 permissions:
   contents: read
