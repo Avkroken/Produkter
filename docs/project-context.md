@@ -62,15 +62,14 @@ D1 är canonical durable state. Förlorad extern renderhost pausar rendering, me
 
 R2 används för uploads/objekt; KV för sessionsstate. Queue separerar producers från bearbetning.
 
-## Free-first invariant
+## Browser rendering boundary
 
 Cloudflare Browser Run ska inte återintroduceras i Produkter utan ett separat arkitekturbeslut. Lägg inte till Wrangler `browser` binding eller Browser Run `/crawl`-anrop i engine som lokal bekvämlighetsfix.
 
-Jobb är Avkroken-workloaden som behåller Browser Run.
 
 ## Observability
 
-Samtliga tre Workers har Cloudflare observability aktiverat med begränsad sampling och query-string-redaction. Persistenta logs/traces ska fortsatt följa central Cloudflare free-first-policy.
+Samtliga tre Workers har Cloudflare observability aktiverat med begränsad sampling och query-string-redaction. Persistenta logs/traces ska fortsatt följa central Cloudflare-observabilitypolicy.
 
 ## CI
 
