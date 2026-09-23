@@ -1,7 +1,7 @@
 # Produkter-fetcher i Docker
 
 Produkter använder en separat, stateless Playwright-fetcher för browser-rendering.
-Den är avsedd att köras som en Docker-container på `mp100` eller annan Linux-host.
+Den är avsedd att köras som en Docker-container på en Linux-host.
 
 Cloudflare är fortfarande control/state plane. Fetcherhosten lagrar ingen canonical
 data och exponerar ingen applikationsport.
@@ -9,7 +9,7 @@ data och exponerar ingen applikationsport.
 ## Flöde
 
 ```text
-Docker på mp100
+Docker på renderhost
   produkter-fetcher
         |
         | POST /jobs/lease
