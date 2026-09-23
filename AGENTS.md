@@ -13,8 +13,8 @@
 - Arbeta i separat gren enligt `{agent}/{feature}/{YYYY-MM-DD}/{HH-mm}-{id}`.
 - Cloudflare är control/state plane; D1 är canonical durable application state.
 - Browser rendering ligger i den stateless externa Playwright-fetchern.
-- Återintroducera inte Cloudflare Browser Run i Produkter som lokal genväg. Jobb är Avkroken-workloaden som behåller Browser Run.
+- Browser rendering ligger i den externa fetchern; ändringar av den runtimegränsen ska vara explicita och verifierade.
 - Fetchern får inte bära unik canonical state; lease-expiry ska möjliggöra återhämtning efter hostfel.
 - Verifiera berörd app/engine/processor med dess faktiska package- och Wrangler-konfiguration före merge.
-- Försvaga inte central Node/Cloudflare/Python/Docker-CI eller Cloudflare free-first observability-policy som workaround.
+- Försvaga inte repositoryts Node/Cloudflare/Python/Docker-verifiering eller observability-kontrakt som workaround.
 - Lägg aldrig providercredentials, ingest-nycklar eller andra secrets i repository, logs eller publik dokumentation.
