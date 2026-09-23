@@ -33,17 +33,10 @@
       "*/5 * * * *"
     ]
   },
-  "browser": {
-    "binding": "BROWSER"
-  },
   "vars": {
     "SCHEDULE_LIMIT": "200",
     "DESCRIBE_LIMIT": "10",
-    "DESCRIBE_WORKERS": "2",
-    "CRAWL_SITE_LIMIT": "2",
-    "CRAWL_PAGE_LIMIT": "100",
-    "BROWSER_RENDER_LIMIT": "3",
-    "BROWSER_MAX_LIST_PAGES": "20"
+    "DESCRIBE_WORKERS": "2"
   },
   "routes": [
     {
@@ -56,13 +49,6 @@
       "binding": "DB",
       "database_name": "produkter",
       "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
-    }
-  ],
-  "secrets_store_secrets": [
-    {
-      "binding": "CLOUDFLARE_API_TOKEN_W1",
-      "store_id": "293e79006fa649b8b182ef105a6b46d1",
-      "secret_name": "CLOUDFLARE_API_TOKEN_W1"
     }
   ]
 }
