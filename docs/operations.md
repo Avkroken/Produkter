@@ -24,8 +24,8 @@ Produkters browser-rendering körs som Docker-containern `produkter-fetcher`.
 Kanonisk driftfil är `scraper/fetcher/compose.yml`; full runbook finns i
 [`scraper/fetcher/README.md`](../scraper/fetcher/README.md).
 
-Hosten behöver endast Docker/Compose, utgående HTTPS och den befintliga
-`INGEST_API_KEY`. Fetchern exponerar ingen inbound port och har ingen lokal
+Hosten behöver endast Docker/Compose, utgående HTTPS och en konfigurerad
+`INGEST_API_KEY` för engine-API:t. Fetchern exponerar ingen inbound port och har ingen lokal
 canonical state.
 
 Normal start:
@@ -39,8 +39,8 @@ docker compose ps
 docker compose logs --tail=100 produkter-fetcher
 ```
 
-Cloudflare-engine får inte cutover-deployas utan Browser Run förrän Docker-
-fetchern har leasad och slutfört minst ett riktigt renderjobb.
+Vid byte från en annan renderingsimplementation ska Docker-fetchern verifieras
+med ett riktigt lease/result-flöde innan den tidigare renderaren stängs av.
 
 Vid hostbyte:
 
