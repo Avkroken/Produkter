@@ -12,14 +12,14 @@ Produkter är Avkrokens produkt-/datainsamlingssystem. Cloudflare ansvarar för 
 - **KV `SESSIONS`** — sessionsstate för appen.
 - **Extern Playwright-fetcher** — leasar renderjobb från engine, renderar lokalt och postar resultat tillbaka.
 
-Cloudflare Browser Run ingår uttryckligen inte i Produktions topology för Produkter.
+Cloudflare Browser Run ingår uttryckligen inte i produktionstopologin för Produkter. Browser-renderingen körs i Docker på den externa fetcherhosten; se [Dockerdrift för fetchern](scraper/fetcher/README.md).
 
 ## Dokumentation
 
 - [Projektkontext](docs/project-context.md)
 - [Arkitektur](docs/architecture.md)
 - [Drift](docs/operations.md)
-- [Extern render-fetcher](scraper/fetcher/README.md)
+- [Dockerdrift för extern render-fetcher](scraper/fetcher/README.md)
 - [Avkrokens dokumentationsstandard](https://github.com/Avkroken/.github/blob/main/docs/documentation-standard.md)
 
 ## Verifiering
