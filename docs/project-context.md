@@ -54,7 +54,7 @@ Cloudflare äger canonical application state, köer och API. Browser rendering �
 2. renderar `list`- eller `detail`-jobb lokalt,
 3. postar resultat till `POST /jobs/:id/result`.
 
-Den behöver `ENGINE_URL` och befintlig `INGEST_API_KEY`. Den exponerar ingen inbound application port och håller ingen canonical state.
+Den behöver `ENGINE_URL` och en konfigurerad `INGEST_API_KEY`. Den exponerar ingen inbound application port och håller ingen canonical state.
 
 ## State- och failuremodell
 
@@ -62,14 +62,14 @@ D1 är canonical durable state. Förlorad extern renderhost pausar rendering, me
 
 R2 används för uploads/objekt; KV för sessionsstate. Queue separerar producers från bearbetning.
 
-## Free-first invariant
+## Browser rendering boundary
 
 Cloudflare Browser Run ska inte återintroduceras i Produkter utan ett separat arkitekturbeslut. Lägg inte till Wrangler `browser` binding eller Browser Run `/crawl`-anrop i engine som lokal bekvämlighetsfix.
 
 
 ## Observability
 
-Samtliga tre Workers har Cloudflare observability aktiverat med begränsad sampling och query-string-redaction. Persistenta logs/traces ska fortsatt följa central Cloudflare free-first-policy.
+Samtliga tre Workers har Cloudflare observability aktiverat med begränsad sampling och query-string-redaction. Persistenta logs/traces ska fortsatt följa repositoryts Cloudflare-observabilitykontrakt.
 
 ## CI
 
