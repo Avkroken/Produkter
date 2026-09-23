@@ -14,8 +14,8 @@
     "workerd@1.20260908.1": true
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260919.1",
-    "tsx": "^4.23.13",
+    "@cloudflare/workers-types": "^5.20260920.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "wrangler": "^4.135.0"
   },
