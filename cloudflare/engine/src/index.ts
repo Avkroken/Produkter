@@ -54,8 +54,6 @@ export interface RenderKoEnv {
 }
 
 const REPO = "Avkroken/produkter";
-export const PLAYWRIGHT_FALLBACK_MARKER = "playwright-fallback:";
-
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
 const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
@@ -222,9 +220,7 @@ export async function rapporteraRenderResultat(id: number, body: ResultBody, env
   // Misslyckande: försök igen tills MAX_ATTEMPTS, sedan parkera som 'error'.
   if (body.error) {
     const dead = job.attempts >= MAX_ATTEMPTS;
-    const error = job.last_error?.startsWith(PLAYWRIGHT_FALLBACK_MARKER)
-      ? `${PLAYWRIGHT_FALLBACK_MARKER}${body.error}`
-      : body.error;
+    const error = body.error;
     await env.DB.prepare(
       `UPDATE render_jobs
        SET status=?1, lease_until=NULL, last_error=?2, updated_at=?3
@@ -464,28 +460,25 @@ async function reclaimLeases(env: Env, now: number): Promise<number> {
 }
 
 // Avsluta väntande detail-jobb som inte längre behövs. Ett jobb kan ha skapats medan
-// source_text saknades och sedan bli redundant när /crawl eller ett annat
-// renderjobb fyller fältet. Utan den här städningen dränerar Browser Run gamla
-// jobb i onödan. Leasade/claimade jobb lämnas till sin worker och uttryckliga
-// Playwright-fallbackjobb bevaras eftersom de även kan reparera titel/pris.
+// source_text saknades och sedan bli redundant när annan ingest eller en tidigare
+// extern fetcher-körning redan fyllt fältet. Leasade/claimade jobb lämnas orörda.
 export async function completeRedundantDetailJobs(env: RenderKoEnv, now: number): Promise<number> {
   const r = await env.DB.prepare(
     `UPDATE render_jobs
      SET status='done', lease_until=NULL, last_error=NULL, updated_at=?1
      WHERE type='detail' AND status='pending'
-       AND COALESCE(last_error, '') NOT LIKE ?2
        AND EXISTS (
          SELECT 1 FROM products p
          WHERE p.url=render_jobs.url AND p.source_text IS NOT NULL
        )`,
   )
-    .bind(now, `${PLAYWRIGHT_FALLBACK_MARKER}%`)
+    .bind(now)
     .run();
   return r.meta.changes ?? 0;
 }
 
 // 2. Skapa detail-jobb för produkter som saknar source_text och inte redan har
-//    ett aktivt jobb. Kategori är metadata som Browser Run hämtar när den finns,
+//    ett aktivt jobb. Kategori är metadata som den externa fetchern hämtar när den finns,
 //    men en saknad kategori får inte ensam orsaka evig omrendering. Cappat per
 //    tick.
 async function scheduleDetailJobs(env: Env, now: number, limit: number): Promise<number> {
