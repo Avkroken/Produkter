@@ -18,20 +18,36 @@ Engine och processor ska verifieras från respektive katalog med deras package s
 
 Dokumentations- eller kodverifiering ska inte implicit deploya produktion. Production deploy ska använda respektive Workers faktiska Wrangler-config.
 
-## Extern fetcher
+## Extern fetcher i Docker
 
-Fetchern ska köras under hostens normala supervisor/service manager. Runtime behöver:
+Produkters browser-rendering körs som Docker-containern `produkter-fetcher`.
+Kanonisk driftfil är `scraper/fetcher/compose.yml`; full runbook finns i
+[`scraper/fetcher/README.md`](../scraper/fetcher/README.md).
 
-- `ENGINE_URL`,
-- `INGEST_API_KEY`,
-- eventuella dokumenterade concurrency-/timingvariabler från `fetcher.py`.
+Hosten behöver endast Docker/Compose, utgående HTTPS och den befintliga
+`INGEST_API_KEY`. Fetchern exponerar ingen inbound port och har ingen lokal
+canonical state.
+
+Normal start:
+
+```bash
+cd scraper/fetcher
+cp .env.example .env
+# sätt INGEST_API_KEY lokalt i .env
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 produkter-fetcher
+```
+
+Cloudflare-engine får inte cutover-deployas utan Browser Run förrän Docker-
+fetchern har leasad och slutfört minst ett riktigt renderjobb.
 
 Vid hostbyte:
 
-1. verifiera att engine health nås från nya hosten,
-2. verifiera credential mot lease-endpoint,
-3. kör ett testjobb och verifiera accepterat resultat,
-4. stoppa gammal process innan concurrency ökas på den nya hosten.
+1. verifiera att engine nås från den nya hosten,
+2. verifiera credential via fetcherns lease-anrop,
+3. kör minst ett renderjobb och verifiera accepterat resultat,
+4. stoppa gammal fetcher innan concurrency ökas på den nya hosten.
 
 ## Incidenter
 
