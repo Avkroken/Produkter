@@ -36,7 +36,7 @@ Hosten behöver:
 - Docker Engine,
 - Docker Compose plugin (`docker compose`),
 - utgående HTTPS till `motor.denied.se`,
-- den befintliga `INGEST_API_KEY`.
+- en `INGEST_API_KEY` med åtkomst till engine-API:t.
 
 Ingen inbound port behöver öppnas.
 
@@ -49,7 +49,7 @@ cd scraper/fetcher
 cp .env.example .env
 ```
 
-Fyll därefter endast det befintliga secret-värdet i `.env`:
+Fyll därefter secret-värdet lokalt i `.env`:
 
 ```dotenv
 INGEST_API_KEY=<befintligt värde>
@@ -122,10 +122,10 @@ Tuning:
 Börja med defaults. Höj concurrency först efter att CPU/minne, målwebbplatser och
 jobbkö har observerats.
 
-## Verifiering före Cloudflare-cutover
+## Verifiering vid byte av renderingsimplementation
 
-Produkter-engine ska inte deployas utan Browser Run förrän Docker-fetchern är
-verifierad på hosten.
+Om Docker-fetchern ersätter en annan renderingsimplementation ska den nya
+fetchern verifieras på hosten innan den tidigare renderaren stängs av.
 
 Kontrollera i denna ordning:
 
@@ -135,8 +135,8 @@ Kontrollera i denna ordning:
 4. Ett renderresultat accepteras av engine.
 5. Rendering fortsätter efter `docker compose restart produkter-fetcher`.
 
-Först därefter ska Cloudflare-engine deployas med den Browser Run-fria
-konfigurationen.
+När lease/result-flödet är verifierat kan den tidigare renderingsimplementationen
+tas ur drift.
 
 ## Felsökning
 
@@ -166,4 +166,4 @@ Vanliga fel:
 - Lägg aldrig `INGEST_API_KEY` i Git.
 - Exponera ingen hostport för fetchern.
 - Lägg ingen canonical state eller databas i containern.
-- Cloudflare Browser Run ska inte återinföras som fallback för Produkter.
+- Fetchern kräver ingen Cloudflare Browser Run-binding.
