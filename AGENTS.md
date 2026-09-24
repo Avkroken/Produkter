@@ -6,7 +6,7 @@
 - [docs/architecture.md](docs/architecture.md) — dataflöden och trust boundaries.
 - [docs/operations.md](docs/operations.md) — verifiering och drift.
 - [scraper/fetcher/README.md](scraper/fetcher/README.md) — externa Playwright-fetcherns kontrakt.
-- `Avkroken/Avkroken/docs/organization/engineering-context.md` och `documentation-standard.md` — central CI/governance och dokumentationsmodell.
+- [Avkrokens centrala engineering- och dokumentationsstandard](https://github.com/Avkroken/Avkroken/tree/main/docs/organization) — central CI/governance och dokumentationsmodell.
 
 ## Invariants
 
