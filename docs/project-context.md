@@ -65,7 +65,7 @@ samt `shared`, `migrations`, `infra` och scripts.
 
 Varje Worker-konfigurationsfil är auktoritativ för just den deployenhetens bindings/runtime.
 
-De tre Cloudflare-Workers som använder D1 binder samma databas, `produkter-eu`. Produktionsdatabasen ska skapas med Cloudflare-jurisdiction `eu`. Shared D1-routing använder Sessions API för request-, cron- och queue-vägar med lämplig `first-unconstrained`/`first-primary`-constraint, så read replication kan vara `auto` inom EU-jurisdictionen.
+De tre Cloudflare-Workers som använder D1 binder samma databas, `produkter-eu-v2`. Produktionsdatabasen ska skapas med Cloudflare-jurisdiction `eu`. Shared D1-routing använder Sessions API för request-, cron- och queue-vägar med lämplig `first-unconstrained`/`first-primary`-constraint, så read replication kan vara `auto` inom EU-jurisdictionen.
 
 ## State- och failuremodell
 
