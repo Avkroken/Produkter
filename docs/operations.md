@@ -63,6 +63,12 @@ Verifiera varje deployenhet mot sin egen config:
 
 Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift.
 
+### D1 data locality och read replication
+
+App, engine och processor ska binda samma D1-databas skapad med `jurisdiction=eu`. Jurisdiction kan inte läggas till på en befintlig databas; replacement kräver därför verifierad export/import till en ny EU-databas före binding-cutover.
+
+Cloudflare-runtime använder den gemensamma Sessions API-wrappern för D1. Read replication får därför vara `auto`; med EU-jurisdiction skapas repliker endast inom EU.
+
 ## Incidentklassificering
 
 ### Generering misslyckas
