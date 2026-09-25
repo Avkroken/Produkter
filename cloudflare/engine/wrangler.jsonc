@@ -47,8 +47,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "produkter-eu",
-      "database_id": "d0bf1d69-64c4-4072-b9ce-d9a15129b526"
+      "database_name": "produkter-eu-v2",
+      "database_id": "33bd7f7b-a3f2-483b-968b-ddd99f3ad356"
     }
   ]
 }
