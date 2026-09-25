@@ -6,7 +6,7 @@
 - [docs/architecture.md](docs/architecture.md) — dataflöden och trust boundaries.
 - [docs/operations.md](docs/operations.md) — verifiering och drift.
 - [scraper/fetcher/README.md](scraper/fetcher/README.md) — externa Playwright-fetcherns kontrakt.
-- [Avkrokens centrala engineering- och dokumentationsstandard](https://github.com/Avkroken/Avkroken/tree/main/docs/organization) — central CI/governance och dokumentationsmodell.
+- Repositoryts egna README, `docs/`, workflows och versionerade konfiguration är auktoritativa för Produkter. Extern GitHub-/Cloudflare-live-state verifieras i respektive provider.
 
 ## Invariants
 
