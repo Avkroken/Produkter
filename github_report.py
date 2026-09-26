@@ -25,6 +25,8 @@ import traceback
 
 import requests
 
+PRODUKTER_REPOSITORY_ID = 1223482099
+
 # Tak på hur många issues som öppnas per fönster, så att fel som en
 # angripare kan trigga med varierande tracebacks (= olika fingeravtryck,
 # som kringgår avdubblingen) inte spammar repot eller GitHub-API:et.
@@ -72,7 +74,25 @@ def _fingerprint(exc: BaseException) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:10]
 
 
-def report_error_to_github(repo: str, title: str, exc: BaseException, context: dict | None = None) -> str | None:
+
+def _resolve_repo(repo: str | int, headers: dict) -> str | None:
+    """Resolve a stable numeric repository ID to the current owner/name."""
+    if isinstance(repo, int) or (isinstance(repo, str) and repo.isdigit()):
+        try:
+            response = requests.get(
+                f"https://api.github.com/repositories/{repo}",
+                headers=headers,
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+            full_name = response.json().get("full_name")
+        except (requests.RequestException, ValueError):
+            return None
+        return full_name if isinstance(full_name, str) and "/" in full_name else None
+    return repo
+
+def report_error_to_github(repo: str | int, title: str, exc: BaseException, context: dict | None = None) -> str | None:
     """Skapar (eller hoppar över om en dubblett redan finns) en GitHub-issue
     för ett oväntat fel. Returnerar issue-URL:en, eller None om rapportering
     inte gick (saknad token, redan rapporterad, nätverksfel — allt 'best
@@ -88,6 +108,10 @@ def report_error_to_github(repo: str, title: str, exc: BaseException, context: d
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
     }
+
+    repo = _resolve_repo(repo, headers)
+    if not repo:
+        return None
 
     try:
         search = requests.get(
