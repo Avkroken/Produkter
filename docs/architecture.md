@@ -3,56 +3,86 @@
 ## Översikt
 
 ```text
-Browser / API client
-        |
-        v
- produkter.denied.se
-   App Worker
-   |   |   \
-   |   |    +--> R2 uploads
-   |   +-------> KV sessions
-   +----------> D1 state
-        |
-        | Service Binding
-        v
-  produkter-motor
-     Engine
-   |    |     \
-   |    |      +--> Workers AI
-   |    +---------> D1
-   |
-   | lease/result over HTTPS
-   v
-External Playwright fetcher
-   |
-   | result
-   v
- Engine / D1
-
-App/Engine --> produkter-jobb --> Processor --> D1/R2
+Files / browser
+      |
+      +--------------------+
+      |                    |
+      v                    v
+ Python app/CLI          Scraper
+      |                    |
+      |                    +--> external fetcher/browser boundary
+      |
+      +--> ProviderChain
+      |      +--> Anthropic
+      |      +--> OpenAI
+      |      +--> Gemini
+      |      +--> Azure OpenAI
+      |
+      +<---- scraper API sync ---->
+      
+Cloudflare runtime:
+  app <--> engine <--> processor
+           |
+        shared/state
 ```
+
+Diagrammet visar ansvar, inte ett påstående om att alla komponenter körs i samma deployment.
+
+## Python webbapp
+
+`app.py` hanterar användarsession, filuppladdning, jobbstate och background processing.
+
+Jobbflödet bevarar input/mellanresultat under bearbetning och kan pausa när providerkedjan är uttömd för att återupptas senare.
+
+## CLI/sync
+
+`main.py` har två huvudlägen:
+
+- `run` — läs fil och skriv en resultatfil med beskrivning;
+- `sync` — hämta produkter utan beskrivning från scraper-API och skriv tillbaka genererade resultat.
+
+Sync använder scraper-API-key via environment eller file path.
+
+## ProviderChain
+
+Providerabstraktionen skiljer applikationslogiken från enskilda AI-leverantörer.
+
+Konfigurationen består av:
+
+- credentials,
+- leverantörsspecifika extra fält,
+- providerordning,
+- modellval.
+
+Providerkeys ska inte passera genom loggar eller outputfiler.
+
+## Per-account providerconfig
+
+`provider_config.py` lagrar config under account-specifika kataloger. Credentialblobs krypteras med Fernet när aktuell skrivväg används.
+
+Det separerar användarkonfiguration från source code och från generell jobstate.
+
+## Scraper boundary
+
+Scrapern samlar in produktdata och exponerar API som synckomponenten använder.
+
+Render-/browserfetching är en separat boundary. Den ska kunna utvecklas eller flyttas utan att provider- och beskrivningslogiken behöver känna till browserimplementationen.
+
+## Cloudflare boundary
+
+Cloudflare-koden är uppdelad i app, engine och processor. De ska beskrivas och deployas som separata runtimeenheter med egna Wrangler-bindings.
+
+Shared code minskar duplication men ändrar inte ägarskapet för runtime state.
 
 ## Trust boundaries
 
-### App -> Engine
+- browser → Flask session/auth
+- app → krypterad providerconfig
+- app/CLI → externa AI-providers
+- sync → scraper API med separat auth
+- scraper → extern fetcher/browser
+- Cloudflare Workers → respektive bindings/state
 
-Appen använder intern Service Binding för primär tjänstkoppling. Interna anrop ska inte kräva en ny parallell credentialmodell när Cloudflare service-to-service-bindingen räcker.
+## Failure model
 
-### External fetcher -> Engine
-
-Fetchern är extern till Cloudflare-runtime och autentiserar sitt lease/result-kontrakt med befintlig ingest-credential. Credential-värdet ska aldrig läggas i repository, loggar eller dokumentation.
-
-### Storage
-
-- D1: canonical databasstate.
-- R2: objekt/uploads.
-- KV: sessionsrelaterad state.
-- Queue: arbetsfördelning, inte canonical långtidssanning.
-
-## Resilience
-
-Fetcherhosten är disposable. Engine måste kunna återvinna utgångna leases. En fetcher får därför inte bära unik state som krävs för att systemet ska återhämta sig.
-
-## Browser boundary
-
-Browser automation finns i den externa fetchern. Cloudflare Browser Run är inte en fallback för Produkter.
+Ett providerfel är inte automatiskt ett scraperfel. Ett fetcherfel är inte automatiskt ett AI-providerfel. Incidenter ska först klassificeras efter subsystemgränsen så att fallback och retries inte körs i fel lager.

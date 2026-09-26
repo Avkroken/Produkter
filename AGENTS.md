@@ -6,14 +6,14 @@
 - [docs/architecture.md](docs/architecture.md) — dataflöden och trust boundaries.
 - [docs/operations.md](docs/operations.md) — verifiering och drift.
 - [scraper/fetcher/README.md](scraper/fetcher/README.md) — externa Playwright-fetcherns kontrakt.
-- `Avkroken/.github/docs/engineering-context.md` och `documentation-standard.md` — central CI/governance och dokumentationsmodell.
+- Repositoryts egna README, `docs/`, workflows och versionerade konfiguration är auktoritativa för Produkter. Extern GitHub-/Cloudflare-live-state verifieras i respektive provider.
 
 ## Invariants
 
 - Arbeta i separat gren enligt `{agent}/{feature}/{YYYY-MM-DD}/{HH-mm}-{id}`.
 - Cloudflare är control/state plane; D1 är canonical durable application state.
 - Browser rendering ligger i den stateless externa Playwright-fetchern.
-- Browser rendering ligger i den externa fetchern; ändringar av den runtimegränsen ska vara explicita och verifierade.
+- Browser rendering ligger i den externa fetchern; ändringar av den runtimegränsen ska vara explicita och verifierade mot Produkters egen kod och konfiguration.
 - Fetchern får inte bära unik canonical state; lease-expiry ska möjliggöra återhämtning efter hostfel.
 - Verifiera berörd app/engine/processor med dess faktiska package- och Wrangler-konfiguration före merge.
 - Försvaga inte repositoryts Node/Cloudflare/Python/Docker-verifiering eller observability-kontrakt som workaround.

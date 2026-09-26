@@ -26,8 +26,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "produkter",
-      "database_id": "f1301925-95c3-47c7-b513-a25d4cfaf881"
+      "database_name": "produkter-eu",
+      "database_id": "d0bf1d69-64c4-4072-b9ce-d9a15129b526"
     }
   ],
   "r2_buckets": [

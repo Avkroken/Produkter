@@ -1,39 +1,30 @@
 # Produkter
 
-Produkter är Avkrokens produkt-/datainsamlingssystem. Cloudflare ansvarar för webbapp, API, state, köer och bearbetning medan browser-rendering körs i en separat stateless Playwright-fetcher utanför Cloudflare Browser Run.
+Produkter är ett system för att samla in produktdata och generera produktbeskrivningar med flera AI-leverantörer. Repositoryt innehåller både en lokal/Docker-baserad Python-app, scraper/fetcher-komponenter och en Cloudflare-baserad runtime uppdelad i flera Workers.
 
-## Produktionsdelar
+## Snabb verifiering
 
-- **App Worker `produkter`** — `produkter.denied.se`, UI/API, auth/sessioner, uploads och jobbproducering.
-- **Engine Worker `produkter-motor`** — schemaläggning, jobb/lease-kontrakt och AI-relaterad bearbetning.
-- **Processor Worker `produkter-bearbetare`** — konsumerar `produkter-jobb` och arbetar mot gemensam state.
-- **D1 `produkter`** — canonical persistent application state.
-- **R2 `produkter-uppladdningar`** — uploads/objekt.
-- **KV `SESSIONS`** — sessionsstate för appen.
-- **Extern Playwright-fetcher** — leasar renderjobb från engine, renderar lokalt och postar resultat tillbaka.
+Python-delarna:
 
-Cloudflare Browser Run ingår uttryckligen inte i produktionstopologin för Produkter. Browser-renderingen körs i Docker på den externa fetcherhosten; se [Dockerdrift för fetchern](scraper/fetcher/README.md).
+```bash
+python -m pip install -r requirements.txt
+pytest
+```
+
+Dockerkonfiguration:
+
+```bash
+docker compose config
+```
 
 ## Dokumentation
 
-- [Projektkontext](docs/project-context.md)
-- [Arkitektur](docs/architecture.md)
-- [Drift](docs/operations.md)
-- [Dockerdrift för extern render-fetcher](scraper/fetcher/README.md)
-- [Avkrokens dokumentationsstandard](https://github.com/Avkroken/.github/blob/main/docs/documentation-standard.md)
+Börja i **[dokumentationsöversikten](docs/index.md)**.
 
-## Verifiering
+- [Projektkontext](docs/project-context.md) — komponenter, runtime och state
+- [Arkitektur](docs/architecture.md) — dataflöden och trust boundaries
+- [Drift](docs/operations.md) — test, Docker, Cloudflare och incidenter
+- [Fetcher-dokumentation](scraper/fetcher/README.md) — den externa browser/fetcher-gränsen
+- [SECURITY.md](SECURITY.md) — säkerhetsrapportering
 
-Appen har verifieringsscript för tester, JavaScript-syntax, TypeScript och Wrangler dry-run:
-
-```bash
-cd cloudflare/app
-npm ci
-npm run validate
-```
-
-Övriga Worker-delar har egna package-/Wrangler-konfigurationer och ska verifieras mot respektive deploymentconfig före merge.
-
-## Säkerhet
-
-Secrets och providercredentials sätts i runtime/Cloudflare och får inte committas eller återges i dokumentation. Rapportera sårbarheter privat enligt [SECURITY.md](SECURITY.md).
+README är medvetet kort; systemet är för stort för att fungera som en enda lång manual.

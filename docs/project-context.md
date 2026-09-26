@@ -1,80 +1,80 @@
 # Projektkontext
 
-**Senast verifierad:** 2026-09-23
+**Senast verifierad:** 2026-09-24
 
 ## Ansvar
 
-Produkter består av ett Cloudflare-baserat control/state plane och en separat browser-renderingsyta.
+Produkter hanterar produktdata och generering av produktbeskrivningar. Repositoryt kombinerar flera runtimeformer och ska därför inte dokumenteras som en enda monolit.
 
-Cloudflare äger canonical application state, köer och API. Browser rendering är medvetet flyttad till en stateless extern Playwright-fetcher för att hålla Browser Run utanför Produkters produktionstopologi.
+## Python-app
 
-## Runtime
+Rootens Python-del innehåller:
 
-### App
+- `app.py` — Flask-webbapp och jobbhantering
+- `main.py` — CLI och scraper-synk
+- `auth.py` — webbappens authlager
+- `extractors.py` — fil-/radextraktion
+- `providers.py` — AI-providerabstraktion och failover
+- `provider_config.py` — per-account providerkonfiguration
+- `prompts.py` — promptbyggande
+- `github_report.py` — felrapportering
 
-`cloudflare/app/wrangler.jsonc`:
+## Input och jobb
 
-- Worker: `produkter`
-- entrypoint: `src/access-worker.ts`
-- domain: `produkter.denied.se`
-- static assets: `public/`
-- Service Binding: `ENGINE -> produkter-motor`
-- D1: `DB -> produkter`
-- R2: `UPLOADS -> produkter-uppladdningar`
-- KV: `SESSIONS`
-- Queue producer: `JOB_QUEUE -> produkter-jobb`
+CLI/webbappen kan extrahera produktdata från flera filformat och skriver genererade resultat till outputfiler.
 
-### Engine
+Webbappen sparar jobbmetadata och mellanresultat under sina data-/outputkataloger så att jobb kan återupptas.
 
-`cloudflare/engine/wrangler.jsonc`:
+## AI-providers
 
-- Worker: `produkter-motor`
-- entrypoint: `src/worker.ts`
-- domain: `motor.denied.se`
-- D1: `produkter`
-- Workers AI binding: `AI`
-- cron: var femte minut
-- ingen Browser binding
+Providerlagret stödjer flera implementationer via en `ProviderChain`.
 
-### Processor
+Verifierad configmodell:
 
-`cloudflare/processor/wrangler.jsonc`:
+- provider credentials lagras per account under configvolym;
+- credentials krypteras med `PROVIDER_CONFIG_MASTER_KEY` när de skrivs via aktuell configväg;
+- provider order/model sparas separat från credentialfilen;
+- CLI-läget kan i stället bygga providerkedja från environment.
 
-- Worker: `produkter-bearbetare`
-- D1: `produkter`
-- R2: `produkter-uppladdningar`
-- consumer + producer på `produkter-jobb`
-- consumer concurrency är begränsad i Wrangler-konfigurationen
+Providerfailover och kvot-/resume-beteende är en del av applikationslogiken och ska inte dupliceras i UI.
 
-### Extern fetcher
+## Docker
 
-`scraper/fetcher/fetcher.py` är en stateless Playwright-worker. Den:
+Rootens `docker-compose.yml` definierar:
 
-1. leasar jobb från engine via `POST /jobs/lease`,
-2. renderar `list`- eller `detail`-jobb lokalt,
-3. postar resultat till `POST /jobs/:id/result`.
+- webbappen `app`;
+- valfri `sync`-profil;
+- separata volumes för uploads, outputs och config;
+- anslutning till scraper-nätverk för synckomponenten.
 
-Den behöver `ENGINE_URL` och en konfigurerad `INGEST_API_KEY`. Den exponerar ingen inbound application port och håller ingen canonical state.
+## Scraper
+
+`scraper/` är en egen delsystemyta med API, scraping, web UI, alerts och en extern fetcher.
+
+Browser/render-fetcher dokumenteras under [`scraper/fetcher/README.md`](../scraper/fetcher/README.md).
+
+## Cloudflare
+
+`cloudflare/` innehåller separata deployenheter:
+
+- `app`
+- `engine`
+- `processor`
+
+samt `shared`, `migrations`, `infra` och scripts.
+
+Varje Worker-konfigurationsfil är auktoritativ för just den deployenhetens bindings/runtime.
+
+De tre Cloudflare-Workers som använder D1 binder samma databas, `produkter-eu`. Produktionsdatabasen ska skapas med Cloudflare-jurisdiction `eu`. Shared D1-routing använder Sessions API för request-, cron- och queue-vägar med lämplig `first-unconstrained`/`first-primary`-constraint, så read replication kan vara `auto` inom EU-jurisdictionen.
 
 ## State- och failuremodell
 
-D1 är canonical durable state. Förlorad extern renderhost pausar rendering, men lease-expiry gör att engine kan återvinna jobb när fetchern återkommer.
+Systemet innehåller flera typer av state: jobb/resultat/config i Python-appen, scraperstate och Cloudflare-resurser. Dokumentation ska ange vilket subsystem som äger respektive state i stället för att använda ett generiskt "databasen".
 
-R2 används för uploads/objekt; KV för sessionsstate. Queue separerar producers från bearbetning.
+## Secrets
 
-## Browser rendering boundary
-
-Cloudflare Browser Run ska inte återintroduceras i Produkter utan ett separat arkitekturbeslut. Lägg inte till Wrangler `browser` binding eller Browser Run `/crawl`-anrop i engine som lokal bekvämlighetsfix.
-
-
-## Observability
-
-Samtliga tre Workers har Cloudflare observability aktiverat med begränsad sampling och query-string-redaction. Persistenta logs/traces ska fortsatt följa repositoryts Cloudflare-observabilitykontrakt.
-
-## CI
-
-Produkter omfattas av centrala Node-, Cloudflare-, Python- och Docker-profiler enligt Avkrokens engineering-context. Repo-lokal post-merge/scheduled container scanning kan fortsätta där den har annan trigger/roll än central PR-gating.
+Providerkeys, scraper-API-keys, session secrets och andra credentials ska ligga i avsedd runtime/configmodell och aldrig i docs eller Git.
 
 ## Uppdateringskontrakt
 
-Uppdatera dokumentationen när Worker-topologi, bindings, kökontrakt, D1/R2/KV-ansvar, fetcher-kontrakt eller Browser Run-gräns ändras.
+Uppdatera denna fil när subsystemgränser, providerkedja, persistent state, Docker-topologi eller Cloudflare-deployenheter ändras.

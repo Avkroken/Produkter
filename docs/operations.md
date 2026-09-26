@@ -1,64 +1,100 @@
 # Drift
 
-## Repositoryverifiering
-
-App:
+## Python-verifiering
 
 ```bash
-cd cloudflare/app
-npm ci
-npm run validate
+python -m pip install -r requirements.txt
+pytest
 ```
 
-`validate` kör tester, syntaxkontroll för browserkoden, TypeScript typecheck och Wrangler dry-run.
+Testerna täcker bland annat auth, extractors, providerconfig, providers, prompts, mainflöden, log safety och felrapportering.
 
-Engine och processor ska verifieras från respektive katalog med deras package scripts och samma Wrangler-konfiguration som används vid deploy.
+## Docker
 
-## Deploymentgräns
-
-Dokumentations- eller kodverifiering ska inte implicit deploya produktion. Production deploy ska använda respektive Workers faktiska Wrangler-config.
-
-## Extern fetcher i Docker
-
-Produkters browser-rendering körs som Docker-containern `produkter-fetcher`.
-Kanonisk driftfil är `scraper/fetcher/compose.yml`; full runbook finns i
-[`scraper/fetcher/README.md`](../scraper/fetcher/README.md).
-
-Hosten behöver endast Docker/Compose, utgående HTTPS och en konfigurerad
-`INGEST_API_KEY` för engine-API:t. Fetchern exponerar ingen inbound port och har ingen lokal
-canonical state.
-
-Normal start:
+Validera Compose innan driftförändringar:
 
 ```bash
-cd scraper/fetcher
-cp .env.example .env
-# sätt INGEST_API_KEY lokalt i .env
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail=100 produkter-fetcher
+docker compose config
 ```
 
-Vid byte från en annan renderingsimplementation ska Docker-fetchern verifieras
-med ett riktigt lease/result-flöde innan den tidigare renderaren stängs av.
+Starta webbappen enligt repositoryts Compose-modell och aktivera `sync`-profilen endast när kontinuerlig scraper-synk ska köras.
 
-Vid hostbyte:
+Persistent data ligger i separata volumes för uploads, outputs och config.
 
-1. verifiera att engine nås från den nya hosten,
-2. verifiera credential via fetcherns lease-anrop,
-3. kör minst ett renderjobb och verifiera accepterat resultat,
-4. stoppa gammal fetcher innan concurrency ökas på den nya hosten.
+## Providerkonfiguration
 
-## Incidenter
+Verifiera:
 
-Om fetchern försvinner ska canonical D1-state lämnas intakt. Åtgärda host/fetcher och låt lease-expiry återställa arbetsflödet.
+1. att master key finns i runtime;
+2. att providerconfig skrivs/läses för rätt account;
+3. att required extra fields finns för aktuell provider;
+4. att provider order inte innehåller borttagna/okonfigurerade providers;
+5. att logs aldrig innehåller credentialvärden.
 
-Om queue/processor felar: verifiera queue backlog/retries och D1/R2-state före manuell omkörning.
+## CLI
+
+Filkörning:
+
+```bash
+python main.py run <input>
+```
+
+Scraper-synk:
+
+```bash
+python main.py sync
+```
+
+Använd `--watch` endast när processen ska loopa kontinuerligt.
+
+## Scraper/fetcher
+
+Scraperns egen verifiering finns under `scraper/tests/`.
+
+För browser/render-fetcher: följ [fetcher-dokumentationen](../scraper/fetcher/README.md). Ändringar i browserdelen ska inte kräva att AI-providercredentials flyttas dit.
+
+## Cloudflare
+
+Verifiera varje deployenhet mot sin egen config:
+
+- `cloudflare/app/wrangler.jsonc`
+- `cloudflare/engine/wrangler.jsonc`
+- `cloudflare/processor/wrangler.jsonc`
+
+Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift.
+
+### D1 data locality och read replication
+
+App, engine och processor ska binda samma D1-databas skapad med `jurisdiction=eu`. Jurisdiction kan inte läggas till på en befintlig databas; replacement kräver därför verifierad export/import till en ny EU-databas före binding-cutover.
+
+Cloudflare-runtime använder den gemensamma Sessions API-wrappern för D1. Read replication får därför vara `auto`; med EU-jurisdiction skapas repliker endast inom EU.
+
+## Incidentklassificering
+
+### Generering misslyckas
+
+Kontrollera providerkedja, aktuell provider, quota/resume-state och output/jobstate.
+
+### Input kan inte läsas
+
+Kontrollera extractor för aktuellt filformat innan providerlagret felsöks.
+
+### Sync kan inte läsa/skriva produkt
+
+Kontrollera scraper URL/auth/API före AI-providerlagret.
+
+### Scraping/rendering misslyckas
+
+Isolera scraper/fetcher/browser boundaryn. Providerkeys och promptlogik är inte första felsökningspunkt.
+
+### Cloudflare-del fallerar
+
+Identifiera först vilken deployenhet som äger requesten eller state: app, engine eller processor.
 
 ## Credentials
 
-Secrets hör hemma i Cloudflare secrets/runtime eller hostens säkra runtimekonfiguration. Dokumentera namn och ansvar, aldrig värden.
+Dokumentation och logs får aldrig innehålla providerkeys, scraper-API-keys, session secrets eller krypteringsnycklar.
 
 ## Observability
 
-Behåll query-string-redaction och central samplingpolicy. Lägg inte till tail consumers eller externa observability-destinations som repo-lokal genväg utan separat central policyändring.
+Logga subsystem, operation och feltyp men inte känsliga payloads. Det ska gå att avgöra om felet uppstod i input, provider, scraper/fetcher eller Cloudflare utan att dumpa användardata.
