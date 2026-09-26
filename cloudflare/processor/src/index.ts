@@ -15,7 +15,7 @@ import { buildChain, type ProviderConfigEnv } from "../../shared/provider-config
 import { extractRows, ExtractionError, type ExtractedRows } from "./extractors";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
 import { AllProvidersExhausted } from "../../shared/providers";
-import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { PRODUKTER_REPOSITORY_ID, reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
 
 interface Env extends ProviderConfigEnv, GitHubReportEnv {
   UPLOADS: R2Bucket;
@@ -51,7 +51,7 @@ export default {
         // oväntat fel ska inte kunna fastna i en oändlig kö-retry-loop.
         console.error(`jobId=${msg.body.jobId} type=${msg.body.type} misslyckades:`, err);
         await reportErrorToGitHub(
-          "Avkroken/produkter",
+          PRODUKTER_REPOSITORY_ID,
           `Processor: ${msg.body.type} misslyckades`,
           err,
           env,

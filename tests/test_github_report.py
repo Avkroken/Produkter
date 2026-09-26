@@ -29,6 +29,20 @@ class TestRedact:
 
 
 class TestReportErrorToGithub:
+    def test_resolves_stable_repository_id(self, monkeypatch):
+        class Response:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"full_name": "renamed/Produkter"}
+
+        monkeypatch.setattr(github_report.requests, "get", lambda *args, **kwargs: Response())
+        assert (
+            github_report._resolve_repo(github_report.PRODUKTER_REPOSITORY_ID, {})
+            == "renamed/Produkter"
+        )
+
     def test_returns_none_without_token(self, monkeypatch):
         monkeypatch.delenv("GITHUB_ERROR_REPORT_TOKEN", raising=False)
         result = report_error_to_github("Avkroken/test", "title", ValueError("x"))

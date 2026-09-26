@@ -28,7 +28,7 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
-from github_report import report_error_to_github
+from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 
 app = Flask(__name__)
 
@@ -47,7 +47,7 @@ def handle_unexpected_error(exc):
     path = _safe_log_value(request.path)
     logger.exception("Unhandled error handling %s %s", method, path)
     report_error_to_github(
-        "Avkroken/produkter",
+        PRODUKTER_REPOSITORY_ID,
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},
@@ -867,7 +867,7 @@ async def scraper_loop():
             await run_scraper()
         except (PlaywrightError, psycopg2.Error, OSError) as e:
             logger.error(f"Scraping failed: {e}")
-            report_error_to_github("Avkroken/produkter", "Scraping failed", e)
+            report_error_to_github(PRODUKTER_REPOSITORY_ID, "Scraping failed", e)
         finally:
             scraping_active = False
         

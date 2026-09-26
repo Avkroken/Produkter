@@ -16,7 +16,7 @@ import auth
 import provider_config
 from csv_safety import safe_csv
 from extractors import SUPPORTED_EXTENSIONS, extract_rows
-from github_report import report_error_to_github
+from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 from main import (
     SCRAPER_URL,
     _process_one,
@@ -83,7 +83,7 @@ def handle_unexpected_error(exc):
     path = _safe_log_value(request.path)
     log.exception("Unhandled error handling %s %s", method, path)
     report_error_to_github(
-        "Avkroken/produkter",
+        PRODUKTER_REPOSITORY_ID,
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},

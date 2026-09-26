@@ -25,7 +25,7 @@ import {
   type ProviderName,
 } from "../../shared/providers";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
-import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { PRODUKTER_REPOSITORY_ID, reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
 
 interface Env extends GitHubReportEnv {
   DB: D1Database;
@@ -53,7 +53,7 @@ export interface RenderKoEnv {
   DB: D1Database;
 }
 
-const REPO = "Avkroken/produkter";
+const REPO = PRODUKTER_REPOSITORY_ID;
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
 const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
