@@ -14,7 +14,7 @@ from flask import Flask, render_template, request, jsonify, g, Response
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
-from github_report import report_error_to_github
+from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 
 SCRAPER_API = os.getenv('SCRAPER_API', 'http://localhost:8765')
 SCRAPER_ENGINE = os.getenv('SCRAPER_ENGINE', 'http://localhost:5001')
@@ -50,7 +50,7 @@ def handle_unexpected_error(exc):
     path = _safe_log_value(request.path)
     logger.exception("Unhandled error handling %s %s", method, path)
     report_error_to_github(
-        "Avkroken/produkter",
+        PRODUKTER_REPOSITORY_ID,
         f"Oväntat fel: {request.method} {request.path}",
         exc,
         context={"method": request.method, "path": request.path},
