@@ -21,7 +21,7 @@ import requests
 import provider_config
 from csv_safety import safe_csv
 from extractors import extract_rows
-from github_report import report_error_to_github
+from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 from prompts import build_system_prompt
 from providers import AllProvidersExhausted, ProviderChain
 
@@ -211,7 +211,7 @@ def cmd_sync(args) -> None:
         except Exception as e:
             log.error("Kunde inte hämta från scrapern: %s", e)
             report_error_to_github(
-                "Avkroken/produkter", "Sync: kunde inte hämta från scrapern", e
+                PRODUKTER_REPOSITORY_ID, "Sync: kunde inte hämta från scrapern", e
             )
             products = []
 
@@ -238,7 +238,7 @@ def cmd_sync(args) -> None:
                     except Exception as e:
                         log.error("Kunde inte spara beskrivning för %s: %s", pid, e)
                         report_error_to_github(
-                            "Avkroken/produkter",
+                            PRODUKTER_REPOSITORY_ID,
                             "Sync: kunde inte spara beskrivning",
                             e,
                             context={"product_id": str(pid)},
