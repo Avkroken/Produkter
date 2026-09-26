@@ -11,6 +11,8 @@
 // No-op om GITHUB_ERROR_REPORT_TOKEN saknas — felet loggas ändå till console
 // av anroparen.
 
+export const PRODUKTER_REPOSITORY_ID = 1223482099;
+
 const SECRET_ENV_MARKERS = ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASS"];
 const EMAIL_RE = /[\w.+-]{1,64}@[\w.-]{1,255}\.\w{2,24}/g;
 const HOME_PATH_RE = /\/home\/[^/\s]+/g;
@@ -42,8 +44,25 @@ async function fingerprint(err: Error): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 10);
 }
 
+async function resolveRepo(
+  repo: string | number,
+  headers: Record<string, string>,
+): Promise<string | null> {
+  if (typeof repo === "number" || /^\d+$/.test(repo)) {
+    try {
+      const response = await fetch(`https://api.github.com/repositories/${repo}`, { headers });
+      if (!response.ok) return null;
+      const data = await response.json<{ full_name?: string }>();
+      return typeof data.full_name === "string" && data.full_name.includes("/") ? data.full_name : null;
+    } catch {
+      return null;
+    }
+  }
+  return repo;
+}
+
 export async function reportErrorToGitHub(
-  repo: string,
+  repo: string | number,
   title: string,
   err: unknown,
   env: GitHubReportEnv,
@@ -60,8 +79,11 @@ export async function reportErrorToGitHub(
     "User-Agent": "produkter",
   };
 
+  const resolvedRepo = await resolveRepo(repo, headers);
+  if (!resolvedRepo) return null;
+
   try {
-    const q = `repo:${repo} is:issue is:open in:title [${fp}]`;
+    const q = `repo:${resolvedRepo} is:issue is:open in:title [${fp}]`;
     const search = await fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(q)}`, { headers });
     if (search.ok) {
       const data = await search.json<{ total_count: number; items: { html_url: string }[] }>();
@@ -89,7 +111,7 @@ export async function reportErrorToGitHub(
     `filinnehåll) är borttagen innan denna issue skapades._`;
 
   try {
-    const resp = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+    const resp = await fetch(`https://api.github.com/repos/${resolvedRepo}/issues`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
