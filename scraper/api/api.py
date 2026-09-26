@@ -17,7 +17,7 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
-from github_report import report_error_to_github
+from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 
 DB_HOST = os.getenv('DB_HOST', 'postgres')
 DB_NAME = os.getenv('DB_NAME', 'scraper')
@@ -85,7 +85,7 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credenti
 async def handle_unexpected_error(request: Request, exc: Exception):
     logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
     report_error_to_github(
-        "Avkroken/produkter",
+        PRODUKTER_REPOSITORY_ID,
         f"Oväntat fel: {request.method} {request.url.path}",
         exc,
         context={"method": request.method, "path": request.url.path},
