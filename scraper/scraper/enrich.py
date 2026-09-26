@@ -46,8 +46,9 @@ from scraper.scraper import (  # noqa: E402
 )
 
 try:
-    from github_report import report_error_to_github
+    from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 except ImportError:  # best-effort, mirrors scraper.py's conventions
+    PRODUKTER_REPOSITORY_ID = 1223482099
     def report_error_to_github(*_args, **_kwargs):
         return None
 
@@ -256,7 +257,7 @@ def main():
         asyncio.run(run(args))
     except Exception as e:  # best-effort felrapport, matchar scraper.py-konventionen
         logger.exception("Oväntat fel i enrich")
-        report_error_to_github("Avkroken/produkter", "enrich: oväntat fel", e, {})
+        report_error_to_github(PRODUKTER_REPOSITORY_ID, "enrich: oväntat fel", e, {})
         sys.exit(1)
 
 
