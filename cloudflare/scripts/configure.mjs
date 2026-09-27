@@ -141,7 +141,7 @@ const app = {
     directory: "./public",
     not_found_handling: "single-page-application",
     binding: "ASSETS",
-    run_worker_first: ["/", "/api/*", "/signup", "/login", "/logout", "/underlag", "/admin", "/admin/*", "/forgot-password.html", "/robots.txt", "/sitemap.xml"],
+    run_worker_first: ["/", "/api/*", "/signup", "/login", "/logout", "/underlag", "/admin", "/admin/*", "/forgot-password", "/forgot-password.html", "/robots.txt", "/sitemap.xml"],
   },
   services: [{ binding: "ENGINE", service: engineName }],
   d1_databases: [{ binding: "DB", database_name: d1Name, database_id: d1Id }],
