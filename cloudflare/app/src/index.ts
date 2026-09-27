@@ -383,7 +383,7 @@ async function handlePasswordRecovery(request: Request, env: Env, ctx: Execution
         throw new AuthRequestError("Turnstile-verifieringen misslyckades. Försök igen.", 403);
       }
     }
-    if (!complete && !env.RESEND_API_KEY) {
+    if (!complete && (!env.RESEND_API_KEY || !env.MAIL_FROM)) {
       throw new AuthRequestError("Lösenordsåterställning via mejl är tillfälligt otillgänglig. Försök igen senare.", 503);
     }
     if (!await resetRateLimit(env, complete ? "reset-complete" : "reset-request", clientIp(request), complete ? 20 : 10)) {
