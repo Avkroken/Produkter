@@ -1,7 +1,6 @@
-// OAuth-inloggning (authorization code). Portad från politiker-webapp — SAMMA
-// OAuth-appar (Google/Microsoft) återanvänds; bara redirect_uri skiljer, så
-// produkters callback-URL måste läggas till i respektive OAuth-apps
-// redirect-lista. Apple ej stött (kräver roterande ES256-JWT-secret).
+// OAuth-inloggning (authorization code). Varje installation använder egna
+// OAuth-appar och callback-URL byggs från PUBLIC_APP_URL.
+// Apple stöds inte här (kräver roterande ES256-JWT-secret).
 import { randomId, hashPassword } from "../../shared/crypto";
 import { getAccountByEmail, type Env } from "./db";
 
@@ -33,14 +32,13 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
 };
 
-const REDIRECT_BASE = "https://produkter.denied.se/api/oauth";
+function redirectUri(provider: string, env: Env): string {
+  const origin = new URL(env.PUBLIC_APP_URL).origin;
+  return `${origin}/api/oauth/${provider}/callback`;
+}
 
 export function isKnownProvider(provider: string): boolean {
   return provider in PROVIDERS;
-}
-
-function redirectUri(provider: string): string {
-  return `${REDIRECT_BASE}/${provider}/callback`;
 }
 
 export function getAuthorizeUrl(provider: string, env: Env, state: string): string {
@@ -50,7 +48,7 @@ export function getAuthorizeUrl(provider: string, env: Env, state: string): stri
   if (!clientId) throw new Error(`${provider}-inloggning är inte konfigurerad än`);
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri(provider),
+    redirect_uri: redirectUri(provider, env),
     response_type: "code",
     scope: cfg.scope,
     state,
@@ -76,7 +74,7 @@ async function exchangeCodeForUserInfo(
       client_id: clientId,
       client_secret: clientSecret,
       code,
-      redirect_uri: redirectUri(provider),
+      redirect_uri: redirectUri(provider, env),
       grant_type: "authorization_code",
     }),
   });
