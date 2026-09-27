@@ -6,6 +6,44 @@ const cloudflareDir = fileURLToPath(new URL("../", import.meta.url));
 const useExample = process.argv.includes("--example");
 const sourcePath = path.join(cloudflareDir, useExample ? "deployment.example.json" : "deployment.json");
 
+async function loadDeployment() {
+  if (useExample) {
+    return {
+      config: JSON.parse(await readFile(sourcePath, "utf8")),
+      source: "deployment.example.json",
+    };
+  }
+
+  const inline = process.env.CLOUDFLARE_DEPLOYMENT_CONFIG?.trim();
+  if (inline) {
+    try {
+      return {
+        config: JSON.parse(inline),
+        source: "CLOUDFLARE_DEPLOYMENT_CONFIG",
+      };
+    } catch (error) {
+      throw new Error(
+        `CLOUDFLARE_DEPLOYMENT_CONFIG är inte giltig JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  try {
+    return {
+      config: JSON.parse(await readFile(sourcePath, "utf8")),
+      source: "deployment.json",
+    };
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(
+        "Saknar cloudflare/deployment.json. Kopiera deployment.example.json lokalt, " +
+        "eller sätt CLOUDFLARE_DEPLOYMENT_CONFIG som en Workers Builds build-secret.",
+      );
+    }
+    throw error;
+  }
+}
+
 function requiredString(value, label) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`Saknar obligatoriskt konfigurationsvärde: ${label}`);
@@ -45,7 +83,7 @@ function observability() {
   };
 }
 
-const config = JSON.parse(await readFile(sourcePath, "utf8"));
+const { config, source } = await loadDeployment();
 const appUrl = publicHttpsUrl(config.appUrl, "appUrl");
 const engineUrl = publicHttpsUrl(config.engineUrl, "engineUrl");
 const appName = requiredString(config.workers?.app, "workers.app");
@@ -141,4 +179,4 @@ for (const [name, value] of [["app", app], ["engine", engine], ["processor", pro
   await writeFile(path.join(cloudflareDir, name, "wrangler.jsonc"), JSON.stringify(value, null, 2) + "\n");
 }
 
-console.log(`Genererade Wrangler-konfigurationer från ${path.basename(sourcePath)}.`);
+console.log(`Genererade Wrangler-konfigurationer från ${source}.`);
