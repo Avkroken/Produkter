@@ -63,6 +63,8 @@ node cloudflare/scripts/configure.mjs
 
 Verifiera app, engine och processor mot de genererade filerna. De genererade `wrangler.jsonc`-filerna är lokal deployment-state och ska inte committas.
 
+I Cloudflare Workers Builds ska motsvarande JSON tillhandahållas som build-secreten `CLOUDFLARE_DEPLOYMENT_CONFIG`. Buildmiljön får därmed samma installationsstate utan att domäner eller provider-resurs-ID:n ligger i Git.
+
 Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift.
 
 ### D1 data locality och read replication
