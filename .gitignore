@@ -50,3 +50,7 @@ batch_state.json
 /uploads/
 /outputs/
 jobs.json
+
+# Local Cloudflare deployment state
+cloudflare/deployment.json
+cloudflare/*/wrangler.jsonc
