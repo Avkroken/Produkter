@@ -16,8 +16,8 @@ class TestRedact:
         assert "abc here" in text
 
     def test_redacts_email(self):
-        assert "[EMAIL REDACTED]" in _redact("failed for anders.eriksson@denied.se")
-        assert "anders.eriksson@denied.se" not in _redact("failed for anders.eriksson@denied.se")
+        assert "[EMAIL REDACTED]" in _redact("failed for person@example.com")
+        assert "person@example.com" not in _redact("failed for person@example.com")
 
     def test_redacts_home_path(self):
         assert "/home/[user]/" in _redact("File \"/home/berduf/GitHub/app.py\", line 1")
@@ -39,13 +39,13 @@ class TestReportErrorToGithub:
 
         monkeypatch.setattr(github_report.requests, "get", lambda *args, **kwargs: Response())
         assert (
-            github_report._resolve_repo(github_report.PRODUKTER_REPOSITORY_ID, {})
+            github_report._resolve_repo(123456789, {})
             == "renamed/Produkter"
         )
 
     def test_returns_none_without_token(self, monkeypatch):
         monkeypatch.delenv("GITHUB_ERROR_REPORT_TOKEN", raising=False)
-        result = report_error_to_github("Avkroken/test", "title", ValueError("x"))
+        result = report_error_to_github("owner/test", "title", ValueError("x"))
         assert result is None
 
     def test_never_raises_on_network_failure(self, monkeypatch):
@@ -57,7 +57,7 @@ class TestReportErrorToGithub:
 
         monkeypatch.setattr(github_report.requests, "get", boom)
         monkeypatch.setattr(github_report.requests, "post", boom)
-        result = report_error_to_github("Avkroken/test", "title", ValueError("x"))
+        result = report_error_to_github("owner/test", "title", ValueError("x"))
         assert result is None
 
     def test_throttles_after_max_per_window(self, monkeypatch):
@@ -74,7 +74,7 @@ class TestReportErrorToGithub:
             lambda *a, **k: (_ for _ in ()).throw(github_report.requests.RequestException()),
         )
         # De första två släpps igenom (och försöker nätverk), den tredje stoppas av spärren.
-        report_error_to_github("Avkroken/test", "t", ValueError("x"))
-        report_error_to_github("Avkroken/test", "t", ValueError("y"))
-        report_error_to_github("Avkroken/test", "t", ValueError("z"))
+        report_error_to_github("owner/test", "t", ValueError("x"))
+        report_error_to_github("owner/test", "t", ValueError("y"))
+        report_error_to_github("owner/test", "t", ValueError("z"))
         assert len(calls) == 2
