@@ -53,10 +53,13 @@ function internalForAdmin(method: string, pathname: string): string | null {
   return `/api/admin/${suffix}`;
 }
 
-function isSpaShellRequest(method: string, pathname: string): boolean {
+function isWorkerRenderedAsset(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return false;
-  return pathname === "/" || pathname === "/admin" || pathname === "/admin/";
+  return pathname === "/" ||
+    pathname === "/admin" ||
+    pathname === "/admin/" ||
+    pathname === "/forgot-password.html";
 }
 
 export function accessRoute(method: string, pathname: string): AccessRoute {
@@ -71,7 +74,7 @@ export function accessRoute(method: string, pathname: string): AccessRoute {
     };
   }
 
-  if (isSpaShellRequest(method, pathname)) {
+  if (isWorkerRenderedAsset(method, pathname)) {
     return { type: "asset", pathname };
   }
 
