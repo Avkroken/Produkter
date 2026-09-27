@@ -35,6 +35,7 @@ jobs:
         2d9837d23e4d5ffa2066fa07d6c4a3f9a913c32c09af74ecf631f99672f31e98
         64aba032e41c85b143c2c7657832cb9d60f4cbb5150da065b2e4f7912f520c44
         47d0a89719d861bcb2b09bd322e8380c9c7bd949c61dd4831e6e61f238c3dc46
+        503b8b33f64f19e3096ef956fcae555cba98c2b48f6ad11512e5b2445cf319e6
 
   node-cloudflare-validation:
     name: Node and Cloudflare validation
