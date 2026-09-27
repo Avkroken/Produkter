@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --remote",
+    "config:generate": "node ../scripts/configure.mjs",
+    "dev": "npm run config:generate && wrangler dev --remote",
     "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && wrangler deploy --dry-run",
-    "deploy": "node ../scripts/deploy-app.mjs",
+    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run",
+    "deploy": "npm run config:generate && node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
-    "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
+    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
