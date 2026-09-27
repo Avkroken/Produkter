@@ -11,9 +11,9 @@ const schema = await readFile(new URL("../infra/schema.sql", import.meta.url), "
 const cryptoBundle = await build({ entryPoints: [new URL("../shared/crypto.ts", import.meta.url).pathname], bundle: true, write: false, format: "esm", platform: "node" });
 const { hashPassword, sha256Hex } = await import(`data:text/javascript;base64,${Buffer.from(cryptoBundle.outputFiles[0].text).toString("base64")}`);
 
-async function fixture({ mail = true, dbReady = true, mailStatus = 200 } = {}) {
+async function fixture({ mail = true, sender = true, dbReady = true, mailStatus = 200 } = {}) {
   const messages = [];
-  const bindings = { PUBLIC_APP_URL: "https://app.example.com", TURNSTILE_SECRET: "test-secret", TURNSTILE_HOSTNAMES: "app.example.com", ...(mail ? { RESEND_API_KEY: "test-only", MAIL_FROM: "noreply@mail.example.com" } : {}) };
+  const bindings = { PUBLIC_APP_URL: "https://app.example.com", TURNSTILE_SECRET: "test-secret", TURNSTILE_HOSTNAMES: "app.example.com", ...(mail ? { RESEND_API_KEY: "test-only" } : {}), ...(sender ? { MAIL_FROM: "noreply@mail.example.com" } : {}) };
   const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: outputFiles[0].text, compatibilityDate: "2026-06-01", d1Databases: ["DB"], kvNamespaces: ["SESSIONS"], bindings,
     outboundService: async request => {
       const url = new URL(request.url);
@@ -85,13 +85,15 @@ test("expired token cannot reset and invalid input is rejected", async () => {
 
 test("missing mail configuration and database failure are service errors", async () => {
   const f=await fixture({mail:false});
+  const missingSender=await fixture({sender:false});
   const broken=await fixture({dbReady:false});
   try {
     assert.equal((await f.post("/api/auth/forgot-password", {email:"person@example.com"})).status,503);
+    assert.equal((await missingSender.post("/api/auth/forgot-password", {email:"person@example.com"})).status,503);
     const response=await broken.post("/login", {email:"person@example.com",password:"wrong-password"});
     assert.equal(response.status,503);
     assert.doesNotMatch(await response.text(),/SELECT|D1_ERROR|no such table/);
-  } finally { await f.mf.dispose(); await broken.mf.dispose(); }
+  } finally { await f.mf.dispose(); await missingSender.mf.dispose(); await broken.mf.dispose(); }
 });
 
 test("per-address mail throttling stays generic and IP limit rejects excess", async () => {
