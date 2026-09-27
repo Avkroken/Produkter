@@ -18,6 +18,26 @@ function requestWithPath(request: Request, pathname: string): Request {
   return new Request(url, request);
 }
 
+function assetRequestWithPath(request: Request, pathname: string): Request {
+  const rewritten = requestWithPath(request, pathname);
+  const headers = new Headers(rewritten.headers);
+  headers.delete("If-None-Match");
+  headers.delete("If-Modified-Since");
+  return new Request(rewritten, { headers });
+}
+
+function noStoreHtml(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.delete("ETag");
+  headers.delete("Last-Modified");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function redirectToCanonical(request: Request, pathname: string): Response {
   const target = new URL(request.url);
   target.pathname = pathname;
@@ -141,7 +161,7 @@ function injectAccessRouting(
       });
   }
 
-  return applyHtmlIndexingPolicy(rewriter.transform(response), pathname);
+  return noStoreHtml(applyHtmlIndexingPolicy(rewriter.transform(response), pathname));
 }
 
 export default {
@@ -163,7 +183,7 @@ export default {
 
     if (route.type === "asset") {
       return injectAccessRouting(
-        await env.ASSETS.fetch(requestWithPath(request, route.pathname)),
+        await env.ASSETS.fetch(assetRequestWithPath(request, route.pathname)),
         externalUrl.pathname,
         canonicalRoot,
         env,
