@@ -1,6 +1,7 @@
 import app from "./worker";
 import { accessRoute } from "./access-routing";
 import type { Env } from "./db";
+import { configuredPublicOrigin, robotsText, sitemapText } from "./public-metadata";
 
 type AccessEnv = Env & { ASSETS: Fetcher };
 
@@ -47,28 +48,14 @@ function applyHtmlIndexingPolicy(response: Response, pathname: string): Response
   return withRobotsHeader(response, pathname === "/" ? "index, follow" : "noindex, nofollow");
 }
 
-function configuredPublicOrigin(env: AccessEnv): string {
-  const url = new URL(env.PUBLIC_APP_URL);
-  if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("PUBLIC_APP_URL måste vara ett HTTPS-origin utan path/query");
-  }
-  return url.origin;
-}
-
 function robotsResponse(origin: string, headOnly: boolean): Response {
-  const body = `User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`;
-  return new Response(headOnly ? null : body, {
+  return new Response(headOnly ? null : robotsText(origin), {
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 
 function sitemapResponse(origin: string, headOnly: boolean): Response {
-  const body =
-    `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    `  <url><loc>${origin}/</loc></url>\n` +
-    `</urlset>\n`;
-  return new Response(headOnly ? null : body, {
+  return new Response(headOnly ? null : sitemapText(origin), {
     headers: { "content-type": "application/xml; charset=utf-8" },
   });
 }
@@ -109,7 +96,7 @@ function injectAccessRouting(response: Response, pathname: string, canonicalRoot
 export default {
   async fetch(request: Request, env: AccessEnv, ctx: ExecutionContext): Promise<Response> {
     const externalUrl = new URL(request.url);
-    const canonicalRoot = configuredPublicOrigin(env);
+    const canonicalRoot = configuredPublicOrigin(env.PUBLIC_APP_URL);
     const headOnly = request.method === "HEAD";
     if ((request.method === "GET" || headOnly) && externalUrl.pathname === "/robots.txt") {
       return robotsResponse(canonicalRoot, headOnly);
