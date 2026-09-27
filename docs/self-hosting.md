@@ -58,6 +58,16 @@ Fyll i egna värden för:
 
 Om du använder Cloudflares Git-integration ska samma JSON i stället läggas som en **Build secret** med namnet `CLOUDFLARE_DEPLOYMENT_CONFIG` på varje Worker-build som använder repositoryt. Det är build-time konfiguration och ska inte läggas som runtime-secret eller committas.
 
+Konfigurera varje ansluten Worker så här:
+
+| Worker | Root directory | Deploy command | Preview command |
+| --- | --- | --- | --- |
+| app | `cloudflare/app` | `npm run deploy` | `npm run preview` |
+| engine | `cloudflare/engine` | `npm run deploy` | `npm run preview` |
+| processor | `cloudflare/processor` | `npm run deploy` | `npm run preview` |
+
+Alla tre använder samma Build secret `CLOUDFLARE_DEPLOYMENT_CONFIG`. Preview- och deploy-kommandona genererar sin lokala `wrangler.jsonc` före Wrangler körs.
+
 Generatorn väljer i ordning:
 
 1. `--example` för CI/test;
