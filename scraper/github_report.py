@@ -25,7 +25,7 @@ import traceback
 
 import requests
 
-PRODUKTER_REPOSITORY_ID = 1223482099
+PRODUKTER_REPOSITORY_ID = os.environ.get("GITHUB_ERROR_REPORT_REPOSITORY", "")
 
 # Tak på hur många issues som öppnas per fönster, så att fel som en
 # angripare kan trigga med varierande tracebacks (= olika fingeravtryck,
