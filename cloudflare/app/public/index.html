@@ -6,7 +6,7 @@
 <title>Produkter</title>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
 </head>
 <body>
 
@@ -20,14 +20,14 @@
       <input type="password" name="password" placeholder="Lösenord" aria-label="Lösenord" autocomplete="current-password" required>
       <button type="submit">Logga in</button>
       <p id="login-msg" class="error" role="alert"></p>
-      <p><a href="/forgot-password.html">Glömt lösenord?</a></p>
+      <p><a href="/forgot-password">Glömt lösenord?</a></p>
     </form>
 
     <form id="signup-form" hidden>
       <h2>Skapa konto</h2>
       <input type="email" name="email" placeholder="E-postadress" aria-label="E-postadress" autocomplete="username" required>
       <input type="password" name="password" autocomplete="new-password" placeholder="Lösenord (minst 8 tecken)" required minlength="8">
-      <div class="cf-turnstile" data-sitekey="" data-action="signup"></div>
+      <div id="signup-turnstile" data-turnstile-widget data-sitekey="" data-action="signup"></div>
       <button type="submit">Skapa konto</button>
       <p id="signup-msg" class="error"></p>
     </form>
