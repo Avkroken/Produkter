@@ -58,17 +58,21 @@ INGEST_API_KEY=<ditt-värde>
 
 `.env` får inte committas.
 
+Compose-filen bygger fetcher-imagen lokalt från repositoryts versionerade `Dockerfile`. Ingen separat runtime-image för fetchern publiceras från repositoryt i nuläget. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
+
+Använd explicit `-f compose.yml` så att en host-global `COMPOSE_FILE` inte kan styra kommandot till en annan stack.
+
 Bygg och starta:
 
 ```bash
-docker compose up -d --build
+docker compose -f compose.yml up -d --build
 ```
 
 Kontrollera status:
 
 ```bash
-docker compose ps
-docker compose logs --tail=100 produkter-fetcher
+docker compose -f compose.yml ps
+docker compose -f compose.yml logs --tail=100 produkter-fetcher
 ```
 
 En normal uppstart ska logga att fetchern ansluter mot `ENGINE_URL` och börjar
@@ -81,10 +85,10 @@ Efter att ny kod har hämtats:
 ```bash
 git pull --ff-only
 cd scraper/fetcher
-docker compose build --pull
-docker compose up -d
-docker compose ps
-docker compose logs --tail=100 produkter-fetcher
+docker compose -f compose.yml build --pull
+docker compose -f compose.yml up -d
+docker compose -f compose.yml ps
+docker compose -f compose.yml logs --tail=100 produkter-fetcher
 ```
 
 Containern använder `restart: unless-stopped`, vilket gör att den startar igen
@@ -93,14 +97,14 @@ efter Docker-/host-restart så länge den inte har stoppats manuellt.
 ## Stoppa/starta
 
 ```bash
-docker compose stop
-docker compose start
+docker compose -f compose.yml stop
+docker compose -f compose.yml start
 ```
 
 Ta ned containern utan att radera någon Cloudflare-state:
 
 ```bash
-docker compose down
+docker compose -f compose.yml down
 ```
 
 Ingen canonical produktdata ligger i containern.
@@ -130,11 +134,11 @@ verifierad på hosten.
 
 Kontrollera i denna ordning:
 
-1. `docker compose ps` visar containern som running.
-2. `docker compose logs` visar anslutning mot engine utan authfel.
+1. `docker compose -f compose.yml ps` visar containern som running.
+2. `docker compose -f compose.yml logs` visar anslutning mot engine utan authfel.
 3. Fetchern kan leasa minst ett jobb.
 4. Ett renderresultat accepteras av engine.
-5. Rendering fortsätter efter `docker compose restart produkter-fetcher`.
+5. Rendering fortsätter efter `docker compose -f compose.yml restart produkter-fetcher`.
 
 Först därefter ska Cloudflare-engine deployas med den Browser Run-fria
 konfigurationen.
@@ -144,13 +148,13 @@ konfigurationen.
 Visa senaste loggar:
 
 ```bash
-docker compose logs --tail=200 produkter-fetcher
+docker compose -f compose.yml logs --tail=200 produkter-fetcher
 ```
 
 Följ loggar:
 
 ```bash
-docker compose logs -f produkter-fetcher
+docker compose -f compose.yml logs -f produkter-fetcher
 ```
 
 Vanliga fel:
@@ -159,7 +163,7 @@ Vanliga fel:
 - HTTP 401/403 mot engine → credential saknas/är fel eller har ändrats.
 - lease-fel → verifiera nätåtkomst till `engine.example.com`.
 - Playwright/Chromium-fel efter imageändring → bygg om med
-  `docker compose build --no-cache` och starta om.
+  `docker compose -f compose.yml build --no-cache` och starta om.
 - tom kö → normalt; fetchern väntar enligt `POLL_IDLE_SEC`.
 
 ## Säkerhetsgräns
