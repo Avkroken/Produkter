@@ -17,6 +17,7 @@ test("admin bootstrap normalizes and validates email", () => {
 test("admin bootstrap SQL escapes values and scopes promotion to account id", () => {
   assert.equal(sqlLiteral("a'b"), "'a''b'");
   assert.match(buildAccountLookupSql("admin@example.com"), /lower\('admin@example\.com'\)/);
+  assert.doesNotMatch(buildAccountLookupSql("admin@example.com"), /LIMIT 1/i);
   assert.equal(buildPromoteSql("account'id"), "UPDATE accounts SET role = 'admin' WHERE id = 'account''id'");
 });
 
@@ -26,4 +27,11 @@ test("admin bootstrap finds account rows in Wrangler JSON output", () => {
     { id: "abc", email: "admin@example.com", role: "user" },
   );
   assert.equal(findAccountRow([{ results: [] }]), null);
+  assert.throws(
+    () => findAccountRow([{ results: [
+      { id: "a", email: "admin@example.com", role: "user" },
+      { id: "b", email: "ADMIN@example.com", role: "user" },
+    ] }]),
+    /Flera konton matchar/,
+  );
 });
