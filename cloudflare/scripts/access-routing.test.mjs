@@ -10,19 +10,23 @@ test("public and admin shells are served from Workers Assets", () => {
     ["GET", "/admin"],
     ["GET", "/admin/"],
     ["HEAD", "/admin"],
-    ["GET", "/forgot-password.html"],
-    ["HEAD", "/forgot-password.html"],
+    ["GET", "/forgot-password"],
+    ["HEAD", "/forgot-password"],
   ]) {
     assert.deepEqual(accessRoute(method, pathname), { type: "asset", pathname });
   }
 });
 
 
-test("extensionless password recovery is rendered through the worker", () => {
+test("password recovery uses the canonical extensionless asset path", () => {
   for (const method of ["GET", "HEAD"]) {
     assert.deepEqual(accessRoute(method, "/forgot-password"), {
       type: "asset",
-      pathname: "/forgot-password.html",
+      pathname: "/forgot-password",
+    });
+    assert.deepEqual(accessRoute(method, "/forgot-password.html"), {
+      type: "redirect",
+      pathname: "/forgot-password",
     });
   }
 });
