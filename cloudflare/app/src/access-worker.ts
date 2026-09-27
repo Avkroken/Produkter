@@ -60,14 +60,42 @@ function sitemapResponse(origin: string, headOnly: boolean): Response {
   });
 }
 
-function injectAccessRouting(response: Response, pathname: string, canonicalRoot: string): Response {
+function injectAccessRouting(
+  response: Response,
+  pathname: string,
+  canonicalRoot: string,
+  env: AccessEnv,
+): Response {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("text/html")) return response;
+
+  const googleOAuthEnabled = Boolean(env.OAUTH_GOOGLE_CLIENT_ID && env.OAUTH_GOOGLE_CLIENT_SECRET);
+  const microsoftOAuthEnabled = Boolean(env.OAUTH_MICROSOFT_CLIENT_ID && env.OAUTH_MICROSOFT_CLIENT_SECRET);
 
   const rewriter = new HTMLRewriter()
     .on('script[src="/app.js"]', {
       element(element) {
         element.before('<script src="/access-routing.js"></script>', { html: true });
+      },
+    })
+    .on(".cf-turnstile", {
+      element(element) {
+        element.setAttribute("data-sitekey", env.TURNSTILE_SITE_KEY);
+      },
+    })
+    .on('[data-oauth-provider="google"]', {
+      element(element) {
+        if (!googleOAuthEnabled) element.remove();
+      },
+    })
+    .on('[data-oauth-provider="microsoft"]', {
+      element(element) {
+        if (!microsoftOAuthEnabled) element.remove();
+      },
+    })
+    .on("[data-oauth-divider]", {
+      element(element) {
+        if (!googleOAuthEnabled && !microsoftOAuthEnabled) element.remove();
       },
     });
 
@@ -115,6 +143,7 @@ export default {
         await env.ASSETS.fetch(requestWithPath(request, route.pathname)),
         externalUrl.pathname,
         canonicalRoot,
+        env,
       );
     }
 
@@ -124,7 +153,7 @@ export default {
     const response = await appHandler.fetch(upstreamRequest, env, ctx);
 
     if (externalUrl.pathname === "/" || externalUrl.pathname === "/admin" || externalUrl.pathname.startsWith("/admin/")) {
-      return injectAccessRouting(response, externalUrl.pathname, canonicalRoot);
+      return injectAccessRouting(response, externalUrl.pathname, canonicalRoot, env);
     }
     return applyHtmlIndexingPolicy(response, externalUrl.pathname);
   },
