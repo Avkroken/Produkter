@@ -96,9 +96,29 @@ export async function checkProduction(profile, {
   throw new Error(`${profile.name}: production checks failed after ${ATTEMPTS} attempts`);
 }
 
-function loadDeployment() {
+export function loadDeployment({ env = process.env, readFile = readFileSync } = {}) {
+  const inline = env.CLOUDFLARE_DEPLOYMENT_CONFIG?.trim();
+  if (inline) {
+    try {
+      return JSON.parse(inline);
+    } catch (error) {
+      throw new Error(
+        `CLOUDFLARE_DEPLOYMENT_CONFIG is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const path = fileURLToPath(new URL("../deployment.json", import.meta.url));
-  return JSON.parse(readFileSync(path, "utf8"));
+  try {
+    return JSON.parse(readFile(path, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(
+        "Missing cloudflare/deployment.json. Create it locally or set CLOUDFLARE_DEPLOYMENT_CONFIG in the build environment.",
+      );
+    }
+    throw error;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
