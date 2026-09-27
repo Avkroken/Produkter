@@ -10,7 +10,8 @@
     "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run",
     "deploy": "npm run config:generate && node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
-    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY"
+    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY",
+    "secret:set-ingest-key": "npm run config:generate && wrangler secret put INGEST_API_KEY"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
