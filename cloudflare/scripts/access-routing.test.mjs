@@ -17,6 +17,16 @@ test("public and admin shells are served from Workers Assets", () => {
   }
 });
 
+
+test("extensionless password recovery is rendered through the worker", () => {
+  for (const method of ["GET", "HEAD"]) {
+    assert.deepEqual(accessRoute(method, "/forgot-password"), {
+      type: "asset",
+      pathname: "/forgot-password.html",
+    });
+  }
+});
+
 test("all canonical admin APIs rewrite to existing handlers", () => {
   const cases = [
     ["GET", "/admin/api/stats", "/api/admin/stats"],
