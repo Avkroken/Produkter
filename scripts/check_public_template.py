@@ -11,6 +11,7 @@ FORBIDDEN = {
     "old KV id": "adafd9ea9ec24bc8ab8da87ff80467cc",
     "old Google OAuth client id": "551393755081-gtbd45b203icbbp0cu0q0p4meppli2fu.apps.googleusercontent.com",
     "old repository id": "1223482099",
+    "old local username": "berduf",
 }
 
 SKIP_DIRS = {".git", "node_modules", ".wrangler", "__pycache__", ".pytest_cache"}
