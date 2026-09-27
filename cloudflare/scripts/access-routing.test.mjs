@@ -10,6 +10,8 @@ test("public and admin shells are served from Workers Assets", () => {
     ["GET", "/admin"],
     ["GET", "/admin/"],
     ["HEAD", "/admin"],
+    ["GET", "/forgot-password.html"],
+    ["HEAD", "/forgot-password.html"],
   ]) {
     assert.deepEqual(accessRoute(method, pathname), { type: "asset", pathname });
   }
