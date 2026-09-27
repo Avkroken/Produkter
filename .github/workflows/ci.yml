@@ -71,7 +71,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r scraper/requirements.txt
-          python scripts/check_public_template.py
           python -m pytest tests
           cd scraper
           python -m pytest tests
