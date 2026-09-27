@@ -28,6 +28,7 @@ jobs:
     uses: Avkroken/.github/.github/workflows/public-template-guard.yml@main
     with:
       forbidden_fingerprints: |
+        dcb8aedbaeb3b4d508f095ea61399b9ea2dff52dd59ad3395037223cda2fdecd
         e616bcc305314c41224898c8c4e38d84e81e733e2c1281f02c4690376be4e72f
         40feb4f559c7aa93166361e60e04d6a44067f154448bb8fe520243e980c0fb27
         9e60e46830887d37cf41074d0dc4798a9f8776cbecf2742ee6fdcd1be4b32cdf
