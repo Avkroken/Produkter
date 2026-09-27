@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   guard:
-    uses: Avkroken/.github/.github/workflows/public-template-guard.yml@chatgpt/public-template-guard/2026-09-27/13-32
+    uses: Avkroken/.github/.github/workflows/public-template-guard.yml@main
     with:
       forbidden_fingerprints: |
         e616bcc305314c41224898c8c4e38d84e81e733e2c1281f02c4690376be4e72f
