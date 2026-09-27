@@ -64,6 +64,16 @@ function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function optionalHttpsUrl(value, label) {
+  const raw = optionalString(value);
+  if (!raw) return undefined;
+  const url = new URL(raw);
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new Error(`${label} måste vara en HTTPS-URL utan inbäddade credentials`);
+  }
+  return url.toString();
+}
+
 function observability() {
   return {
     enabled: true,
@@ -107,6 +117,8 @@ for (const [key, value] of Object.entries({
   MAIL_FROM: optionalString(config.mail?.from),
   ADMIN_EMAIL: optionalString(config.mail?.adminEmail),
   GITHUB_ERROR_REPORT_REPOSITORY: optionalString(config.githubErrorReportRepository),
+  SUPPORT_PAYPAL_URL: optionalHttpsUrl(config.support?.paypalUrl, "support.paypalUrl"),
+  SUPPORT_DONATION_URL: optionalHttpsUrl(config.support?.donationUrl, "support.donationUrl"),
 })) {
   if (value) appVars[key] = value;
 }
