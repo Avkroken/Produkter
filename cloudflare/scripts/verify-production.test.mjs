@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadDeployment,
   productionProfile,
   validateProductionResponse,
 } from "./verify-production.mjs";
@@ -11,6 +12,25 @@ const DEPLOYMENT = {
   engineUrl: "https://engine.example.com",
   workers: { app: "produkter", engine: "produkter-engine" },
 };
+
+
+test("deployment loader prefers inline Workers Builds configuration", () => {
+  const inline = JSON.stringify(DEPLOYMENT);
+  assert.deepEqual(
+    loadDeployment({
+      env: { CLOUDFLARE_DEPLOYMENT_CONFIG: inline },
+      readFile: () => { throw new Error("local file should not be read"); },
+    }),
+    DEPLOYMENT,
+  );
+  assert.throws(
+    () => loadDeployment({
+      env: { CLOUDFLARE_DEPLOYMENT_CONFIG: "{" },
+      readFile: () => "",
+    }),
+    /not valid JSON/,
+  );
+});
 
 test("only Workers with public HTTP checks have verification profiles", () => {
   assert.equal(productionProfile("app", DEPLOYMENT).name, "produkter");
