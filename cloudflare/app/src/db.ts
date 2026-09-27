@@ -11,6 +11,8 @@ export interface Env {
   PROVIDER_CONFIG_KEY: string;
   JOB_QUEUE: Queue<JobMessage>;
   GITHUB_ERROR_REPORT_TOKEN?: string;
+  GITHUB_ERROR_REPORT_REPOSITORY?: string;
+  PUBLIC_APP_URL: string;
   // Avd. B: on-demand-beskrivning går direkt till engine-Workern via Service Binding.
   ENGINE: Fetcher;
   INGEST_API_KEY?: string;
