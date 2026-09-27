@@ -37,7 +37,7 @@ async function loadDeployment() {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       throw new Error(
         "Saknar cloudflare/deployment.json. Kopiera deployment.example.json lokalt, " +
-        "eller sätt CLOUDFLARE_DEPLOYMENT_CONFIG som en Workers Builds build-secret.",
+        "eller sätt CLOUDFLARE_DEPLOYMENT_CONFIG i en extern CI/buildmiljö.",
       );
     }
     throw error;
