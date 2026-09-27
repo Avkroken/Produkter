@@ -86,9 +86,19 @@ Kommandot ovan är bara för en tom ny installation. Befintliga installationer s
 
 Secret-värden hör inte hemma i `deployment.json`. Sätt dem i respektive Worker med Wrangler eller motsvarande providerflöde.
 
+För ingest-nyckeln ska samma värde installeras på båda Workers. Kör respektive kommando och mata in samma nyckel när Wrangler frågar; skriv inte nyckeln i kommandoraden:
+
+```bash
+cd cloudflare/engine
+npm run secret:set-ingest-key
+cd ../app
+npm run secret:set-ingest-key
+cd ../..
+```
+
 Exempel på secrets som kan behövas beroende på aktiverade funktioner:
 
-- `INGEST_API_KEY`;
+- `INGEST_API_KEY` — samma värde ska sättas på **både app- och engine-Workern**;
 - `PROVIDER_CONFIG_KEY`;
 - AI-providerkeys;
 - OAuth client secrets;
