@@ -7,10 +7,15 @@ Produkter är ett system för att samla in produktdata och generera produktbeskr
 ```bash
 cp .env.example .env
 cp cloudflare/deployment.example.json cloudflare/deployment.json
-node cloudflare/scripts/configure.mjs
 ```
 
-Fyll i endast dina egna värden. Se [Self-hosting](docs/self-hosting.md) för Cloudflare-resurser och secrets.
+Fyll därefter i endast dina egna värden i de två lokala konfigurationsfilerna. Se [Self-hosting](docs/self-hosting.md) för Cloudflare-resurser och secrets.
+
+När `cloudflare/deployment.json` innehåller din installation genererar du Wrangler-konfigurationerna:
+
+```bash
+node cloudflare/scripts/configure.mjs
+```
 
 ## Snabb verifiering
 
