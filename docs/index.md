@@ -8,7 +8,7 @@ Navigationssida för Produkter.
 | --- | --- |
 | systemets komponenter och current-state | [Projektkontext](project-context.md) |
 | dataflöden, AI-providerkedja och trust boundaries | [Arkitektur](architecture.md) |
-| utveckling, test, Docker och deployment | [Drift](operations.md) |
+| utveckling, test, Docker och deployment | [Drift](operations.md) |\n| release- och versionskontrakt | [Release- och versionsstandard](release-standard.md) |
 | extern render/browser-fetcher | [scraper/fetcher/README.md](../scraper/fetcher/README.md) |
 | säkerhetsrapportering | [SECURITY.md](../SECURITY.md) |
 
