@@ -79,7 +79,7 @@ function injectAccessRouting(
         element.before('<script src="/access-routing.js"></script>', { html: true });
       },
     })
-    .on(".cf-turnstile", {
+    .on("[data-turnstile-widget]", {
       element(element) {
         element.setAttribute("data-sitekey", env.TURNSTILE_SITE_KEY);
       },
