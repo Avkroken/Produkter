@@ -43,3 +43,11 @@ test("TURNSTILE_SECRET has a dedicated Wrangler installation command", () => {
     "npm run config:generate && wrangler secret put TURNSTILE_SECRET",
   );
 });
+
+test("dynamic HTML bypasses conditional asset caching", async () => {
+  const accessWorker = await readFile(new URL("../app/src/access-worker.ts", import.meta.url), "utf8");
+  assert.match(accessWorker, /headers\.delete\("If-None-Match"\)/);
+  assert.match(accessWorker, /headers\.delete\("If-Modified-Since"\)/);
+  assert.match(accessWorker, /headers\.set\("Cache-Control", "no-store"\)/);
+  assert.match(accessWorker, /headers\.delete\("ETag"\)/);
+});
