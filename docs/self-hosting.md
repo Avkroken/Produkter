@@ -26,10 +26,10 @@ ENGINE_URL=https://engine.example.com
 INGEST_API_KEY=<samma värde som engine-Workerns INGEST_API_KEY>
 ```
 
-Start:
+Starta fetchern med dess explicita Compose-fil så att en host-global `COMPOSE_FILE` inte kan välja en annan stack:
 
 ```bash
-docker compose up -d --build
+docker compose -f compose.yml up -d --build
 cd ../..
 ```
 
