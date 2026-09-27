@@ -69,13 +69,25 @@ Generatorn väljer i ordning:
 
 För normal Wrangler-deploy används den gitignorerade `cloudflare/deployment.json`. `CLOUDFLARE_DEPLOYMENT_CONFIG` är endast ett portabelt alternativ för framtida/external CI och ska inte läggas som Worker runtime-secret.
 
-Generera Wrangler-konfigurationerna:
+Installera först de låsta Node-beroendena för samtliga tre deployenheter:
+
+```bash
+cd cloudflare/app
+npm ci
+cd ../engine
+npm ci
+cd ../processor
+npm ci
+cd ../..
+```
+
+Generera därefter Wrangler-konfigurationerna:
 
 ```bash
 node cloudflare/scripts/configure.mjs
 ```
 
-Det skapar lokala `cloudflare/*/wrangler.jsonc`. De är också gitignorerade och får inte användas som versionsstyrd produktionsstate.
+Det skapar lokala `cloudflare/*/wrangler.jsonc`. De är också gitignorerade och får inte användas som versionsstyrd produktionsstate. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
 
 För en **ny D1-databas**, initiera grundschemat en gång innan första app-deployen:
 
