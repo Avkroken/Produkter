@@ -114,7 +114,7 @@ export function loadDeployment({ env = process.env, readFile = readFileSync } = 
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       throw new Error(
-        "Missing cloudflare/deployment.json. Create it locally or set CLOUDFLARE_DEPLOYMENT_CONFIG in the build environment.",
+        "Missing cloudflare/deployment.json. Create it locally or set CLOUDFLARE_DEPLOYMENT_CONFIG in an external CI/build environment.",
       );
     }
     throw error;
