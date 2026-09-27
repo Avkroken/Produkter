@@ -1,0 +1,21 @@
+name: Public template guard
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    uses: Avkroken/.github/.github/workflows/public-template-guard.yml@chatgpt/public-template-guard/2026-09-27/13-32
+    with:
+      forbidden_fingerprints: |
+        e616bcc305314c41224898c8c4e38d84e81e733e2c1281f02c4690376be4e72f
+        40feb4f559c7aa93166361e60e04d6a44067f154448bb8fe520243e980c0fb27
+        9e60e46830887d37cf41074d0dc4798a9f8776cbecf2742ee6fdcd1be4b32cdf
+        61e34e748075a3525d1fcbc2b346044aef4b412f3893af8dc563ac97845c19c1
+        2d9837d23e4d5ffa2066fa07d6c4a3f9a913c32c09af74ecf631f99672f31e98
+        64aba032e41c85b143c2c7657832cb9d60f4cbb5150da065b2e4f7912f520c44
+        47d0a89719d861bcb2b09bd322e8380c9c7bd949c61dd4831e6e61f238c3dc46
