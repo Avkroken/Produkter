@@ -57,25 +57,17 @@ Fyll i egna värden för:
 
 `cloudflare/deployment.json` är gitignorerad.
 
-### Cloudflare Workers Builds
+### Deploymentkälla
 
-Om du använder Cloudflares Git-integration ska samma JSON i stället läggas som en **Build secret** med namnet `CLOUDFLARE_DEPLOYMENT_CONFIG` på varje Worker-build som använder repositoryt. Det är build-time konfiguration och ska inte läggas som runtime-secret eller committas.
-
-Konfigurera varje ansluten Worker så här:
-
-| Worker | Root directory | Deploy command | Preview command |
-| --- | --- | --- | --- |
-| app | `cloudflare/app` | `npm run deploy` | `npm run preview` |
-| engine | `cloudflare/engine` | `npm run deploy` | `npm run preview` |
-| processor | `cloudflare/processor` | `npm run deploy` | `npm run preview` |
-
-Alla tre använder samma Build secret `CLOUDFLARE_DEPLOYMENT_CONFIG`. Preview- och deploy-kommandona genererar sin lokala `wrangler.jsonc` före Wrangler körs.
+Den verifierade produktionsvägen för den här installationen är Wrangler. De tre Workers har ingen Workers Builds-/Git-trigger som ska bära installationskonfiguration.
 
 Generatorn väljer i ordning:
 
 1. `--example` för CI/test;
-2. `CLOUDFLARE_DEPLOYMENT_CONFIG` i buildmiljön;
+2. `CLOUDFLARE_DEPLOYMENT_CONFIG` om en extern CI/buildmiljö uttryckligen tillhandahåller samma JSON;
 3. lokal `cloudflare/deployment.json`.
+
+För normal Wrangler-deploy används den gitignorerade `cloudflare/deployment.json`. `CLOUDFLARE_DEPLOYMENT_CONFIG` är endast ett portabelt alternativ för framtida/external CI och ska inte läggas som Worker runtime-secret.
 
 Generera Wrangler-konfigurationerna:
 
@@ -172,7 +164,7 @@ node cloudflare/scripts/configure.mjs --example
 
 CI gör samma sak och kör dessutom en kontamineringskontroll som stoppar kända installationsspecifika värden från att återintroduceras.
 
-För en riktig installation: generera från `deployment.json` (eller `CLOUDFLARE_DEPLOYMENT_CONFIG` i Workers Builds), kör respektive components typecheck/test/dry-run, deploya Workers, konfigurera nödvändiga secrets och verifiera därefter de egna publika URL:erna.
+För en riktig installation: generera från `deployment.json`, kör respektive components typecheck/test/dry-run, deploya Workers med Wrangler, konfigurera nödvändiga secrets och verifiera därefter de egna publika URL:erna. En extern CI kan alternativt tillhandahålla samma JSON via `CLOUDFLARE_DEPLOYMENT_CONFIG`.
 
 ```bash
 cd cloudflare/app
@@ -182,4 +174,4 @@ npm run verify:production
 cd ../..
 ```
 
-`verify:production` använder samma environment-first deployment-konfiguration som generatorn, så Cloudflare Workers Builds behöver inte en committad `deployment.json`.
+`verify:production` använder samma environment-first deployment-konfiguration som generatorn. Vid normal Wrangler-drift används den lokala gitignorerade `deployment.json`; extern CI kan använda `CLOUDFLARE_DEPLOYMENT_CONFIG`.
