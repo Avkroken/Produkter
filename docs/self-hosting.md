@@ -30,6 +30,7 @@ Start:
 
 ```bash
 docker compose up -d --build
+cd ../..
 ```
 
 ## 2. Cloudflare deployment
@@ -48,6 +49,7 @@ Fyll i egna värden för:
 - R2 bucket;
 - KV namespace-ID;
 - Queue-namn;
+- Turnstile site key (publik, inte secret);
 - OAuth client-ID:n när OAuth används;
 - mailavsändare/adminadress när mailfunktioner används;
 - valfritt GitHub-repo för automatisk felrapportering.
@@ -92,6 +94,20 @@ cd ../..
 
 Kommandot ovan är bara för en tom ny installation. Befintliga installationer ska använda repositoryts versionsstyrda migrations-/deployflöde och ska inte återköra hela grundschemat.
 
+Deploya därefter Workers i den ordning som krävs av appens Service Binding:
+
+```bash
+cd cloudflare/engine
+npm run deploy
+cd ../processor
+npm run deploy
+cd ../app
+npm run deploy
+cd ../..
+```
+
+Engine måste finnas innan appen deployas eftersom appen binder `ENGINE` som Service Binding.
+
 ## 3. Secrets
 
 Secret-värden hör inte hemma i `deployment.json`. Sätt dem i respektive Worker med Wrangler eller motsvarande providerflöde.
@@ -106,17 +122,46 @@ npm run secret:set-ingest-key
 cd ../..
 ```
 
+För kryptering av per-konto-providerinställningar ska **samma** `PROVIDER_CONFIG_KEY` sättas på app och processor:
+
+```bash
+cd cloudflare/app
+npm run secret:set-provider-key
+cd ../processor
+npm run secret:set-provider-key
+cd ../..
+```
+
+Använd samma genererade värde i båda kommandona. Appen krypterar providerdata och processorn dekrypterar samma D1-rader.
+
+Turnstile använder två värden: den publika `turnstile.siteKey` i `deployment.json` och `TURNSTILE_SECRET` som Worker-secret på appen. OAuth-knappar visas bara när både client ID och motsvarande client secret finns konfigurerade.
+
 Exempel på secrets som kan behövas beroende på aktiverade funktioner:
 
 - `INGEST_API_KEY` — samma värde ska sättas på **både app- och engine-Workern**;
-- `PROVIDER_CONFIG_KEY`;
+- `PROVIDER_CONFIG_KEY` — samma värde ska sättas på **både app- och processor-Workern**;
 - AI-providerkeys;
 - OAuth client secrets;
 - `TURNSTILE_SECRET`;
 - `RESEND_API_KEY`;
 - `GITHUB_ERROR_REPORT_TOKEN`.
 
-## 4. Verifiering
+## 4. Första administratören
+
+En ny databas skapar vanliga användarkonton som `user`; ingen publik request får automatiskt admin-rättigheter.
+
+1. Öppna den deployade appen och skapa det konto som ska vara första administratör.
+2. Kör därefter bootstrap från app-katalogen med samma e-postadress:
+
+```bash
+cd cloudflare/app
+npm run admin:bootstrap -- admin@example.com
+cd ../..
+```
+
+Kommandot använder Wrangler/D1-behörigheten, vägrar om kontot inte finns och verifierar efteråt att rollen är `admin`. Ytterligare admins kan sedan hanteras via den skyddade admin-vyn.
+
+## 5. Verifiering
 
 Generisk konfiguration kan verifieras utan en riktig installation:
 
@@ -126,4 +171,14 @@ node cloudflare/scripts/configure.mjs --example
 
 CI gör samma sak och kör dessutom en kontamineringskontroll som stoppar kända installationsspecifika värden från att återintroduceras.
 
-För en riktig installation: generera från `deployment.json`, kör respektive components typecheck/test/dry-run och verifiera därefter de egna publika URL:erna.
+För en riktig installation: generera från `deployment.json` (eller `CLOUDFLARE_DEPLOYMENT_CONFIG` i Workers Builds), kör respektive components typecheck/test/dry-run, deploya Workers, konfigurera nödvändiga secrets och verifiera därefter de egna publika URL:erna.
+
+```bash
+cd cloudflare/app
+npm run verify:production
+cd ../engine
+npm run verify:production
+cd ../..
+```
+
+`verify:production` använder samma environment-first deployment-konfiguration som generatorn, så Cloudflare Workers Builds behöver inte en committad `deployment.json`.
