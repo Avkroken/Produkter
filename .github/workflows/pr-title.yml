@@ -45,6 +45,7 @@ jobs:
               "feat:",
               "Feat: add product workflow",
               "feat( ): add product workflow",
+              "feat(): add product workflow",
           )
 
           for fixture in valid:
