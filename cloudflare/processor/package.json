@@ -5,6 +5,7 @@
   "scripts": {
     "config:generate": "node ../scripts/configure.mjs",
     "dev": "npm run config:generate && wrangler dev --remote",
+    "preview": "npm run config:generate && wrangler preview",
     "deploy": "npm run config:generate && wrangler deploy --strict",
     "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY"
   },
