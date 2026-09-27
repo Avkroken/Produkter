@@ -14,7 +14,7 @@ Docker på renderhost
         |
         | POST /jobs/lease
         v
-https://motor.denied.se
+https://engine.example.com
         |
         | renderjobb
         v
@@ -35,8 +35,8 @@ Hosten behöver:
 
 - Docker Engine,
 - Docker Compose plugin (`docker compose`),
-- utgående HTTPS till `motor.denied.se`,
-- den befintliga `INGEST_API_KEY`.
+- utgående HTTPS till `engine.example.com`,
+- din egen `INGEST_API_KEY`.
 
 Ingen inbound port behöver öppnas.
 
@@ -49,10 +49,11 @@ cd scraper/fetcher
 cp .env.example .env
 ```
 
-Fyll därefter endast det befintliga secret-värdet i `.env`:
+Fyll i din egen engine-URL och samma ingest-nyckel som du har satt som secret på din engine-Worker:
 
 ```dotenv
-INGEST_API_KEY=<befintligt värde>
+ENGINE_URL=https://engine.example.com
+INGEST_API_KEY=<ditt-värde>
 ```
 
 `.env` får inte committas.
@@ -108,8 +109,8 @@ Ingen canonical produktdata ligger i containern.
 
 Obligatoriska variabler:
 
-- `ENGINE_URL` — normalt `https://motor.denied.se`.
-- `INGEST_API_KEY` — befintlig operatorcredential som skickas som `X-API-Key`.
+- `ENGINE_URL` — normalt `https://engine.example.com`.
+- `INGEST_API_KEY` — installationens operatorcredential som skickas som `X-API-Key`.
 
 Tuning:
 
@@ -119,8 +120,8 @@ Tuning:
 - `RENDER_WAIT_MS` — väntan på client-side-innehåll, default `12000`.
 - `MAX_LIST_PAGES` — hårt sidtak per listjobb, default `60`.
 
-Börja med defaults. Höj concurrency först efter att CPU/minne, målwebbplatser och
-jobbkö har observerats.
+Runtime-defaults för concurrency/timing ligger i fetchern och behöver normalt inte anges i Compose.
+Lägg bara till en override i Compose när du faktiskt behöver avvika.
 
 ## Verifiering före Cloudflare-cutover
 
@@ -156,7 +157,7 @@ Vanliga fel:
 
 - `ENGINE_URL och INGEST_API_KEY måste vara satta` → kontrollera lokal `.env`.
 - HTTP 401/403 mot engine → credential saknas/är fel eller har ändrats.
-- lease-fel → verifiera nätåtkomst till `motor.denied.se`.
+- lease-fel → verifiera nätåtkomst till `engine.example.com`.
 - Playwright/Chromium-fel efter imageändring → bygg om med
   `docker compose build --no-cache` och starta om.
 - tom kö → normalt; fetchern väntar enligt `POLL_IDLE_SEC`.
