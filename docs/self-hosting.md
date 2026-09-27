@@ -52,6 +52,7 @@ Fyll i egna värden för:
 - Turnstile site key (publik, inte secret);
 - OAuth client-ID:n när OAuth används;
 - mailavsändare/adminadress när mailfunktioner används;
+- valfria publika stöd-/donationslänkar;
 - valfritt GitHub-repo för automatisk felrapportering.
 
 `cloudflare/deployment.json` är gitignorerad.
