@@ -8,7 +8,8 @@ Navigationssida för Produkter.
 | --- | --- |
 | systemets komponenter och current-state | [Projektkontext](project-context.md) |
 | dataflöden, AI-providerkedja och trust boundaries | [Arkitektur](architecture.md) |
-| utveckling, test, Docker och deployment | [Drift](operations.md) |\n| release, SemVer och versionskontrakt | [Release- och versionsstandard](release-standard.md) |
+| utveckling, test, Docker och deployment | [Drift](operations.md) |
+| release, SemVer och versionskontrakt | [Release- och versionsstandard](release-standard.md) |
 | extern render/browser-fetcher | [scraper/fetcher/README.md](../scraper/fetcher/README.md) |
 | säkerhetsrapportering | [SECURITY.md](../SECURITY.md) |
 
@@ -40,6 +41,10 @@ Läs scraperkoden och [fetcher-dokumentationen](../scraper/fetcher/README.md). H
 ### Jag ändrar Cloudflare runtime
 
 Läs `cloudflare/*/wrangler.jsonc`, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
+
+### Jag gör en versionerad release
+
+Läs [release-standard.md](release-standard.md). GitHub Release är versionsankare och ska hållas separat från subsystemens deploymentflöden.
 
 ## Wiki
 
