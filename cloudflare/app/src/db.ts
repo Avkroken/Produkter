@@ -5,6 +5,7 @@ export type JobMessage = { type: "extract"; jobId: string } | { type: "describe"
 export interface Env {
   TURNSTILE_SECRET?: string;
   TURNSTILE_HOSTNAMES?: string;
+  TURNSTILE_SITE_KEY: string;
   DB: D1Database;
   UPLOADS: R2Bucket;
   SESSIONS: KVNamespace;
