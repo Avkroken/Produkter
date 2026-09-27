@@ -27,5 +27,8 @@
     "from": "",
     "adminEmail": ""
   },
-  "githubErrorReportRepository": ""
+  "githubErrorReportRepository": "",
+  "turnstile": {
+    "siteKey": "replace-with-your-turnstile-site-key"
+  }
 }
