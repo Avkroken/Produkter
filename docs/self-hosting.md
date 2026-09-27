@@ -62,6 +62,16 @@ node cloudflare/scripts/configure.mjs
 
 Det skapar lokala `cloudflare/*/wrangler.jsonc`. De är också gitignorerade och får inte användas som versionsstyrd produktionsstate.
 
+För en **ny D1-databas**, initiera grundschemat en gång innan första app-deployen:
+
+```bash
+cd cloudflare/app
+npx wrangler d1 execute DB --remote --file=../infra/schema.sql
+cd ../..
+```
+
+Kommandot ovan är bara för en tom ny installation. Befintliga installationer ska använda repositoryts versionsstyrda migrations-/deployflöde och ska inte återköra hela grundschemat.
+
 ## 3. Secrets
 
 Secret-värden hör inte hemma i `deployment.json`. Sätt dem i respektive Worker med Wrangler eller motsvarande providerflöde.
