@@ -27,6 +27,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
   ADMIN_EMAIL?: string;
+  SUPPORT_PAYPAL_URL?: string;
+  SUPPORT_DONATION_URL?: string;
 }
 
 export interface Account {
