@@ -54,6 +54,16 @@ Fyll i egna värden för:
 
 `cloudflare/deployment.json` är gitignorerad.
 
+### Cloudflare Workers Builds
+
+Om du använder Cloudflares Git-integration ska samma JSON i stället läggas som en **Build secret** med namnet `CLOUDFLARE_DEPLOYMENT_CONFIG` på varje Worker-build som använder repositoryt. Det är build-time konfiguration och ska inte läggas som runtime-secret eller committas.
+
+Generatorn väljer i ordning:
+
+1. `--example` för CI/test;
+2. `CLOUDFLARE_DEPLOYMENT_CONFIG` i buildmiljön;
+3. lokal `cloudflare/deployment.json`.
+
 Generera Wrangler-konfigurationerna:
 
 ```bash
