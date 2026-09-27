@@ -1,16 +1,11 @@
 services:
   produkter-fetcher:
-    build:
-      context: .
+    build: .
     container_name: produkter-fetcher
     restart: unless-stopped
     init: true
+    security_opt:
+      - no-new-privileges:true
     environment:
-      ENGINE_URL: "${ENGINE_URL:-https://motor.denied.se}"
-      INGEST_API_KEY: "${INGEST_API_KEY:?INGEST_API_KEY must be set}"
-      FETCHER_CONCURRENCY: "${FETCHER_CONCURRENCY:-3}"
-      LEASE_BATCH: "${LEASE_BATCH:-10}"
-      POLL_IDLE_SEC: "${POLL_IDLE_SEC:-15}"
-      RENDER_WAIT_MS: "${RENDER_WAIT_MS:-12000}"
-      MAX_LIST_PAGES: "${MAX_LIST_PAGES:-60}"
-      HEADLESS: "1"
+      ENGINE_URL: ${ENGINE_URL:?Set ENGINE_URL in .env}
+      INGEST_API_KEY: ${INGEST_API_KEY:?Set INGEST_API_KEY in .env}
