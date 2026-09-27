@@ -71,6 +71,7 @@ function injectAccessRouting(
 
   const googleOAuthEnabled = Boolean(env.OAUTH_GOOGLE_CLIENT_ID && env.OAUTH_GOOGLE_CLIENT_SECRET);
   const microsoftOAuthEnabled = Boolean(env.OAUTH_MICROSOFT_CLIENT_ID && env.OAUTH_MICROSOFT_CLIENT_SECRET);
+  const supportEnabled = Boolean(env.SUPPORT_PAYPAL_URL || env.SUPPORT_DONATION_URL);
 
   const rewriter = new HTMLRewriter()
     .on('script[src="/app.js"]', {
@@ -96,6 +97,28 @@ function injectAccessRouting(
     .on("[data-oauth-divider]", {
       element(element) {
         if (!googleOAuthEnabled && !microsoftOAuthEnabled) element.remove();
+      },
+    })
+    .on('[data-support-provider="paypal"]', {
+      element(element) {
+        if (env.SUPPORT_PAYPAL_URL) element.setAttribute("href", env.SUPPORT_PAYPAL_URL);
+        else element.remove();
+      },
+    })
+    .on('[data-support-provider="donation"]', {
+      element(element) {
+        if (env.SUPPORT_DONATION_URL) element.setAttribute("href", env.SUPPORT_DONATION_URL);
+        else element.remove();
+      },
+    })
+    .on("[data-support-nav]", {
+      element(element) {
+        if (!supportEnabled) element.remove();
+      },
+    })
+    .on("[data-support-section]", {
+      element(element) {
+        if (!supportEnabled) element.remove();
       },
     });
 
