@@ -8,7 +8,7 @@ Det här dokumentet gäller **Produkter-repositoryt**. Repositoryts egna dokumen
 
 Produkter är en **versionsbar produkt**.
 
-Verifierad GitHub Release-historik finns på current provider-state. Senast verifierade publicerade release är `v1.4.5` från 2026-09-07.
+Verifierad GitHub Release-historik finns under [GitHub Releases](https://github.com/Avkroken/Produkter/releases). Senast verifierade publicerade release är `v1.4.5` från 2026-09-07.
 
 GitHub Release och motsvarande SemVer-tagg är repositoryts officiella versionsankare:
 
