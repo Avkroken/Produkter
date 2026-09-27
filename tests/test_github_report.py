@@ -20,8 +20,8 @@ class TestRedact:
         assert "person@example.com" not in _redact("failed for person@example.com")
 
     def test_redacts_home_path(self):
-        assert "/home/[user]/" in _redact("File \"/home/berduf/GitHub/app.py\", line 1")
-        assert "berduf" not in _redact("File \"/home/berduf/GitHub/app.py\", line 1")
+        assert "/home/[user]/" in _redact("File \"/home/exampleuser/GitHub/app.py\", line 1")
+        assert "exampleuser" not in _redact("File \"/home/exampleuser/GitHub/app.py\", line 1")
 
     def test_redacts_known_key_patterns(self):
         assert "[REDACTED]" in _redact("token=ghp_abcdefghijklmnopqrstuvwxyz0123")
