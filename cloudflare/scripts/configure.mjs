@@ -94,10 +94,12 @@ const d1Id = requiredString(config.d1?.id, "d1.id");
 const r2Uploads = requiredString(config.r2?.uploads, "r2.uploads");
 const sessionsId = requiredString(config.kv?.sessionsId, "kv.sessionsId");
 const jobsQueue = requiredString(config.queue?.jobs, "queue.jobs");
+const turnstileSiteKey = requiredString(config.turnstile?.siteKey, "turnstile.siteKey");
 
 const appVars = {
   PUBLIC_APP_URL: appUrl.origin,
   TURNSTILE_HOSTNAMES: appUrl.hostname,
+  TURNSTILE_SITE_KEY: turnstileSiteKey,
 };
 for (const [key, value] of Object.entries({
   OAUTH_GOOGLE_CLIENT_ID: optionalString(config.oauth?.googleClientId),
@@ -127,7 +129,7 @@ const app = {
     directory: "./public",
     not_found_handling: "single-page-application",
     binding: "ASSETS",
-    run_worker_first: ["/", "/api/*", "/signup", "/login", "/logout", "/underlag", "/admin", "/admin/*", "/robots.txt", "/sitemap.xml"],
+    run_worker_first: ["/", "/api/*", "/signup", "/login", "/logout", "/underlag", "/admin", "/admin/*", "/forgot-password.html", "/robots.txt", "/sitemap.xml"],
   },
   services: [{ binding: "ENGINE", service: engineName }],
   d1_databases: [{ binding: "DB", database_name: d1Name, database_id: d1Id }],
