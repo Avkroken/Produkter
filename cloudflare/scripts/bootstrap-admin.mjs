@@ -45,13 +45,17 @@ function collectRows(value, rows = []) {
 }
 
 export function findAccountRow(result) {
-  return collectRows(result).find(
+  const matches = collectRows(result).filter(
     (row) => row && typeof row === "object" && typeof row.id === "string" && typeof row.email === "string",
-  ) ?? null;
+  );
+  if (matches.length > 1) {
+    throw new Error("Flera konton matchar e-postadressen skiftlägesokänsligt. Bootstrap avbryts.");
+  }
+  return matches[0] ?? null;
 }
 
 export function buildAccountLookupSql(email) {
-  return `SELECT id, email, role FROM accounts WHERE lower(email) = lower(${sqlLiteral(email)}) LIMIT 1`;
+  return `SELECT id, email, role FROM accounts WHERE lower(email) = lower(${sqlLiteral(email)}) ORDER BY id`;
 }
 
 export function buildPromoteSql(accountId) {
