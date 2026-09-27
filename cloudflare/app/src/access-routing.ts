@@ -59,8 +59,7 @@ function isWorkerRenderedAsset(method: string, pathname: string): boolean {
   return pathname === "/" ||
     pathname === "/admin" ||
     pathname === "/admin/" ||
-    pathname === "/forgot-password" ||
-    pathname === "/forgot-password.html";
+    pathname === "/forgot-password";
 }
 
 export function accessRoute(method: string, pathname: string): AccessRoute {
@@ -75,11 +74,12 @@ export function accessRoute(method: string, pathname: string): AccessRoute {
     };
   }
 
+  if ((method === "GET" || method === "HEAD") && pathname === "/forgot-password.html") {
+    return { type: "redirect", pathname: "/forgot-password" };
+  }
+
   if (isWorkerRenderedAsset(method, pathname)) {
-    return {
-      type: "asset",
-      pathname: pathname === "/forgot-password" ? "/forgot-password.html" : pathname,
-    };
+    return { type: "asset", pathname };
   }
 
   const adminInternal = internalForAdmin(method, pathname);
