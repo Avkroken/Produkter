@@ -11,12 +11,14 @@ CONVENTIONAL = re.compile(
     r"^(feat|fix|perf|revert|refactor|docs|test|build|ci|chore)"
     r"(?:\(([^)]+)\))?(!)?:\s+(.+)$"
 )
-BREAKING_FOOTER = re.compile(r"(?m)^BREAKING(?: CHANGE|-CHANGE):\s+\S")
-RELEASE_AS = re.compile(r"(?m)^Release-As:\s*(major|minor|patch|none)\s*$")
+TRAILER = re.compile(
+    r"^(?P<token>[A-Za-z][A-Za-z0-9-]*(?: [A-Za-z][A-Za-z0-9-]*)*):\s+(?P<value>\S.*)$"
+)
 RANK = {None: 0, "patch": 1, "minor": 2, "major": 3}
 
 
 def git(*args, check=True):
+    """Run a Git command and return its completed process result."""
     result = subprocess.run(
         ["git", *args],
         text=True,
@@ -29,6 +31,7 @@ def git(*args, check=True):
 
 
 def semver_key(tag):
+    """Return a sortable semantic-version tuple for a stable tag."""
     match = STABLE.fullmatch(tag)
     if not match:
         return None
@@ -36,6 +39,7 @@ def semver_key(tag):
 
 
 def prerelease_key(tag):
+    """Return a sortable semantic-version tuple including the RC sequence."""
     match = RC.fullmatch(tag)
     if not match:
         return None
@@ -44,10 +48,12 @@ def prerelease_key(tag):
 
 
 def is_ancestor(ref, head="HEAD"):
+    """Return whether ref is an ancestor of the selected head."""
     return git("merge-base", "--is-ancestor", ref, head, check=False).returncode == 0
 
 
 def write_output(path, name, value):
+    """Append a name/value pair to a GitHub Actions output file when configured."""
     if not path:
         return
     with open(path, "a", encoding="utf-8") as handle:
@@ -55,6 +61,7 @@ def write_output(path, name, value):
 
 
 def parse_args():
+    """Parse command-line options for release calculation."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--forced-bump",
@@ -68,6 +75,7 @@ def parse_args():
 
 
 def release_line(subject, body):
+    """Select the Conventional Commit line used to classify a commit."""
     candidates = [subject.strip()]
     if subject.startswith("Merge pull request #"):
         candidates.extend(line.strip() for line in body.splitlines() if line.strip())
@@ -77,14 +85,38 @@ def release_line(subject, body):
     return subject.strip()
 
 
+def commit_trailers(body):
+    """Return the contiguous Git trailer block at the end of a commit body."""
+    trailers = {}
+    for raw in reversed(body.rstrip().splitlines()):
+        line = raw.strip()
+        if not line:
+            if trailers:
+                break
+            continue
+        match = TRAILER.fullmatch(line)
+        if not match:
+            break
+        trailers[match.group("token")] = match.group("value").strip()
+    return trailers
+
+
 def commit_record(sha, subject, body):
+    """Normalize commit metadata used by release classification."""
     line = release_line(subject, body)
     match = CONVENTIONAL.fullmatch(line)
     commit_type = match.group(1) if match else None
     scope = match.group(2) if match else None
-    breaking = bool(match and match.group(3)) or bool(BREAKING_FOOTER.search(body))
-    release_as_match = RELEASE_AS.search(body)
-    release_as = release_as_match.group(1) if release_as_match else None
+    trailers = commit_trailers(body)
+    breaking = bool(match and match.group(3)) or bool(
+        trailers.get("BREAKING CHANGE") or trailers.get("BREAKING-CHANGE")
+    )
+    release_as_value = trailers.get("Release-As", "").lower()
+    release_as = (
+        release_as_value
+        if release_as_value in {"major", "minor", "patch", "none"}
+        else None
+    )
     return {
         "sha": sha,
         "subject": line,
@@ -96,6 +128,7 @@ def commit_record(sha, subject, body):
 
 
 def commits_in(revision_range):
+    """Return normalized first-parent commits in a revision range."""
     raw = git(
         "log",
         "--first-parent",
@@ -114,6 +147,7 @@ def commits_in(revision_range):
 
 
 def default_bump(item):
+    """Return the default SemVer bump implied by a normalized commit."""
     if item["breaking"]:
         return "major"
     if item["release_as"]:
@@ -126,6 +160,7 @@ def default_bump(item):
 
 
 def bump_version(current, bump):
+    """Apply a major, minor, or patch bump to a semantic version tuple."""
     major, minor, patch = current
     if bump == "major":
         return (major + 1, 0, 0)
@@ -137,10 +172,12 @@ def bump_version(current, bump):
 
 
 def format_core(core):
+    """Format a semantic-version core tuple as a v-prefixed tag."""
     return f"v{core[0]}.{core[1]}.{core[2]}"
 
 
 def category_for(item):
+    """Return the changelog category for a normalized commit."""
     if (item["scope"] or "").lower() == "security":
         return "Security"
     mapping = {
@@ -163,6 +200,7 @@ def category_for(item):
 
 
 def main():
+    """Calculate release metadata and changelog output for the requested channel."""
     args = parse_args()
     all_tags = git("tag", "--list", "v*").stdout.splitlines()
 
@@ -201,6 +239,17 @@ def main():
         if not active_pre:
             raise SystemExit("No active prerelease exists to promote.")
 
+        deferred_bump = None
+        for item in commits_in(f"{active_pre}..HEAD"):
+            candidate = default_bump(item)
+            if RANK[candidate] > RANK[deferred_bump]:
+                deferred_bump = candidate
+        if deferred_bump:
+            raise SystemExit(
+                f"Release-worthy commits exist after {active_pre}; "
+                "create a new release candidate before promotion."
+            )
+
     if last_tag:
         if not is_ancestor(last_tag, release_ref):
             raise SystemExit(
@@ -223,14 +272,21 @@ def main():
 
     commits = commits_in(revision_range)
 
+    calculated_bump = None
+    for item in commits:
+        candidate = default_bump(item)
+        if RANK[candidate] > RANK[calculated_bump]:
+            calculated_bump = candidate
+
     bump = None
     if forced in {"major", "minor", "patch"}:
+        if RANK[forced] < RANK[calculated_bump]:
+            raise SystemExit(
+                f"Forced {forced} bump is below required {calculated_bump} bump."
+            )
         bump = forced
     elif forced != "promote":
-        for item in commits:
-            candidate = default_bump(item)
-            if RANK[candidate] > RANK[bump]:
-                bump = candidate
+        bump = calculated_bump
 
     prerelease = False
     if args.channel == "stable":
