@@ -26,12 +26,15 @@ ENGINE_URL=https://engine.example.com
 INGEST_API_KEY=<samma värde som engine-Workerns INGEST_API_KEY>
 ```
 
-Starta fetchern med dess explicita Compose-fil så att en host-global `COMPOSE_FILE` inte kan välja en annan stack:
+Fetcherns runtime-image publiceras till GHCR från repositoryts `main`-gren. Starta med dess explicita Compose-fil så att en host-global `COMPOSE_FILE` inte kan välja en annan stack:
 
 ```bash
-docker compose -f compose.yml up -d --build
+docker compose -f compose.yml pull
+docker compose -f compose.yml up -d
 cd ../..
 ```
+
+Normal drift använder `ghcr.io/avkroken/produkter-fetcher:latest`. En annan image kan väljas lokalt med den valfria variabeln `FETCHER_IMAGE`; den behöver inte sättas för standardinstallationen.
 
 ## 2. Cloudflare deployment
 
