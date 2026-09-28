@@ -6,6 +6,11 @@ const cloudflareDir = fileURLToPath(new URL("../", import.meta.url));
 const useExample = process.argv.includes("--example");
 const sourcePath = path.join(cloudflareDir, useExample ? "deployment.example.json" : "deployment.json");
 
+/**
+ * Läser konfiguration och källnamn: --example väljer exempelfilen; annars används
+ * CLOUDFLARE_DEPLOYMENT_CONFIG om den inte är tom, därefter deployment.json.
+ * Ogiltig miljö-JSON och saknad lokal fil ger förklarande fel; övriga läs-/JSON-fel förs vidare.
+ */
 async function loadDeployment() {
   if (useExample) {
     return {
@@ -44,6 +49,7 @@ async function loadDeployment() {
   }
 }
 
+/** Returnerar en trimmad, icke-tom sträng; kastar annars med konfigurationsfältets label. */
 function requiredString(value, label) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`Saknar obligatoriskt konfigurationsvärde: ${label}`);
@@ -51,6 +57,10 @@ function requiredString(value, label) {
   return value.trim();
 }
 
+/**
+ * Returnerar en URL för ett obligatoriskt HTTPS-origin utan credentials, query eller fragment
+ * och med sökvägen /. Kastar vid saknat/ogiltigt värde; label identifierar fältet.
+ */
 function publicHttpsUrl(value, label) {
   const raw = requiredString(value, label);
   const url = new URL(raw);
@@ -60,10 +70,16 @@ function publicHttpsUrl(value, label) {
   return url;
 }
 
+/** Returnerar en trimmad sträng eller undefined för tomma värden och andra typer. */
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * Returnerar en normaliserad HTTPS-URL utan credentials; path, query och fragment tillåts.
+ * Tomma värden och andra typer än sträng ger undefined. Ogiltiga URL:er kastar;
+ * label identifierar fältet vid otillåtet protokoll eller credentials.
+ */
 function optionalHttpsUrl(value, label) {
   const raw = optionalString(value);
   if (!raw) return undefined;
@@ -74,6 +90,7 @@ function optionalHttpsUrl(value, label) {
   return url.toString();
 }
 
+/** Returnerar gemensam Wrangler-konfiguration för loggar och spårning med query-maskering. */
 function observability() {
   return {
     enabled: true,

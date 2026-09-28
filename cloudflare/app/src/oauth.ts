@@ -32,6 +32,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
 };
 
+/** Bygger callback-adressen från PUBLIC_APP_URL:s origin; ogiltig bas-URL ger ett fel. */
 function redirectUri(provider: string, env: Env): string {
   const origin = new URL(env.PUBLIC_APP_URL).origin;
   return `${origin}/api/oauth/${provider}/callback`;
@@ -41,6 +42,10 @@ export function isKnownProvider(provider: string): boolean {
   return provider in PROVIDERS;
 }
 
+/**
+ * Bygger leverantörens inloggnings-URL med angiven state-nonce och installationens callback.
+ * Kastar om leverantören är okänd, klient-id saknas eller PUBLIC_APP_URL inte kan tolkas.
+ */
 export function getAuthorizeUrl(provider: string, env: Env, state: string): string {
   const cfg = PROVIDERS[provider];
   if (!cfg) throw new Error("Okänd leverantör");
@@ -56,6 +61,12 @@ export function getAuthorizeUrl(provider: string, env: Env, state: string): stri
   return `${cfg.authorizeUrl}?${params.toString()}`;
 }
 
+/**
+ * Byter en auktoriseringskod mot användar-id, e-postadress och verifieringsflagga.
+ * Saknad verifieringsflagga räknas som overifierad e-post. Kastar vid okänd
+ * leverantör, saknade klientuppgifter, HTTP-fel eller saknad identitet;
+ * URL-, nätverks- och JSON-fel förs också vidare.
+ */
 async function exchangeCodeForUserInfo(
   provider: string,
   env: Env,

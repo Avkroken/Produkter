@@ -13,6 +13,11 @@ async function api(path, options = {}) {
 
 let signupTurnstileId = null;
 
+/**
+ * Registrerar callbacken när Turnstile finns och låter biblioteket invänta beredskap.
+ * attempts anger återstående kontroller med 100 ms fördröjning; när de är slut
+ * och biblioteket fortfarande saknas avslutas väntan utan att callbacken körs.
+ */
 function whenTurnstileReady(callback, attempts = 50) {
   if (window.turnstile) {
     window.turnstile.ready(callback);
@@ -21,6 +26,11 @@ function whenTurnstileReady(callback, attempts = 50) {
   if (attempts > 0) setTimeout(() => whenTurnstileReady(callback, attempts - 1), 100);
 }
 
+/**
+ * Skapar en Turnstile-widget för registrering med behållarens sitekey och
+ * action (standard: signup). Gör inget om widgeten redan finns eller
+ * om behållaren, sitekey eller Turnstile saknas.
+ */
 function renderSignupTurnstile() {
   const container = document.getElementById("signup-turnstile");
   if (!container || signupTurnstileId !== null || !window.turnstile) return;
@@ -32,6 +42,7 @@ function renderSignupTurnstile() {
   });
 }
 
+/** Återställer widgeten för registrering om både dess id och Turnstile finns. */
 function resetSignupTurnstile() {
   if (signupTurnstileId !== null && window.turnstile) {
     window.turnstile.reset(signupTurnstileId);

@@ -18,6 +18,10 @@ function requestWithPath(request: Request, pathname: string): Request {
   return new Request(url, request);
 }
 
+/**
+ * Kopierar begäran till en ny sökväg och tar bort villkorliga cacheheaders
+ * så att HTML kan hämtas för installationsspecifik bearbetning. Query bevaras.
+ */
 function assetRequestWithPath(request: Request, pathname: string): Request {
   const rewritten = requestWithPath(request, pathname);
   const headers = new Headers(rewritten.headers);
@@ -26,6 +30,7 @@ function assetRequestWithPath(request: Request, pathname: string): Request {
   return new Request(rewritten, { headers });
 }
 
+/** Kopierar svaret med no-store och utan ETag/Last-Modified; status och body bevaras. */
 function noStoreHtml(response: Response): Response {
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
@@ -68,18 +73,26 @@ function applyHtmlIndexingPolicy(response: Response, pathname: string): Response
   return withRobotsHeader(response, pathname === "/" ? "index, follow" : "noindex, nofollow");
 }
 
+/** Skapar robots.txt för ett validerat origin utan avslutande snedstreck; headOnly utelämnar body. */
 function robotsResponse(origin: string, headOnly: boolean): Response {
   return new Response(headOnly ? null : robotsText(origin), {
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 
+/** Skapar sitemap-svaret för ett validerat origin utan avslutande snedstreck; headOnly utelämnar body. */
 function sitemapResponse(origin: string, headOnly: boolean): Response {
   return new Response(headOnly ? null : sitemapText(origin), {
     headers: { "content-type": "application/xml; charset=utf-8" },
   });
 }
 
+/**
+ * Anpassar HTML med routningsskript, Turnstile-nyckel och konfigurerade OAuth-/stödlänkar.
+ * canonicalRoot är ett validerat origin utan avslutande snedstreck för startsidans
+ * kanoniska länk. Endast startsidan tillåts indexeras och bearbetad HTML får no-store.
+ * Svar som inte är HTML returneras oförändrade.
+ */
 function injectAccessRouting(
   response: Response,
   pathname: string,
@@ -165,6 +178,10 @@ function injectAccessRouting(
 }
 
 export default {
+  /**
+   * Serverar crawlerfiler, omdirigerar äldre adresser och anpassar HTML från assets/app.
+   * Fel i PUBLIC_APP_URL eller från vidarebefordrade anrop förs vidare till anroparen.
+   */
   async fetch(request: Request, env: AccessEnv, ctx: ExecutionContext): Promise<Response> {
     const externalUrl = new URL(request.url);
     const canonicalRoot = configuredPublicOrigin(env.PUBLIC_APP_URL);

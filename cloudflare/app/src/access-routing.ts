@@ -53,6 +53,7 @@ function internalForAdmin(method: string, pathname: string): string | null {
   return `/api/admin/${suffix}`;
 }
 
+/** Avgör om GET/HEAD avser startsidan, adminsidan eller formuläret för lösenordsåterställning. */
 function isWorkerRenderedAsset(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return false;
@@ -62,6 +63,11 @@ function isWorkerRenderedAsset(method: string, pathname: string): boolean {
     pathname === "/forgot-password";
 }
 
+/**
+ * Väljer asset, intern omskrivning, omdirigering från äldre adresser eller passage.
+ * pathname är en URL-sökväg utan query; resultatet beskriver routningen utan
+ * att hämta innehåll eller kontrollera behörighet.
+ */
 export function accessRoute(method: string, pathname: string): AccessRoute {
   if (pathname === LEGACY_CRITICAL_PAGE || pathname === `${LEGACY_CRITICAL_PAGE}/`) {
     return { type: "redirect", pathname: "/admin" };

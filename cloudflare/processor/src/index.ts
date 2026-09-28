@@ -38,6 +38,11 @@ interface JobRow {
 }
 
 export default {
+  /**
+   * Behandlar extraktions- och beskrivningsmeddelanden sekventiellt.
+   * Oväntade fel rapporteras till GitHub och meddelandet kvitteras därefter;
+   * om rapporteringen kastar förs felet vidare innan kvittering.
+   */
   async queue(batch: MessageBatch<JobMessage>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
       try {

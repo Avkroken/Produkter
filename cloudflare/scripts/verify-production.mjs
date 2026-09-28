@@ -5,6 +5,10 @@ const ATTEMPTS = 5;
 const RETRY_DELAY_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 
+/**
+ * Returnerar ett HTTPS-origin utan avslutande snedstreck. Kastar vid saknat/ogiltigt
+ * värde, annan sökväg än /, query eller fragment; label identifierar konfigurationsfältet.
+ */
 function origin(value, label) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${label} in cloudflare/deployment.json`);
   const url = new URL(value);
@@ -14,6 +18,10 @@ function origin(value, label) {
   return url.origin;
 }
 
+/**
+ * Bygger publika HTTP-kontroller för app (startsidan) eller engine (/health) från deployment.
+ * Kastar för andra nycklar eller om motsvarande installations-URL är ogiltig.
+ */
 export function productionProfile(key, deployment) {
   if (key === "app") {
     const appUrl = origin(deployment?.appUrl, "appUrl");
@@ -96,6 +104,11 @@ export async function checkProduction(profile, {
   throw new Error(`${profile.name}: production checks failed after ${ATTEMPTS} attempts`);
 }
 
+/**
+ * Returnerar parsad deployment-JSON från miljön om den inte är tom, annars från deployment.json.
+ * env och den synkrona readFile-funktionen kan ersättas av anroparen.
+ * Ogiltig miljö-JSON och saknad fil ger förklarande fel; andra läs-/JSON-fel förs vidare.
+ */
 export function loadDeployment({ env = process.env, readFile = readFileSync } = {}) {
   const inline = env.CLOUDFLARE_DEPLOYMENT_CONFIG?.trim();
   if (inline) {
