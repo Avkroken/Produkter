@@ -375,7 +375,8 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
 /**
  * Hanterar återställning: complete byter lösenord med token och rensar sessionscookien;
- * annars schemaläggs mejlutskick med ett generiskt 202-svar även för okända adresser.
+ * annars returneras ett generiskt 202-svar även för okända adresser och mejl schemaläggs
+ * endast när den normaliserade adressens separata rate limit tillåter det.
  * Mejlvägen kräver Turnstile samt konfigurerad API-nyckel och avsändare.
  * Validerings- och gränsfel blir HTTP-felsvar; oväntade fel blir 503.
  */
