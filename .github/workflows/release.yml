@@ -116,12 +116,13 @@ jobs:
               with urllib.request.urlopen(request, timeout=30) as response:
                   return json.load(response)
 
-          def all_runs():
+          def runs_with_status(status):
               runs = []
               page = 1
               while True:
                   data = api(
-                      f"/actions/workflows/release.yml/runs?per_page=100&page={page}"
+                      f"/actions/workflows/release.yml/runs"
+                      f"?status={status}&per_page=100&page={page}"
                   )
                   batch = data.get("workflow_runs", [])
                   runs.extend(batch)
@@ -129,13 +130,25 @@ jobs:
                       return runs
                   page += 1
 
+          def active_runs():
+              runs = []
+              seen = set()
+              for status in ("queued", "in_progress", "waiting", "pending", "requested"):
+                  for run in runs_with_status(status):
+                      run_id = int(run["id"])
+                      if run_id in seen:
+                          continue
+                      seen.add(run_id)
+                      runs.append(run)
+              return runs
+
           while True:
               if time.monotonic() - started > 1800:
                   raise SystemExit("Timed out waiting for an earlier release run.")
 
               active = sorted(
                   int(run["id"])
-                  for run in all_runs()
+                  for run in active_runs()
                   if run.get("event") in {"push", "workflow_dispatch"}
                   and run.get("status") != "completed"
                   and run.get("head_branch") == "main"
