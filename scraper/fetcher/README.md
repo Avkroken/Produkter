@@ -58,14 +58,15 @@ INGEST_API_KEY=<ditt-värde>
 
 `.env` får inte committas.
 
-Compose-filen bygger fetcher-imagen lokalt från repositoryts versionerade `Dockerfile`. Ingen separat runtime-image för fetchern publiceras från repositoryt i nuläget. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
+Runtime-imagen publiceras från repositoryts `main`-gren till `ghcr.io/avkroken/produkter-fetcher:latest`. Compose drar den publicerade imagen; renderhosten behöver alltså inte bygga Playwright/Chromium lokalt. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
 
 Använd explicit `-f compose.yml` så att en host-global `COMPOSE_FILE` inte kan styra kommandot till en annan stack.
 
-Bygg och starta:
+Dra och starta:
 
 ```bash
-docker compose -f compose.yml up -d --build
+docker compose -f compose.yml pull
+docker compose -f compose.yml up -d
 ```
 
 Kontrollera status:
@@ -80,16 +81,17 @@ polla efter jobb.
 
 ## Uppdatering
 
-Efter att ny kod har hämtats:
+När en ny fetcher-image har publicerats:
 
 ```bash
-git pull --ff-only
 cd scraper/fetcher
-docker compose -f compose.yml build --pull
+docker compose -f compose.yml pull
 docker compose -f compose.yml up -d
 docker compose -f compose.yml ps
 docker compose -f compose.yml logs --tail=100 produkter-fetcher
 ```
+
+`latest` följer aktuell publicerad `main`. Varje publicering får även en immutable tagg `sha-<commit>`. En fork eller installation som vill använda en annan image kan sätta valfria `FETCHER_IMAGE` i lokal `.env`; den variabeln behövs inte för normal Avkroken-drift.
 
 Containern använder `restart: unless-stopped`, vilket gör att den startar igen
 efter Docker-/host-restart så länge den inte har stoppats manuellt.
@@ -162,8 +164,8 @@ Vanliga fel:
 - `ENGINE_URL och INGEST_API_KEY måste vara satta` → kontrollera lokal `.env`.
 - HTTP 401/403 mot engine → credential saknas/är fel eller har ändrats.
 - lease-fel → verifiera nätåtkomst till `engine.example.com`.
-- Playwright/Chromium-fel efter imageändring → bygg om med
-  `docker compose -f compose.yml build --no-cache` och starta om.
+- Playwright/Chromium-fel efter imageändring → kör
+  `docker compose -f compose.yml pull` och återskapa containern med `docker compose -f compose.yml up -d --force-recreate`.
 - tom kö → normalt; fetchern väntar enligt `POLL_IDLE_SEC`.
 
 ## Säkerhetsgräns
