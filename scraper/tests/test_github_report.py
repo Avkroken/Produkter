@@ -28,6 +28,19 @@ class TestRedact:
         assert "ghp_" not in _redact("token=ghp_abcdefghijklmnopqrstuvwxyz0123")
 
 
+class TestErrorReportingConfiguration:
+    def test_warns_when_token_exists_without_repository(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_ERROR_REPORT_TOKEN", "fake-token")
+        monkeypatch.delenv("GITHUB_ERROR_REPORT_REPOSITORY", raising=False)
+        monkeypatch.setattr(github_report, "PRODUKTER_REPOSITORY_ID", "")
+        assert "GITHUB_ERROR_REPORT_REPOSITORY" in github_report._error_reporting_configuration_warning()
+
+    def test_no_warning_when_repository_is_configured(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_ERROR_REPORT_TOKEN", "fake-token")
+        monkeypatch.setattr(github_report, "PRODUKTER_REPOSITORY_ID", "owner/repository")
+        assert github_report._error_reporting_configuration_warning() is None
+
+
 class TestReportErrorToGithub:
     def test_resolves_stable_repository_id(self, monkeypatch):
         class Response:

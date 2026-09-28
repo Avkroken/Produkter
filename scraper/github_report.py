@@ -22,10 +22,24 @@ import re
 import threading
 import time
 import traceback
+import warnings
 
 import requests
 
 PRODUKTER_REPOSITORY_ID = os.environ.get("GITHUB_ERROR_REPORT_REPOSITORY", "")
+
+def _error_reporting_configuration_warning() -> str | None:
+    """Return a startup warning when error reporting is only half-configured."""
+    if os.environ.get("GITHUB_ERROR_REPORT_TOKEN") and not PRODUKTER_REPOSITORY_ID:
+        return (
+            "GITHUB_ERROR_REPORT_TOKEN is set but GITHUB_ERROR_REPORT_REPOSITORY is empty; "
+            "automatic GitHub error reporting is disabled until both are configured."
+        )
+    return None
+
+_CONFIG_WARNING = _error_reporting_configuration_warning()
+if _CONFIG_WARNING:
+    warnings.warn(_CONFIG_WARNING, RuntimeWarning, stacklevel=2)
 
 # Tak på hur många issues som öppnas per fönster, så att fel som en
 # angripare kan trigga med varierande tracebacks (= olika fingeravtryck,

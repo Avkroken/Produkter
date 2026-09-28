@@ -128,6 +128,7 @@ const shared = {
   compatibility_flags: ["nodejs_compat"],
   workers_dev: false,
   preview_urls: false,
+  previews: {},
 };
 
 const app = {

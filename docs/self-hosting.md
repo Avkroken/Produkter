@@ -168,11 +168,27 @@ Exempel på secrets som kan behövas beroende på aktiverade funktioner:
 
 - `INGEST_API_KEY` — samma värde ska sättas på **både app- och engine-Workern**;
 - `PROVIDER_CONFIG_KEY` — samma värde ska sättas på **både app- och processor-Workern**;
-- AI-providerkeys;
 - OAuth client secrets;
 - `TURNSTILE_SECRET`;
 - `RESEND_API_KEY`;
 - `GITHUB_ERROR_REPORT_TOKEN`.
+
+### AI-provider på engine-Workern
+
+Minst en AI-provider måste konfigureras på **engine-Workern** för att `/describe` och schemalagd beskrivningsgenerering ska fungera. Generera först installationens Wrangler-konfiguration och lägg därefter providerns secret på engine-Workern, exempelvis OpenAI:
+
+```bash
+cd cloudflare/engine
+npm run config:generate
+npx wrangler secret put OPENAI_API_KEY
+cd ../..
+```
+
+Alternativt stöds `ANTHROPIC_API_KEY` eller `GEMINI_API_KEY`. Azure OpenAI kräver `AZURE_OPENAI_API_KEY` som secret samt `AZURE_OPENAI_ENDPOINT` och `AZURE_OPENAI_DEPLOYMENT` som runtime-värden på samma engine-Worker. Lägg aldrig providervärden i Git eller i `deployment.json` om de är hemliga.
+
+### Uppgradering av GitHub-felrapportering
+
+Felrapportering är opt-in. Om en befintlig installation redan har `GITHUB_ERROR_REPORT_TOKEN` måste den samtidigt sätta `GITHUB_ERROR_REPORT_REPOSITORY` i sin persistenta `.env` (format `owner/repository` eller numeriskt repository-ID) innan den uppgraderade containern startas. Om token finns men repository saknas skriver processen en tydlig runtime-varning och felrapporteringen förblir avstängd i stället för att tyst försvinna.
 
 ## 4. Första administratören
 
