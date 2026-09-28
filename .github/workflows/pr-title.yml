@@ -1,0 +1,43 @@
+name: PR title
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  conventional-title:
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Validate Conventional Commit title
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+
+          pattern = re.compile(
+              r"^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)"
+              r"(\((?!\s*\))[^)]+\))?!?: [^\s].*$"
+          )
+
+          title = os.environ.get("PR_TITLE", "").strip()
+          if pattern.fullmatch(title):
+              print(f"PR title follows Conventional Commits: {title}")
+              sys.exit(0)
+
+          print(
+              "::error title=Invalid PR title::Use Conventional Commits, for example: "
+              "feat: add capability, fix(runtime): preserve behavior, "
+              "chore: maintain repository, or feat!: change a public contract."
+          )
+          print(f"Received: {title!r}")
+          sys.exit(1)
+          PY
