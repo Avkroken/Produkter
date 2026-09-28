@@ -1,6 +1,7 @@
 services:
   produkter-fetcher:
-    build: .
+    image: ${FETCHER_IMAGE:-ghcr.io/avkroken/produkter-fetcher:latest}
+    pull_policy: always
     container_name: produkter-fetcher
     restart: unless-stopped
     init: true
