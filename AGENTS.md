@@ -10,7 +10,10 @@
 
 ## Invariants
 
-- Arbeta i separat gren enligt `{agent}/{feature}/{YYYY-MM-DD}/{HH-mm}-{id}`.
+- Anta inte organization-scope eller andra org-funktioner utan live-verifiering.
+- Arbeta i separat gren enligt `{agent}/{feature}/{YYYY-MM-DD}`.
+- Commits ska använda Conventional Commits eller motsvarande tydlig typ, exempelvis `feat:`, `fix:`, `docs:`, `chore:`, `ci:` eller `test:`.
+- Läs hela PR-review-state före merge, inklusive kommentarer och trådar som GitHub markerar som `outdated`; verifiera att grundproblemet faktiskt är löst.
 - Cloudflare är control/state plane; D1 är canonical durable application state.
 - Browser rendering ligger i den stateless externa Playwright-fetchern.
 - Browser rendering ligger i den externa fetchern; ändringar av den runtimegränsen ska vara explicita och verifierade mot Produkters egen kod och konfiguration.
