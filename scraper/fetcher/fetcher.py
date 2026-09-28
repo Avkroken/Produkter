@@ -16,7 +16,7 @@ upptäckta produkter med titel/pris). Lease-svaret bär list-selektorerna för
 list-jobb.
 
 Miljövariabler:
-    ENGINE_URL           t.ex. https://motor.denied.se
+    ENGINE_URL           t.ex. https://engine.example.com
     INGEST_API_KEY       operatörsnyckeln (X-API-Key)
     FETCHER_CONCURRENCY  parallella renderingar (default 3)
     LEASE_BATCH          jobb per lease (default 10)

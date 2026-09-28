@@ -1,56 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "produkter-bearbetare",
+  "main": "src/worker.ts",
   "workers_dev": false,
   "preview_urls": false,
   "previews": {},
-  "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
-  // nodejs_compat: behövs av beroenden som använder node:-API:er.
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 0.1,
-    "redact_query_string": true,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 0.1,
-      "invocation_logs": true,
-      "persist": true
-    },
-    "traces": {
-      "enabled": true,
-      "head_sampling_rate": 0.01,
-      "persist": true
-    }
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "produkter-eu",
-      "database_id": "d0bf1d69-64c4-4072-b9ce-d9a15129b526"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "UPLOADS",
-      "bucket_name": "produkter-uppladdningar"
-    }
-  ],
-  "queues": {
-    "consumers": [
-      {
-        "queue": "produkter-jobb",
-        "max_batch_size": 10,
-        "max_retries": 10,
-        "max_concurrency": 4
-      }
-    ],
-    "producers": [
-      {
-        "queue": "produkter-jobb",
-        "binding": "JOB_QUEUE"
-      }
-    ]
-  }
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
 }

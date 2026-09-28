@@ -1,6 +1,6 @@
 # Projektkontext
 
-**Senast verifierad:** 2026-09-24
+**Senast verifierad:** 2026-09-27
 
 ## Ansvar
 
@@ -63,9 +63,9 @@ Browser/render-fetcher dokumenteras under [`scraper/fetcher/README.md`](../scrap
 
 samt `shared`, `migrations`, `infra` och scripts.
 
-Varje Worker-konfigurationsfil är auktoritativ för just den deployenhetens bindings/runtime.
+Installationsspecifik Cloudflare-state ligger i den gitignorerade `cloudflare/deployment.json`, skapad från `deployment.example.json`. `cloudflare/scripts/configure.mjs` genererar därefter lokala `wrangler.production.jsonc` för app, engine och processor. De versionsstyrda `wrangler.jsonc`-filerna är separata fail-closed Preview-konfigurationer utan production-resurs-ID:n. Produktion deployas med den genererade konfigurationen; Preview-builds använder den versionsstyrda konfigurationen.
 
-De tre Cloudflare-Workers som använder D1 binder samma databas, `produkter-eu`. Produktionsdatabasen ska skapas med Cloudflare-jurisdiction `eu`. Shared D1-routing använder Sessions API för request-, cron- och queue-vägar med lämplig `first-unconstrained`/`first-primary`-constraint, så read replication kan vara `auto` inom EU-jurisdictionen.
+De Workers som använder D1 ska binda samma installationsspecifika databas. Om installationen använder EU-jurisdiction ska databasen skapas med `jurisdiction=eu`. Shared D1-routing använder Sessions API för request-, cron- och queue-vägar med lämplig `first-unconstrained`/`first-primary`-constraint.
 
 ## State- och failuremodell
 

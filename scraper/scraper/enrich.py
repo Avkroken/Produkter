@@ -48,7 +48,7 @@ from scraper.scraper import (  # noqa: E402
 try:
     from github_report import PRODUKTER_REPOSITORY_ID, report_error_to_github
 except ImportError:  # best-effort, mirrors scraper.py's conventions
-    PRODUKTER_REPOSITORY_ID = 1223482099
+    PRODUKTER_REPOSITORY_ID = os.environ.get("GITHUB_ERROR_REPORT_REPOSITORY", "")
     def report_error_to_github(*_args, **_kwargs):
         return None
 

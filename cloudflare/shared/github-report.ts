@@ -11,8 +11,6 @@
 // No-op om GITHUB_ERROR_REPORT_TOKEN saknas — felet loggas ändå till console
 // av anroparen.
 
-export const PRODUKTER_REPOSITORY_ID = 1223482099;
-
 const SECRET_ENV_MARKERS = ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASS"];
 const EMAIL_RE = /[\w.+-]{1,64}@[\w.-]{1,255}\.\w{2,24}/g;
 const HOME_PATH_RE = /\/home\/[^/\s]+/g;
@@ -21,6 +19,7 @@ const KEY_PATTERN_RE =
 
 export interface GitHubReportEnv {
   GITHUB_ERROR_REPORT_TOKEN?: string;
+  GITHUB_ERROR_REPORT_REPOSITORY?: string;
   // Övriga bindings/secrets — itereras för att maska hemlighetslika värden.
   [key: string]: unknown;
 }
@@ -62,14 +61,14 @@ async function resolveRepo(
 }
 
 export async function reportErrorToGitHub(
-  repo: string | number,
   title: string,
   err: unknown,
   env: GitHubReportEnv,
   context?: Record<string, string>,
 ): Promise<string | null> {
   const token = env.GITHUB_ERROR_REPORT_TOKEN;
-  if (!token) return null;
+  const repo = env.GITHUB_ERROR_REPORT_REPOSITORY;
+  if (!token || !repo) return null;
 
   const error = err instanceof Error ? err : new Error(String(err));
   const fp = await fingerprint(error);
