@@ -61,9 +61,9 @@ Kopiera först `cloudflare/deployment.example.json` till den gitignorerade `clou
 node cloudflare/scripts/configure.mjs
 ```
 
-Verifiera app, engine och processor mot de genererade filerna. De genererade `wrangler.jsonc`-filerna är lokal deployment-state och ska inte committas.
+Verifiera app, engine och processor mot de genererade `wrangler.production.jsonc`-filerna. De är lokal deployment-state och ska inte committas. De versionsstyrda `wrangler.jsonc`-filerna är endast portable Preview-/bundle-konfiguration och innehåller ingen installation-specifik production-state.
 
-Aktuell produktion deployas via Wrangler; de tre Workers har ingen Workers Builds-/Git-trigger som är en del av deploykontraktet. `CLOUDFLARE_DEPLOYMENT_CONFIG` stöds som ett valfritt environment-kontrakt för extern CI, men normal drift använder den lokala gitignorerade `cloudflare/deployment.json`.
+Produktion deployas med den genererade `wrangler.production.jsonc`. `CLOUDFLARE_DEPLOYMENT_CONFIG` stöds som ett valfritt environment-kontrakt för extern buildmiljö, medan normal self-hosting använder den lokala gitignorerade `cloudflare/deployment.json`. Cloudflare Preview-builds använder däremot den versionsstyrda fail-closed `wrangler.jsonc` och får inte ärva production bindings.
 
 Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift.
 

@@ -62,7 +62,7 @@ Fyll i egna värden för:
 
 ### Deploymentkälla
 
-Den verifierade produktionsvägen för den här installationen är Wrangler. De tre Workers har ingen Workers Builds-/Git-trigger som ska bära installationskonfiguration.
+Den verifierade produktionsvägen för installation-specifik state är Wrangler med den genererade produktionskonfigurationen. Cloudflare Preview-builds från Git får endast använda den versionsstyrda fail-closed Preview-konfigurationen och ska inte bära installationskonfiguration.
 
 Generatorn väljer i ordning:
 
@@ -90,13 +90,13 @@ Generera därefter Wrangler-konfigurationerna:
 node cloudflare/scripts/configure.mjs
 ```
 
-Det skapar lokala `cloudflare/*/wrangler.jsonc`. De är också gitignorerade och får inte användas som versionsstyrd produktionsstate. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
+Det skapar lokala `cloudflare/*/wrangler.production.jsonc`. De är gitignorerade och innehåller installationens produktionsresurser. De versionsstyrda `cloudflare/*/wrangler.jsonc` är separata fail-closed Preview-konfigurationer utan production D1/R2/KV/Queue/Service-bindings eller installationsspecifika routes/vars. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
 
 För en **ny D1-databas**, initiera grundschemat en gång innan första app-deployen:
 
 ```bash
 cd cloudflare/app
-npx wrangler d1 execute DB --remote --file=../infra/schema.sql
+npx wrangler d1 execute DB --remote --config wrangler.production.jsonc --file=../infra/schema.sql
 cd ../..
 ```
 
@@ -150,7 +150,7 @@ När installationen redan har en Turnstile-widget ska den återanvändas; skapa 
 
 1. Lägg widgetens **Site Key** i den lokala, gitignorerade `cloudflare/deployment.json` under `turnstile.siteKey`.
 2. Kontrollera widgetens hostname/mode mot den avsedda produktionen.
-3. Innan widgetens secret återställs eller skrivs till Workern: verifiera exakt mål med `wrangler secret list` för app-Workern.
+3. Innan widgetens secret återställs eller skrivs till Workern: verifiera exakt mål med `wrangler secret list --config wrangler.production.jsonc` för app-Workern.
 4. Hämta widgetens secret med Wrangler 4.109+ från ett separat, uttryckligen godkänt Wrangler-exemplar utanför projektets package-resolution. Secretvärdet får inte skrivas ut, läggas i kommandoradsargument, temporära filer, Git eller chatt.
 5. Installera secretvärdet på app-Workern som `TURNSTILE_SECRET` via standardkommandot:
 
@@ -180,7 +180,7 @@ Minst en AI-provider måste konfigureras på **engine-Workern** för att `/descr
 ```bash
 cd cloudflare/engine
 npm run config:generate
-npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put OPENAI_API_KEY --config wrangler.production.jsonc
 cd ../..
 ```
 

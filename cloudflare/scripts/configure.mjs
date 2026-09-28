@@ -191,7 +191,7 @@ const processor = {
 };
 
 for (const [name, value] of [["app", app], ["engine", engine], ["processor", processor]]) {
-  await writeFile(path.join(cloudflareDir, name, "wrangler.jsonc"), JSON.stringify(value, null, 2) + "\n");
+  await writeFile(path.join(cloudflareDir, name, "wrangler.production.jsonc"), JSON.stringify(value, null, 2) + "\n");
 }
 
-console.log(`Genererade Wrangler-konfigurationer från ${source}.`);
+console.log(`Genererade produktionskonfigurationer för Wrangler från ${source}.`);

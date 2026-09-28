@@ -40,7 +40,7 @@ test("server-side Siteverify validates bounded tokens, action, hostname, and tim
 test("TURNSTILE_SECRET has a dedicated Wrangler installation command", () => {
   assert.equal(
     pkg.scripts["secret:set-turnstile"],
-    "npm run config:generate && wrangler secret put TURNSTILE_SECRET",
+    "npm run config:generate && wrangler secret put TURNSTILE_SECRET --config wrangler.production.jsonc",
   );
 });
 

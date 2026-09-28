@@ -40,7 +40,7 @@ Läs scraperkoden och [fetcher-dokumentationen](../scraper/fetcher/README.md). H
 
 ### Jag ändrar Cloudflare runtime
 
-Läs `cloudflare/*/wrangler.jsonc`, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
+Läs de versionsstyrda Preview-konfigurationerna `cloudflare/*/wrangler.jsonc`, den genererade production-modellen som beskrivs i drift/self-hosting, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
 
 ## Wiki
 

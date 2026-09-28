@@ -17,7 +17,7 @@ function wranglerJson(sql) {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";
   const result = spawnSync(
     command,
-    ["--no-install", "wrangler", "d1", "execute", "DB", "--remote", "--command", sql, "--json"],
+    ["--no-install", "wrangler", "d1", "execute", "DB", "--remote", "--config", "wrangler.production.jsonc", "--command", sql, "--json"],
     { encoding: "utf8" },
   );
   if (result.status !== 0) {

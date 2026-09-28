@@ -4,17 +4,17 @@
   "type": "module",
   "scripts": {
     "config:generate": "node ../scripts/configure.mjs",
-    "dev": "npm run config:generate && wrangler dev --remote",
-    "preview": "npm run config:generate && wrangler preview",
+    "dev": "npm run config:generate && wrangler dev --remote --config wrangler.production.jsonc",
+    "preview": "wrangler preview",
     "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run",
+    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run --config wrangler.production.jsonc",
     "deploy": "npm run config:generate && node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
-    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY",
-    "secret:set-ingest-key": "npm run config:generate && wrangler secret put INGEST_API_KEY",
+    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY --config wrangler.production.jsonc",
+    "secret:set-ingest-key": "npm run config:generate && wrangler secret put INGEST_API_KEY --config wrangler.production.jsonc",
     "admin:bootstrap": "npm run config:generate && node ../scripts/bootstrap-admin.mjs",
-    "secret:set-turnstile": "npm run config:generate && wrangler secret put TURNSTILE_SECRET"
+    "secret:set-turnstile": "npm run config:generate && wrangler secret put TURNSTILE_SECRET --config wrangler.production.jsonc"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,

@@ -11,11 +11,13 @@ cp cloudflare/deployment.example.json cloudflare/deployment.json
 
 Fyll därefter i endast dina egna värden i de två lokala konfigurationsfilerna. Se [Self-hosting](docs/self-hosting.md) för Cloudflare-resurser och secrets.
 
-När `cloudflare/deployment.json` innehåller din installation genererar du Wrangler-konfigurationerna:
+När `cloudflare/deployment.json` innehåller din installation genererar du de gitignorerade produktionskonfigurationerna för Wrangler:
 
 ```bash
 node cloudflare/scripts/configure.mjs
 ```
+
+Generatorn skriver `cloudflare/*/wrangler.production.jsonc`. De versionsstyrda `cloudflare/*/wrangler.jsonc` är resursfria Preview-konfigurationer för Cloudflare Builds och ska inte fyllas med installationens production-ID:n.
 
 ## Snabb verifiering
 

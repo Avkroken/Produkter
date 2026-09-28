@@ -53,4 +53,4 @@ jobs.json
 
 # Local Cloudflare deployment state
 cloudflare/deployment.json
-cloudflare/*/wrangler.jsonc
+cloudflare/*/wrangler.production.jsonc

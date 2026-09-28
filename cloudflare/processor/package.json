@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "config:generate": "node ../scripts/configure.mjs",
-    "dev": "npm run config:generate && wrangler dev --remote",
-    "preview": "npm run config:generate && wrangler preview",
-    "deploy": "npm run config:generate && wrangler deploy --strict",
-    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY"
+    "dev": "npm run config:generate && wrangler dev --remote --config wrangler.production.jsonc",
+    "preview": "wrangler preview",
+    "deploy": "npm run config:generate && wrangler deploy --strict --config wrangler.production.jsonc",
+    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY --config wrangler.production.jsonc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260925.1",
