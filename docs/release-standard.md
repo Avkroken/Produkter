@@ -110,21 +110,22 @@ En releaseprocess får inte kringgå normala PR-checks eller repositoryskydd.
 
 ## Releaseautomation — current state
 
-Current `main` har ingen verifierad Release Please- eller motsvarande release-PR-workflow.
+`.github/workflows/release.yml` äger repositoryts automatiska releaseflöde lokalt.
 
-Full releaseautomation aktiveras inte i detta arbete.
+Efter merge till `main`:
 
-En framtida release-PR-modell måste bevara:
+1. ordinarie push-CI och container security körs på release-target SHA;
+2. releasejobbet beräknar SemVer från validerad first-parent-historik och Conventional Commits;
+3. inga releasevärdiga ändringar innebär ingen ny release;
+4. releasevärdiga ändringar väntar på de checks som anges i `.github/release-required-checks`;
+5. en immutable SemVer-tagg och GitHub Release skapas på exakt verifierad target-SHA;
+6. release notes genereras som repositoryts canonical versionerade changelog.
 
-- normal CI/review på release-PR:n;
-- least-privilege write-identitet;
-- inga nya onödiga PAT:ar;
-- ingen utökning av read-only GitHub App-integrationer till release-write;
-- ingen koppling som automatiskt deployar flera subsystem enbart därför att en release-PR mergas.
+Workflown använder repositoryts `GITHUB_TOKEN` med least privilege. Ingen separat PAT eller write-utökning av read-only GitHub App-integrationer behövs.
 
-Standard-`GITHUB_TOKEN`-beteende och efterföljande workflowtriggers måste verifieras mot aktuell GitHub-dokumentation innan automation införs.
+Release är inte deployment: GitHub Release-flödet skapar inte en parallell Cloudflare-deployväg och deployar inte flera subsystem enbart därför att en release publiceras.
 
-Historiska Releases som har skapats av `gamnacken[bot]` bevisar inte current write-permission och används därför inte som grund för en ny write-arkitektur.
+Manuell `workflow_dispatch` är begränsad till `main` och används endast som kontrollerad SemVer-/prerelease-override inom samma verifieringsmodell.
 
 ## Prerelease
 
