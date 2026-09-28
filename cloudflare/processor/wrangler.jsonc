@@ -3,6 +3,7 @@
   "name": "produkter-bearbetare",
   "workers_dev": false,
   "preview_urls": false,
+  "previews": {},
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   // nodejs_compat: behövs av beroenden som använder node:-API:er.
