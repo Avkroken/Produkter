@@ -36,9 +36,12 @@
           },
           {
             "context": "Conventional PR title"
+          },
+          {
+            "context": "Validate semantic release"
           }
         ],
-        "strict_required_status_checks_policy": false
+        "strict_required_status_checks_policy": true
       }
     }
   ],

@@ -106,7 +106,7 @@ Verifiering följer [operations.md](operations.md). Beroende på ändring omfatt
 - scraper/fetcher-verifiering;
 - Cloudflare app/engine/processor med respektive test/typecheck/Wrangler dry-run.
 
-En releaseprocess får inte kringgå normala PR-checks eller repositoryskydd.
+En releaseprocess får inte kringgå normala PR-checks eller repositoryskydd. `Validate semantic release` rapporteras på varje PR och merge-queue-körning och är ett required check tillsammans med de ordinarie repository-gates. Required status checks körs i strict mode mot aktuell `main`.
 
 ## Releaseautomation — current state
 

@@ -3,12 +3,8 @@ name: Release
 on:
   pull_request:
     branches: [main]
-    paths:
-      - ".github/workflows/release.yml"
-      - ".github/scripts/semantic_release.py"
-      - ".github/scripts/wait_for_checks.py"
-      - ".github/release-baseline"
-      - ".github/release-required-checks"
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   workflow_dispatch:
@@ -32,7 +28,7 @@ permissions:
 jobs:
   validate:
     name: Validate semantic release
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
     concurrency:
       group: ${{ format('release-validate-{0}', github.ref) }}
       cancel-in-progress: true
@@ -70,11 +66,14 @@ jobs:
               "fix: compatibility\n\nBREAKING CHANGE: contract changed\n continued detail\n"
           )
           assert multiline["BREAKING CHANGE"] == "contract changed\ncontinued detail"
-          assert module.commit_record(
+          breaking = module.commit_record(
               "a" * 40,
               "fix: compatibility",
               "BREAKING CHANGE: contract changed\n continued detail\n",
-          )["breaking"]
+          )
+          assert breaking["breaking"]
+          assert module.category_for(breaking) == "Breaking changes"
+          assert module.category_for({**breaking, "scope": "security"}) == "Security"
           assert module.release_tag_key("v1.2.3") > module.release_tag_key("v1.2.3-rc.10")
           assert module.release_tag_key("v1.2.3-rc.10") > module.release_tag_key("v1.2.3-rc.9")
           assert module.commit_trailers(
@@ -97,7 +96,7 @@ jobs:
 
   release:
     name: Semantic release
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
     concurrency:
       group: ${{ format('semantic-release-{0}', github.repository) }}
       cancel-in-progress: false
@@ -164,6 +163,12 @@ jobs:
           [[ "${planned_tag}" == "${orphan_tag}" ]]
           actual_sha="$(git rev-parse --verify "${orphan_tag}^{commit}")"
           [[ "${target_sha}" == "${actual_sha}" ]]
+
+          python3 .github/scripts/wait_for_checks.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --sha "${target_sha}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --required-checks-file ".github/release-required-checks"
 
           for anchor in "${base_tag}" "${active_prerelease_tag}"; do
             [[ -z "${anchor}" ]] && continue

@@ -215,6 +215,8 @@ def category_for(item):
     """Return the changelog category for a normalized commit."""
     if (item["scope"] or "").lower() == "security":
         return "Security"
+    if item["breaking"]:
+        return "Breaking changes"
     mapping = {
         "feat": "Features",
         "fix": "Fixes",
@@ -229,8 +231,6 @@ def category_for(item):
     }
     if item["type"] in mapping:
         return mapping[item["type"]]
-    if item["breaking"]:
-        return "Breaking changes"
     return "Other changes"
 
 
