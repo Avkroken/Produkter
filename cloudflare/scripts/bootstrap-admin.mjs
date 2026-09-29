@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
+/** Returnerar e-postadressen trimmad och i gemener; kastar om formatet är ogiltigt eller längden överstiger 254 tecken. */
 export function normalizeAdminEmail(value) {
   const email = String(value ?? "").trim().toLowerCase();
   if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -9,10 +10,15 @@ export function normalizeAdminEmail(value) {
   return email;
 }
 
+/** Returnerar värdet som en citerad SQL-sträng med enkla citattecken dubblerade. */
 export function sqlLiteral(value) {
   return "'" + String(value).replaceAll("'", "''") + "'";
 }
 
+/**
+ * Kör SQL mot aktuell Wrangler-konfigurations fjärrdatabas DB och returnerar JSON-svaret.
+ * Kastar om kommandot misslyckas eller svaret inte kan tolkas som JSON.
+ */
 function wranglerJson(sql) {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";
   const result = spawnSync(
@@ -31,6 +37,10 @@ function wranglerJson(sql) {
   }
 }
 
+/**
+ * Samlar poster från nästlade results-arrayer i Wrangler-svaret.
+ * Lägger till i och returnerar samma rows-array; övriga skalärvärden ignoreras.
+ */
 function collectRows(value, rows = []) {
   if (Array.isArray(value)) {
     for (const item of value) collectRows(item, rows);
@@ -44,6 +54,10 @@ function collectRows(value, rows = []) {
   return rows;
 }
 
+/**
+ * Returnerar den enda raden med id och email som strängar, eller null om ingen finns.
+ * Kastar om flera sådana rader förekommer i Wrangler-svaret.
+ */
 export function findAccountRow(result) {
   const matches = collectRows(result).filter(
     (row) => row && typeof row === "object" && typeof row.id === "string" && typeof row.email === "string",
@@ -54,14 +68,21 @@ export function findAccountRow(result) {
   return matches[0] ?? null;
 }
 
+/** Bygger SQL för att hitta konton via skiftlägesokänslig e-postmatchning, sorterade på id. */
 export function buildAccountLookupSql(email) {
   return `SELECT id, email, role FROM accounts WHERE lower(email) = lower(${sqlLiteral(email)}) ORDER BY id`;
 }
 
+/** Bygger SQL som ger det angivna konto-id:t adminrollen; kör inte uppdateringen. */
 export function buildPromoteSql(accountId) {
   return `UPDATE accounts SET role = 'admin' WHERE id = ${sqlLiteral(accountId)}`;
 }
 
+/**
+ * Ger det befintliga kontot för CLI-argumentets e-postadress adminrollen i fjärrdatabasen.
+ * Kastar vid ogiltig adress, saknat/tvetydigt konto, Wrangler-fel eller misslyckad
+ * efterkontroll. En redan utförd rolländring återställs inte om efterkontrollen misslyckas.
+ */
 async function main() {
   const email = normalizeAdminEmail(process.argv[2]);
   const account = findAccountRow(wranglerJson(buildAccountLookupSql(email)));

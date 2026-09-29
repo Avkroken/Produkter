@@ -15,6 +15,12 @@ export interface Suggestion {
   created_at: number;
 }
 
+/**
+ * Sparar ett väntande sidförslag och försöker mejla ADMIN_EMAIL om den är angiven.
+ * Tom titel eller minst fem väntande förslag ger ok: false med feltext. Titel och
+ * beskrivning trimmas och lagras med högst 200 respektive 4000 tecken.
+ * Mejlfel påverkar inte ok: true efter lagring; databasfel förs vidare.
+ */
 export async function submitSuggestion(
   env: Env,
   accountId: string,

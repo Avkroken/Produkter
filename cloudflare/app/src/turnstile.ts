@@ -1,3 +1,10 @@
+/**
+ * Verifierar token via Siteverify mot exakt expectedAction och en kommaseparerad
+ * lista med tillåtna hostnames, jämförda utan hänsyn till skiftläge. Klientens
+ * CF-Connecting-IP skickas med när den finns. Returnerar false vid saknad
+ * konfiguration, tom token eller token över 2048 tecken, nekad verifiering,
+ * HTTP-/JSON-/nätverksfel eller timeout efter 10 sekunder.
+ */
 export async function verifyTurnstile(
   request: Request,
   secret: string | undefined,

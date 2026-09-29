@@ -25,7 +25,12 @@ export function normalizeResetEmail(value: unknown): string {
   return value.trim().toLowerCase();
 }
 
-// Called through waitUntil: account existence and mail latency cannot affect the response.
+/**
+ * Försöker skicka en återställningslänk för ett befintligt konto med 20 minuters giltighet.
+ * Ersätter tidigare token, lagrar endast dess hash och bygger länken från PUBLIC_APP_URL.
+ * Anropas via waitUntil så att kontots existens och mejlets svarstid inte påverkar HTTP-svaret.
+ * Alla fel fångas; en sparad token behålls även när mejlutskicket misslyckas.
+ */
 export async function deliverPasswordReset(env: Env, email: string): Promise<void> {
   try {
     const now = Date.now();

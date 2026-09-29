@@ -60,6 +60,14 @@ async function resolveRepo(
   return repo;
 }
 
+/**
+ * Söker en öppen felrapport med samma fingeravtryck eller skapar en GitHub-issue.
+ * GITHUB_ERROR_REPORT_REPOSITORY anger owner/repo eller ett numeriskt repo-id.
+ * Returnerar rapportens URL, eller null vid saknad token/repo eller misslyckad
+ * repo-upplösning/skapande. Sökfel hindrar inte skapande. Stack och kontextvärden
+ * maskeras; titel och kontextnycklar maskeras inte. Fel vid beräkning av
+ * fingeravtryck förs vidare, medan nätverksfel fångas.
+ */
 export async function reportErrorToGitHub(
   title: string,
   err: unknown,

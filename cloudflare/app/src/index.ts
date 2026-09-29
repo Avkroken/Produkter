@@ -373,6 +373,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   } catch (err) { return authFailure(err); }
 }
 
+/**
+ * Hanterar återställning: complete byter lösenord med token och rensar sessionscookien;
+ * annars returneras ett generiskt 202-svar även för okända adresser och mejl schemaläggs
+ * endast när den normaliserade adressens separata rate limit tillåter det.
+ * Mejlvägen kräver Turnstile samt konfigurerad API-nyckel och avsändare.
+ * Validerings- och gränsfel blir HTTP-felsvar; oväntade fel blir 503.
+ */
 async function handlePasswordRecovery(request: Request, env: Env, ctx: ExecutionContext, complete: boolean): Promise<Response> {
   try {
     verifyAuthOrigin(request);
