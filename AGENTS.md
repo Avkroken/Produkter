@@ -24,3 +24,13 @@
 - Verifiera berörd app/engine/processor med dess faktiska package- och Wrangler-konfiguration före merge.
 - Försvaga inte repositoryts Node/Cloudflare/Python/Docker-verifiering eller observability-kontrakt som workaround.
 - Lägg aldrig providercredentials, ingest-nycklar eller andra secrets i repository, logs eller publik dokumentation.
+## Agent skills
+
+### Issue tracker
+
+Use this repository's GitHub Issues for issues and specifications. Read `docs/agents/issue-tracker.md` before reading, creating, or publishing tickets.
+
+### Domain docs
+
+Use the single-context convention in `docs/agents/domain.md`; existing project-context, architecture, operations, and component documentation remain authoritative.
+
