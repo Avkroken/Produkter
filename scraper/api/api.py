@@ -6,6 +6,7 @@ PostgreSQL-based API - Production version with connection pooling
 
 import os
 import logging
+import hmac
 import sys
 from datetime import datetime
 from typing import Optional
@@ -111,8 +112,12 @@ def _read_credential(name):
 async def check_api_key(request: Request, call_next):
     if request.url.path in ["/health", "/docs", "/openapi.json", "/", "/redoc"]:
         return await call_next(request)
-    if request.headers.get("X-API-Key") != get_api_key():
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    expected = get_api_key()
+    if not expected:
+        return JSONResponse(status_code=503, content={"detail": "Authentication not configured"})
+    provided = request.headers.get("X-API-Key", "")
+    if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
 
 @app.on_event("startup")
