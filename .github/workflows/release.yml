@@ -84,7 +84,21 @@ jobs:
             --forced-bump auto \
             --channel stable \
             --notes "${RUNNER_TEMP}/release-notes.md"
-          latest_tag="$(git tag --merged HEAD --list 'v*' --sort=-version:refname | head -n1)"
+          latest_tag="$(python3 - <<'PYTAG'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path(".github/scripts/semantic_release.py")
+          spec = importlib.util.spec_from_file_location("semantic_release", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          tags = module.git("tag", "--merged", "HEAD", "--list", "v*").stdout.splitlines()
+          tags = [tag for tag in tags if module.release_tag_key(tag) is not None]
+          tags.sort(key=module.release_tag_key, reverse=True)
+          print(tags[0] if tags else "")
+          PYTAG
+          )"
           if [[ -n "${latest_tag}" ]]; then
             python3 .github/scripts/semantic_release.py \
               --recover-tag "${latest_tag}" \

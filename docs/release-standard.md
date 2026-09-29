@@ -117,7 +117,7 @@ Efter merge till `main`:
 1. ordinarie push-CI och container security körs på release-target SHA;
 2. releasejobbet beräknar SemVer från validerad first-parent-historik och Conventional Commits;
 3. inga releasevärdiga ändringar innebär ingen ny release;
-4. releasevärdiga ändringar väntar på de checks som anges i `.github/release-required-checks`;
+4. releasevärdiga ändringar väntar på de checks som anges i `.github/release-required-checks`; release-gaten har en timeout som överstiger repositoryts längsta övervakade CI-jobb;
 5. en immutable SemVer-tagg och GitHub Release skapas på exakt verifierad target-SHA;
 6. release notes genereras som repositoryts canonical versionerade changelog.
 

@@ -21,7 +21,7 @@ def parse_args():
         "--required-checks-file",
         default=".github/release-required-checks",
     )
-    parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--registration-grace", type=int, default=30)
     parser.add_argument("--settle", type=int, default=30)
     parser.add_argument("--poll", type=int, default=10)
