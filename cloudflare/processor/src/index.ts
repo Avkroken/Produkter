@@ -39,7 +39,7 @@ interface JobRow {
 
 export default {
   /**
-   * Behandlar extraktions- och beskrivningsmeddelanden sekventiellt.
+   * Behandlar extraktions- och beskrivningsmeddelanden sekventiellt inom varje queue-batch.
    * Oväntade fel rapporteras till GitHub och meddelandet kvitteras därefter;
    * om rapporteringen kastar förs felet vidare innan kvittering.
    */

@@ -59,7 +59,8 @@ function requiredString(value, label) {
 
 /**
  * Returnerar en URL för ett obligatoriskt HTTPS-origin utan credentials, query eller fragment
- * och med sökvägen /. Kastar vid saknat/ogiltigt värde; label identifierar fältet.
+ * och med sökvägen /. Kastar vid saknat eller ogiltigt värde; formatfel från URL-parsern
+ * kan använda parserns eget felmeddelande medan övrig validering identifierar fältets label.
  */
 function publicHttpsUrl(value, label) {
   const raw = requiredString(value, label);

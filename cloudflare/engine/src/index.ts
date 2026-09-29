@@ -789,8 +789,8 @@ export default {
   /**
    * Kör lease-återhämtning, schemaläggning, prisbevakning och eventuell AI-beskrivning
    * sekventiellt med tak per tick (DESIGN.md §4.4). Fel vid redundantstädning
-   * tolereras; övriga arbetsfel avbryter tickens återstående arbete och rapporteras
-   * till GitHub. Fel som rapporteringen inte fångar förs vidare.
+   * tolereras; övriga arbetsfel avbryter tickens återstående arbete och försöker
+   * rapporteras till GitHub best effort. Fel som rapporteringsanropet kastar förs vidare.
    */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const now = Date.now();
