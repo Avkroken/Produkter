@@ -91,9 +91,9 @@ Rent dokumentations-, test-, CI- eller dependencyunderhåll skapar normalt inte 
 
 ## Release notes
 
-`.github/release.yml` konfigurerar GitHubs genererade release notes-kategorier. Den skapar inte taggar eller GitHub Releases och är inte releaseautomation.
+`.github/scripts/semantic_release.py` bygger release notes från den validerade first-parent-historiken och grupperar ändringar efter Conventional Commit-typ, inklusive breaking changes och security-scope. `.github/workflows/release.yml` skickar exakt dessa notes till den GitHub Release som skapas för den verifierade SemVer-taggen.
 
-GitHub Releases är den officiella versionerade releasehistoriken som Portalens Changelog får konsumera. Inför inte en separat manuellt underhållen changelog som konkurrerande source of truth.
+GitHub Releases är den officiella versionerade releasehistoriken som Portalens Changelog får konsumera. Inför inte en separat manuellt underhållen changelog eller parallell generated-notes-modell som konkurrerande source of truth.
 
 ## Verifiering vid release
 

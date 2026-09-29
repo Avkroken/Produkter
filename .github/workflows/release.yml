@@ -66,6 +66,17 @@ jobs:
           )
           assert trailers["Release-As"] == "minor"
           assert trailers["BREAKING CHANGE"] == "contract changed"
+          multiline = module.commit_trailers(
+              "fix: compatibility\n\nBREAKING CHANGE: contract changed\n continued detail\n"
+          )
+          assert multiline["BREAKING CHANGE"] == "contract changed\ncontinued detail"
+          assert module.commit_record(
+              "a" * 40,
+              "fix: compatibility",
+              "BREAKING CHANGE: contract changed\n continued detail\n",
+          )["breaking"]
+          assert module.release_tag_key("v1.2.3") > module.release_tag_key("v1.2.3-rc.10")
+          assert module.release_tag_key("v1.2.3-rc.10") > module.release_tag_key("v1.2.3-rc.9")
           assert module.commit_trailers(
               "Release-As: major\n\nordinary paragraph after the example\n"
           ) == {}
@@ -74,104 +85,107 @@ jobs:
             --forced-bump auto \
             --channel stable \
             --notes "${RUNNER_TEMP}/release-notes.md"
+          latest_tag="$(git tag --merged HEAD --list 'v*' --sort=-version:refname | head -n1)"
+          if [[ -n "${latest_tag}" ]]; then
+            python3 .github/scripts/semantic_release.py \
+              --recover-tag "${latest_tag}" \
+              --notes "${RUNNER_TEMP}/recovered-release-notes.md" \
+              --output "${RUNNER_TEMP}/recovered-release-output"
+            grep -q '^release=true$' "${RUNNER_TEMP}/recovered-release-output"
+            grep -q "^tag=${latest_tag}$" "${RUNNER_TEMP}/recovered-release-output"
+          fi
 
   release:
     name: Semantic release
     if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: ${{ format('semantic-release-{0}', github.repository) }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 70
     permissions:
-      actions: read
       checks: read
       contents: write
       statuses: read
     steps:
-      - name: Wait for release turn
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import os
-          import time
-          import urllib.request
-
-          repository = os.environ["GITHUB_REPOSITORY"]
-          own_id = int(os.environ["GITHUB_RUN_ID"])
-          token = os.environ["GITHUB_TOKEN"]
-          started = time.monotonic()
-
-          def api(path):
-              request = urllib.request.Request(
-                  f"https://api.github.com/repos/{repository}{path}",
-                  headers={
-                      "Accept": "application/vnd.github+json",
-                      "Authorization": f"Bearer {token}",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                      "User-Agent": "repository-release-lock",
-                  },
-              )
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  return json.load(response)
-
-          def runs_with_status(status):
-              runs = []
-              page = 1
-              while True:
-                  data = api(
-                      f"/actions/workflows/release.yml/runs"
-                      f"?status={status}&per_page=100&page={page}"
-                  )
-                  batch = data.get("workflow_runs", [])
-                  runs.extend(batch)
-                  if len(batch) < 100:
-                      return runs
-                  page += 1
-
-          def active_runs():
-              runs = []
-              seen = set()
-              for status in ("queued", "in_progress", "waiting", "pending", "requested"):
-                  for run in runs_with_status(status):
-                      run_id = int(run["id"])
-                      if run_id in seen:
-                          continue
-                      seen.add(run_id)
-                      runs.append(run)
-              return runs
-
-          while True:
-              if time.monotonic() - started > 1800:
-                  raise SystemExit("Timed out waiting for an earlier release run.")
-
-              active = sorted(
-                  int(run["id"])
-                  for run in active_runs()
-                  if run.get("event") in {"push", "workflow_dispatch"}
-                  and run.get("status") != "completed"
-                  and run.get("head_branch") == "main"
-              )
-
-              if own_id not in active:
-                  raise SystemExit(
-                      "Current release run is absent from the active-run lock set; refusing to fail open."
-                  )
-
-              if own_id == active[0]:
-                  print("Release turn acquired.")
-                  break
-
-              print(f"Waiting for earlier release run {active[0]}.")
-              time.sleep(10)
-          PY
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Recover orphaned release anchor
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          orphan_tag="$(python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path(".github/scripts/semantic_release.py")
+          spec = importlib.util.spec_from_file_location("semantic_release", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          tags = module.git("tag", "--merged", "HEAD", "--list", "v*").stdout.splitlines()
+          tags = [tag for tag in tags if module.release_tag_key(tag) is not None]
+          tags.sort(key=module.release_tag_key, reverse=True)
+          print(tags[0] if tags else "")
+          PY
+          )"
+
+          [[ -z "${orphan_tag}" ]] && exit 0
+          release_json="$(gh release view "${orphan_tag}" --repo "${GITHUB_REPOSITORY}" --json isDraft,tagName 2>/dev/null || true)"
+          if [[ -n "${release_json}" ]]; then
+            if [[ "$(printf '%s' "${release_json}" | jq -r '.isDraft')" == "true" ]]; then
+              echo "::error::Latest release anchor ${orphan_tag} is a draft; publish or remove the draft before continuing."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          echo "::warning::Recovering orphaned release anchor ${orphan_tag}."
+          notes="${RUNNER_TEMP}/orphaned-release-notes.md"
+          output="${RUNNER_TEMP}/orphaned-release-output"
+          : > "${output}"
+          python3 .github/scripts/semantic_release.py \
+            --recover-tag "${orphan_tag}" \
+            --notes "${notes}" \
+            --output "${output}"
+
+          planned_tag="$(grep '^tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+          target_sha="$(grep '^target_sha=' "${output}" | tail -n1 | cut -d= -f2-)"
+          prerelease="$(grep '^prerelease=' "${output}" | tail -n1 | cut -d= -f2-)"
+          base_tag="$(grep '^base_tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+          active_prerelease_tag="$(grep '^active_prerelease_tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+
+          [[ "${planned_tag}" == "${orphan_tag}" ]]
+          actual_sha="$(git rev-parse --verify "${orphan_tag}^{commit}")"
+          [[ "${target_sha}" == "${actual_sha}" ]]
+
+          for anchor in "${base_tag}" "${active_prerelease_tag}"; do
+            [[ -z "${anchor}" ]] && continue
+            gh release view "${anchor}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          done
+
+          if gh release view "${orphan_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${orphan_tag} appeared concurrently; recovery is complete."
+            exit 0
+          fi
+
+          args=(
+            "${orphan_tag}"
+            --repo "${GITHUB_REPOSITORY}"
+            --verify-tag
+            --title "${orphan_tag}"
+            --notes-file "${notes}"
+          )
+          if [[ "${prerelease}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
 
       - name: Calculate version and changelog
         id: release

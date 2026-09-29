@@ -47,6 +47,17 @@ def prerelease_key(tag):
     return (int(major), int(minor), int(patch), int(sequence))
 
 
+def release_tag_key(tag):
+    """Return a sortable key where stable follows RCs of the same version core."""
+    stable = semver_key(tag)
+    if stable:
+        return (*stable, 1, 0)
+    prerelease = prerelease_key(tag)
+    if prerelease:
+        return (*prerelease[:3], 0, prerelease[3])
+    return None
+
+
 def is_ancestor(ref, head="HEAD"):
     """Return whether ref is an ancestor of the selected head."""
     return git("merge-base", "--is-ancestor", ref, head, check=False).returncode == 0
@@ -69,6 +80,11 @@ def parse_args():
         default="auto",
     )
     parser.add_argument("--channel", choices=("stable", "rc"), default="stable")
+    parser.add_argument(
+        "--recover-tag",
+        default="",
+        help="Recreate release metadata for an existing reachable SemVer tag.",
+    )
     parser.add_argument("--notes", required=True)
     parser.add_argument("--output")
     return parser.parse_args()
@@ -86,18 +102,37 @@ def release_line(subject, body):
 
 
 def commit_trailers(body):
-    """Return the contiguous Git trailer block at the end of a commit body."""
+    """Return the contiguous Git trailer block, including indented continuations."""
     trailers = {}
+    continuation = []
+    saw_trailer = False
+
     for raw in reversed(body.rstrip().splitlines()):
         line = raw.strip()
         if not line:
-            if trailers:
+            if saw_trailer or continuation:
                 break
             continue
+
+        if raw[:1].isspace():
+            continuation.append(line)
+            continue
+
         match = TRAILER.fullmatch(line)
         if not match:
+            if continuation:
+                return {}
             break
-        trailers[match.group("token")] = match.group("value").strip()
+
+        value = match.group("value").strip()
+        if continuation:
+            value += "\n" + "\n".join(reversed(continuation))
+            continuation.clear()
+        trailers[match.group("token")] = value
+        saw_trailer = True
+
+    if continuation:
+        return {}
     return trailers
 
 
@@ -199,10 +234,139 @@ def category_for(item):
     return "Other changes"
 
 
+def write_release_plan(
+    args,
+    *,
+    tag,
+    bump_label,
+    base_tag,
+    active_prerelease_tag,
+    prerelease,
+    release_ref,
+    commits,
+    base_label,
+):
+    """Write release notes and GitHub Actions outputs for one validated release plan."""
+    repository = os.environ.get("GITHUB_REPOSITORY", "repository")
+    category_order = [
+        "Breaking changes",
+        "Security",
+        "Features",
+        "Fixes",
+        "Performance",
+        "Reverts",
+        "Refactoring",
+        "Documentation",
+        "Build",
+        "CI",
+        "Tests",
+        "Chores",
+        "Other changes",
+    ]
+    grouped = {heading: [] for heading in category_order}
+    for item in commits:
+        grouped[category_for(item)].append(item)
+
+    lines = [f"# {tag}", "", f"Changes since {base_label}.", ""]
+    for heading in category_order:
+        selected = grouped[heading]
+        if not selected:
+            continue
+        lines.extend([f"## {heading}", ""])
+        for item in selected:
+            short = item["sha"][:7]
+            url = f"https://github.com/{repository}/commit/{item['sha']}"
+            breaking_prefix = "**Breaking:** " if item["breaking"] else ""
+            lines.append(f"- {breaking_prefix}{item['subject']} ([{short}]({url}))")
+        lines.append("")
+
+    pathlib.Path(args.notes).write_text(
+        "\n".join(lines).rstrip() + "\n",
+        encoding="utf-8",
+    )
+
+    target_sha = git("rev-parse", "--verify", f"{release_ref}^{{commit}}").stdout.strip()
+    print(f"Release bump: {bump_label}")
+    print(f"Previous stable tag: {base_tag or 'none'}")
+    print(f"Next tag: {tag}")
+    print(f"Release target: {target_sha}")
+    write_output(args.output, "release", "true")
+    write_output(args.output, "tag", tag)
+    write_output(args.output, "bump", bump_label)
+    write_output(args.output, "base_tag", base_tag or "")
+    write_output(args.output, "active_prerelease_tag", active_prerelease_tag or "")
+    write_output(args.output, "prerelease", "true" if prerelease else "false")
+    write_output(args.output, "target_sha", target_sha)
+
+
 def main():
     """Calculate release metadata and changelog output for the requested channel."""
     args = parse_args()
     all_tags = git("tag", "--list", "v*").stdout.splitlines()
+
+    recover_tag = args.recover_tag.strip()
+    if recover_tag:
+        recover_key = release_tag_key(recover_tag)
+        if recover_key is None:
+            raise SystemExit(f"Recovery tag {recover_tag} is not a supported SemVer tag.")
+        if recover_tag not in all_tags:
+            raise SystemExit(f"Recovery tag {recover_tag} does not exist.")
+        if not is_ancestor(recover_tag):
+            raise SystemExit(f"Recovery tag {recover_tag} is not reachable from HEAD.")
+
+        target_core = recover_key[:3]
+        previous_stable = [
+            tag
+            for tag in all_tags
+            if STABLE.fullmatch(tag)
+            and tag != recover_tag
+            and semver_key(tag) < target_core
+            and is_ancestor(tag, recover_tag)
+        ]
+        previous_stable.sort(key=semver_key, reverse=True)
+        base_tag = previous_stable[0] if previous_stable else None
+
+        if base_tag:
+            revision_range = f"{base_tag}..{recover_tag}"
+            base_label = base_tag
+        else:
+            baseline = pathlib.Path(".github/release-baseline")
+            if not baseline.exists():
+                raise SystemExit(
+                    "No stable release exists and .github/release-baseline is missing; "
+                    "cannot recover release notes."
+                )
+            baseline_sha = baseline.read_text(encoding="utf-8").strip()
+            if not baseline_sha or not is_ancestor(baseline_sha, recover_tag):
+                raise SystemExit(
+                    "Configured release baseline is not an ancestor of the recovery tag."
+                )
+            revision_range = f"{baseline_sha}..{recover_tag}"
+            base_label = "repository release baseline"
+
+        previous_rc = [
+            tag
+            for tag in all_tags
+            if RC.fullmatch(tag)
+            and tag != recover_tag
+            and prerelease_key(tag)[:3] == target_core
+            and is_ancestor(tag, recover_tag)
+        ]
+        previous_rc.sort(key=prerelease_key, reverse=True)
+        active_pre = previous_rc[0] if previous_rc else None
+
+        write_release_plan(
+            args,
+            tag=recover_tag,
+            bump_label="recover",
+            base_tag=base_tag,
+            active_prerelease_tag=active_pre,
+            prerelease=bool(RC.fullmatch(recover_tag)),
+            release_ref=recover_tag,
+            commits=commits_in(revision_range),
+            base_label=base_label,
+        )
+        return
 
     stable_tags = [tag for tag in all_tags if STABLE.fullmatch(tag)]
     reachable_stable = [tag for tag in stable_tags if is_ancestor(tag)]
@@ -364,61 +528,17 @@ def main():
     if tag in all_tags:
         raise SystemExit(f"Tag {tag} already exists.")
 
-    repository = os.environ.get("GITHUB_REPOSITORY", "repository")
-    category_order = [
-        "Breaking changes",
-        "Security",
-        "Features",
-        "Fixes",
-        "Performance",
-        "Reverts",
-        "Refactoring",
-        "Documentation",
-        "Build",
-        "CI",
-        "Tests",
-        "Chores",
-        "Other changes",
-    ]
-    grouped = {heading: [] for heading in category_order}
-    for item in commits:
-        grouped[category_for(item)].append(item)
-
-    lines = [
-        f"# {tag}",
-        "",
-        f"Changes since {base_label}.",
-        "",
-    ]
-    for heading in category_order:
-        selected = grouped[heading]
-        if not selected:
-            continue
-        lines.extend([f"## {heading}", ""])
-        for item in selected:
-            short = item["sha"][:7]
-            url = f"https://github.com/{repository}/commit/{item['sha']}"
-            breaking_prefix = "**Breaking:** " if item["breaking"] else ""
-            lines.append(f"- {breaking_prefix}{item['subject']} ([{short}]({url}))")
-        lines.append("")
-
-    pathlib.Path(args.notes).write_text(
-        "\n".join(lines).rstrip() + "\n",
-        encoding="utf-8",
+    write_release_plan(
+        args,
+        tag=tag,
+        bump_label=bump_label,
+        base_tag=last_tag,
+        active_prerelease_tag=active_pre,
+        prerelease=prerelease,
+        release_ref=release_ref,
+        commits=commits,
+        base_label=base_label,
     )
-
-    target_sha = git("rev-parse", "--verify", f"{release_ref}^{{commit}}").stdout.strip()
-    print(f"Release bump: {bump_label}")
-    print(f"Previous stable tag: {last_tag or 'none'}")
-    print(f"Next tag: {tag}")
-    print(f"Release target: {target_sha}")
-    write_output(args.output, "release", "true")
-    write_output(args.output, "tag", tag)
-    write_output(args.output, "bump", bump_label)
-    write_output(args.output, "base_tag", last_tag or "")
-    write_output(args.output, "active_prerelease_tag", active_pre or "")
-    write_output(args.output, "prerelease", "true" if prerelease else "false")
-    write_output(args.output, "target_sha", target_sha)
 
 
 if __name__ == "__main__":
