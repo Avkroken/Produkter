@@ -3,6 +3,11 @@ const forgotForm = document.getElementById("forgot-password-form");
 const resetForm = document.getElementById("reset-password-form");
 let recoveryTurnstileId = null;
 
+/**
+ * Registrerar callbacken när Turnstile finns och låter biblioteket invänta beredskap.
+ * attempts anger återstående kontroller med 100 ms fördröjning; när de är slut
+ * och biblioteket fortfarande saknas avslutas väntan utan att callbacken körs.
+ */
 function whenTurnstileReady(callback, attempts = 50) {
   if (window.turnstile) {
     window.turnstile.ready(callback);
@@ -11,6 +16,11 @@ function whenTurnstileReady(callback, attempts = 50) {
   if (attempts > 0) setTimeout(() => whenTurnstileReady(callback, attempts - 1), 100);
 }
 
+/**
+ * Skapar en Turnstile-widget för lösenordsåterställning med behållarens sitekey och
+ * action (standard: password_recovery). Gör inget om widgeten redan finns eller
+ * om behållaren, sitekey eller Turnstile saknas.
+ */
 function renderRecoveryTurnstile() {
   const container = document.getElementById("recovery-turnstile");
   if (!container || recoveryTurnstileId !== null || !window.turnstile) return;
@@ -22,6 +32,7 @@ function renderRecoveryTurnstile() {
   });
 }
 
+/** Återställer widgeten för lösenordsåterställning om både dess id och Turnstile finns. */
 function resetRecoveryTurnstile() {
   if (recoveryTurnstileId !== null && window.turnstile) {
     window.turnstile.reset(recoveryTurnstileId);
