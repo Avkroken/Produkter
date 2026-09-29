@@ -6,8 +6,9 @@ const RETRY_DELAY_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 
 /**
- * Returnerar ett HTTPS-origin utan avslutande snedstreck. Kastar vid saknat/ogiltigt
- * värde, annan sökväg än /, query eller fragment; label identifierar konfigurationsfältet.
+ * Returnerar ett HTTPS-origin utan avslutande snedstreck. Kastar vid saknat eller ogiltigt
+ * värde, annan sökväg än /, query eller fragment. Native URL-parsefel kan använda parserns
+ * eget felmeddelande; övrig validering identifierar konfigurationsfältets label.
  */
 function origin(value, label) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${label} in cloudflare/deployment.json`);
