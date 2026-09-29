@@ -40,6 +40,11 @@ jobs:
             image: local/scraper
             sarif: trivy-scraper.sarif
             category: trivy-scraper
+          - name: fetcher
+            context: scraper/fetcher
+            image: local/produkter-fetcher
+            sarif: trivy-fetcher.sarif
+            category: trivy-fetcher
 
     steps:
       - name: Checkout repository

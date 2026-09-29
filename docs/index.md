@@ -8,6 +8,7 @@ Navigationssida för Produkter.
 | --- | --- |
 | systemets komponenter och current-state | [Projektkontext](project-context.md) |
 | dataflöden, AI-providerkedja och trust boundaries | [Arkitektur](architecture.md) |
+| egen installation | [Self-hosting](self-hosting.md) |
 | utveckling, test, Docker och deployment | [Drift](operations.md) |
 | extern render/browser-fetcher | [scraper/fetcher/README.md](../scraper/fetcher/README.md) |
 | säkerhetsrapportering | [SECURITY.md](../SECURITY.md) |
@@ -39,7 +40,7 @@ Läs scraperkoden och [fetcher-dokumentationen](../scraper/fetcher/README.md). H
 
 ### Jag ändrar Cloudflare runtime
 
-Läs `cloudflare/*/wrangler.jsonc`, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
+Läs de versionsstyrda Preview-konfigurationerna `cloudflare/*/wrangler.jsonc`, den genererade production-modellen som beskrivs i drift/self-hosting, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
 
 ## Wiki
 

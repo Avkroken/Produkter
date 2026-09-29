@@ -39,15 +39,16 @@ export async function submitSuggestion(
     .run();
 
   // Notifiera admin (godkännande-grind). Best-effort — förslaget är sparat oavsett.
-  const adminEmail = env.ADMIN_EMAIL || "anders.eriksson@denied.se";
-  await sendEmail(
-    env,
-    adminEmail,
-    `Nytt sidförslag: ${t.slice(0, 80)}`,
-    `En användare (${accountEmail}) har föreslagit en ny sida.\n\n` +
-      `Titel: ${t}\n\nBeskrivning:\n${description.trim() || "(ingen)"}\n\n` +
-      `Bedöm i admin-vyn innan något implementeras. Förslags-id: ${id}`,
-  );
+  if (env.ADMIN_EMAIL) {
+    await sendEmail(
+      env,
+      env.ADMIN_EMAIL,
+      `Nytt sidförslag: ${t.slice(0, 80)}`,
+      `En användare (${accountEmail}) har föreslagit en ny sida.\n\n` +
+        `Titel: ${t}\n\nBeskrivning:\n${description.trim() || "(ingen)"}\n\n` +
+        `Bedöm i admin-vyn innan något implementeras. Förslags-id: ${id}`,
+    );
+  }
   return { ok: true };
 }
 

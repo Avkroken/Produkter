@@ -25,7 +25,7 @@ import {
   type ProviderName,
 } from "../../shared/providers";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
-import { PRODUKTER_REPOSITORY_ID, reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
 
 interface Env extends GitHubReportEnv {
   DB: D1Database;
@@ -53,7 +53,6 @@ export interface RenderKoEnv {
   DB: D1Database;
 }
 
-const REPO = PRODUKTER_REPOSITORY_ID;
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
 const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
@@ -815,7 +814,7 @@ export default {
       console.log(`cron: reclaimed=${reclaimed} redundant=${redundant} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
     } catch (err) {
       console.error("cron misslyckades:", err);
-      await reportErrorToGitHub(REPO, "Engine cron misslyckades", err, env);
+      await reportErrorToGitHub("Engine cron misslyckades", err, env);
     }
   },
 

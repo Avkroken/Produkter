@@ -11,6 +11,33 @@ async function api(path, options = {}) {
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 
+let signupTurnstileId = null;
+
+function whenTurnstileReady(callback, attempts = 50) {
+  if (window.turnstile) {
+    window.turnstile.ready(callback);
+    return;
+  }
+  if (attempts > 0) setTimeout(() => whenTurnstileReady(callback, attempts - 1), 100);
+}
+
+function renderSignupTurnstile() {
+  const container = document.getElementById("signup-turnstile");
+  if (!container || signupTurnstileId !== null || !window.turnstile) return;
+  const sitekey = container.dataset.sitekey;
+  if (!sitekey) return;
+  signupTurnstileId = window.turnstile.render(container, {
+    sitekey,
+    action: container.dataset.action || "signup",
+  });
+}
+
+function resetSignupTurnstile() {
+  if (signupTurnstileId !== null && window.turnstile) {
+    window.turnstile.reset(signupTurnstileId);
+  }
+}
+
 document.getElementById("toggle-auth-btn").addEventListener("click", () => {
   const login = document.getElementById("login-form");
   const signup = document.getElementById("signup-form");
@@ -19,6 +46,7 @@ document.getElementById("toggle-auth-btn").addEventListener("click", () => {
   login.hidden = showingSignup;
   signup.hidden = !showingSignup;
   btn.textContent = showingSignup ? "Inget konto? Registrera dig" : "Har du redan ett konto? Logga in";
+  if (!signup.hidden) whenTurnstileReady(renderSignupTurnstile);
 });
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -35,11 +63,19 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 document.getElementById("signup-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = new FormData(e.target);
+  const turnstileToken = signupTurnstileId !== null && window.turnstile
+    ? window.turnstile.getResponse(signupTurnstileId)
+    : "";
+  if (!turnstileToken) {
+    document.getElementById("signup-msg").textContent = "Slutför säkerhetskontrollen och försök igen.";
+    return;
+  }
   try {
-    await api("/signup", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password"), turnstileToken: form.get("cf-turnstile-response") }) });
+    await api("/signup", { method: "POST", body: JSON.stringify({ email: form.get("email"), password: form.get("password"), turnstileToken }) });
     await showApp();
   } catch (err) {
     document.getElementById("signup-msg").textContent = err.message;
+    resetSignupTurnstile();
   }
 });
 
