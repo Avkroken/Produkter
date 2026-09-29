@@ -788,9 +788,10 @@ async function checkPriceDrops(env: Env, now: number): Promise<number> {
 export default {
   /**
    * Kör lease-återhämtning, schemaläggning, prisbevakning och eventuell AI-beskrivning
-   * sekventiellt med tak per tick (DESIGN.md §4.4). Fel vid redundantstädning
-   * tolereras; övriga arbetsfel avbryter tickens återstående arbete och försöker
-   * rapporteras till GitHub best effort. Fel som rapporteringsanropet kastar förs vidare.
+   * sekventiellt med tak per tick (DESIGN.md §4.4). Fel vid redundantstädning,
+   * enskilda alerttransporter och tolererade per-produkt-AI-fel loggas/hanteras lokalt
+   * och arbetet kan fortsätta. Övriga arbetsfel avbryter tickens återstående arbete och
+   * försöker rapporteras till GitHub best effort; fel som rapporteringsanropet kastar förs vidare.
    */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const now = Date.now();
