@@ -15,6 +15,12 @@ export interface Suggestion {
   created_at: number;
 }
 
+/**
+ * Sparar ett väntande sidförslag och försöker mejla ADMIN_EMAIL om den är angiven.
+ * Tom titel eller minst fem väntande förslag ger ok: false med feltext. Titel och
+ * beskrivning trimmas och lagras med högst 200 respektive 4000 tecken.
+ * Mejlfel påverkar inte ok: true efter lagring; databasfel förs vidare.
+ */
 export async function submitSuggestion(
   env: Env,
   accountId: string,
@@ -39,15 +45,16 @@ export async function submitSuggestion(
     .run();
 
   // Notifiera admin (godkännande-grind). Best-effort — förslaget är sparat oavsett.
-  const adminEmail = env.ADMIN_EMAIL || "anders.eriksson@denied.se";
-  await sendEmail(
-    env,
-    adminEmail,
-    `Nytt sidförslag: ${t.slice(0, 80)}`,
-    `En användare (${accountEmail}) har föreslagit en ny sida.\n\n` +
-      `Titel: ${t}\n\nBeskrivning:\n${description.trim() || "(ingen)"}\n\n` +
-      `Bedöm i admin-vyn innan något implementeras. Förslags-id: ${id}`,
-  );
+  if (env.ADMIN_EMAIL) {
+    await sendEmail(
+      env,
+      env.ADMIN_EMAIL,
+      `Nytt sidförslag: ${t.slice(0, 80)}`,
+      `En användare (${accountEmail}) har föreslagit en ny sida.\n\n` +
+        `Titel: ${t}\n\nBeskrivning:\n${description.trim() || "(ingen)"}\n\n` +
+        `Bedöm i admin-vyn innan något implementeras. Förslags-id: ${id}`,
+    );
+  }
   return { ok: true };
 }
 

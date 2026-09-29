@@ -25,7 +25,7 @@ import {
   type ProviderName,
 } from "../../shared/providers";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
-import { PRODUKTER_REPOSITORY_ID, reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
 
 interface Env extends GitHubReportEnv {
   DB: D1Database;
@@ -53,7 +53,6 @@ export interface RenderKoEnv {
   DB: D1Database;
 }
 
-const REPO = PRODUKTER_REPOSITORY_ID;
 const LEASE_MS = 120_000; // detail-jobb: kort lease (snabba)
 const LIST_LEASE_MS = 900_000; // list-jobb (crawl): lång lease, kan ta många minuter
 const MAX_ATTEMPTS = 5; // efter så många misslyckanden -> status='error'
@@ -787,8 +786,13 @@ async function checkPriceDrops(env: Env, now: number): Promise<number> {
 }
 
 export default {
-  // EN cron-trigger (*/5), EN handler som gör allt sekventiellt och cappat per
-  // tick (DESIGN.md §4.4). Inga flera cronjobb att koordinera.
+  /**
+   * Kör lease-återhämtning, schemaläggning, prisbevakning och eventuell AI-beskrivning
+   * sekventiellt med tak per tick (DESIGN.md §4.4). Fel vid redundantstädning,
+   * enskilda alerttransporter och tolererade per-produkt-AI-fel loggas/hanteras lokalt
+   * och arbetet kan fortsätta. Övriga arbetsfel avbryter tickens återstående arbete och
+   * försöker rapporteras till GitHub best effort; fel som rapporteringsanropet kastar förs vidare.
+   */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const now = Date.now();
     try {
@@ -815,7 +819,7 @@ export default {
       console.log(`cron: reclaimed=${reclaimed} redundant=${redundant} crawls=${crawls} scheduled=${scheduled} alerts=${alerts} described=${described}`);
     } catch (err) {
       console.error("cron misslyckades:", err);
-      await reportErrorToGitHub(REPO, "Engine cron misslyckades", err, env);
+      await reportErrorToGitHub("Engine cron misslyckades", err, env);
     }
   },
 

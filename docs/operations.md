@@ -55,17 +55,21 @@ För browser/render-fetcher: följ [fetcher-dokumentationen](../scraper/fetcher/
 
 ## Cloudflare
 
-Verifiera varje deployenhet mot sin egen config:
+Kopiera först `cloudflare/deployment.example.json` till den gitignorerade `cloudflare/deployment.json` och ange installationens egna domäner/resurs-ID:n. Generera sedan lokala Wrangler-filer:
 
-- `cloudflare/app/wrangler.jsonc`
-- `cloudflare/engine/wrangler.jsonc`
-- `cloudflare/processor/wrangler.jsonc`
+```bash
+node cloudflare/scripts/configure.mjs
+```
+
+Verifiera app, engine och processor mot de genererade `wrangler.production.jsonc`-filerna. De är lokal deployment-state och ska inte committas. De versionsstyrda `wrangler.jsonc`-filerna är endast portable Preview-/bundle-konfiguration och innehåller ingen installation-specifik production-state.
+
+Produktion deployas med den genererade `wrangler.production.jsonc`. `CLOUDFLARE_DEPLOYMENT_CONFIG` stöds som ett valfritt environment-kontrakt för extern buildmiljö, medan normal self-hosting använder den lokala gitignorerade `cloudflare/deployment.json`. Cloudflare Preview-builds använder däremot den versionsstyrda fail-closed `wrangler.jsonc` och får inte ärva production bindings.
 
 Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift.
 
 ### D1 data locality och read replication
 
-App, engine och processor ska binda samma D1-databas skapad med `jurisdiction=eu`. Jurisdiction kan inte läggas till på en befintlig databas; replacement kräver därför verifierad export/import till en ny EU-databas före binding-cutover.
+App, engine och processor ska binda samma D1-databas. Om installationen använder EU-jurisdiction ska databasen skapas med `jurisdiction=eu`. Jurisdiction kan inte läggas till på en befintlig databas; replacement kräver därför verifierad export/import till en ny EU-databas före binding-cutover.
 
 Cloudflare-runtime använder den gemensamma Sessions API-wrappern för D1. Read replication får därför vara `auto`; med EU-jurisdiction skapas repliker endast inom EU.
 

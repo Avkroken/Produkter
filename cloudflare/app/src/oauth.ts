@@ -1,7 +1,6 @@
-// OAuth-inloggning (authorization code). Portad från politiker-webapp — SAMMA
-// OAuth-appar (Google/Microsoft) återanvänds; bara redirect_uri skiljer, så
-// produkters callback-URL måste läggas till i respektive OAuth-apps
-// redirect-lista. Apple ej stött (kräver roterande ES256-JWT-secret).
+// OAuth-inloggning (authorization code). Varje installation använder egna
+// OAuth-appar och callback-URL byggs från PUBLIC_APP_URL.
+// Apple stöds inte här (kräver roterande ES256-JWT-secret).
 import { randomId, hashPassword } from "../../shared/crypto";
 import { getAccountByEmail, type Env } from "./db";
 
@@ -33,16 +32,20 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
 };
 
-const REDIRECT_BASE = "https://produkter.denied.se/api/oauth";
+/** Bygger callback-adressen från PUBLIC_APP_URL:s origin; ogiltig bas-URL ger ett fel. */
+function redirectUri(provider: string, env: Env): string {
+  const origin = new URL(env.PUBLIC_APP_URL).origin;
+  return `${origin}/api/oauth/${provider}/callback`;
+}
 
 export function isKnownProvider(provider: string): boolean {
   return provider in PROVIDERS;
 }
 
-function redirectUri(provider: string): string {
-  return `${REDIRECT_BASE}/${provider}/callback`;
-}
-
+/**
+ * Bygger leverantörens inloggnings-URL med angiven state-nonce och installationens callback.
+ * Kastar om leverantören är okänd, klient-id saknas eller PUBLIC_APP_URL inte kan tolkas.
+ */
 export function getAuthorizeUrl(provider: string, env: Env, state: string): string {
   const cfg = PROVIDERS[provider];
   if (!cfg) throw new Error("Okänd leverantör");
@@ -50,7 +53,7 @@ export function getAuthorizeUrl(provider: string, env: Env, state: string): stri
   if (!clientId) throw new Error(`${provider}-inloggning är inte konfigurerad än`);
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri(provider),
+    redirect_uri: redirectUri(provider, env),
     response_type: "code",
     scope: cfg.scope,
     state,
@@ -58,6 +61,12 @@ export function getAuthorizeUrl(provider: string, env: Env, state: string): stri
   return `${cfg.authorizeUrl}?${params.toString()}`;
 }
 
+/**
+ * Byter en auktoriseringskod mot användar-id, e-postadress och verifieringsflagga.
+ * Saknad verifieringsflagga räknas som overifierad e-post. Kastar vid okänd
+ * leverantör, saknade klientuppgifter, HTTP-fel eller saknad identitet;
+ * URL-, nätverks- och JSON-fel förs också vidare.
+ */
 async function exchangeCodeForUserInfo(
   provider: string,
   env: Env,
@@ -76,7 +85,7 @@ async function exchangeCodeForUserInfo(
       client_id: clientId,
       client_secret: clientSecret,
       code,
-      redirect_uri: redirectUri(provider),
+      redirect_uri: redirectUri(provider, env),
       grant_type: "authorization_code",
     }),
   });

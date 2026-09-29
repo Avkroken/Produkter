@@ -15,7 +15,7 @@ import { buildChain, type ProviderConfigEnv } from "../../shared/provider-config
 import { extractRows, ExtractionError, type ExtractedRows } from "./extractors";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
 import { AllProvidersExhausted } from "../../shared/providers";
-import { PRODUKTER_REPOSITORY_ID, reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
 
 interface Env extends ProviderConfigEnv, GitHubReportEnv {
   UPLOADS: R2Bucket;
@@ -38,6 +38,11 @@ interface JobRow {
 }
 
 export default {
+  /**
+   * Behandlar extraktions- och beskrivningsmeddelanden sekventiellt inom varje queue-batch.
+   * Oväntade fel loggas och försöker rapporteras till GitHub best effort innan
+   * meddelandet kvitteras; om rapporteringsanropet kastar förs felet vidare före kvittering.
+   */
   async queue(batch: MessageBatch<JobMessage>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
       try {
@@ -51,7 +56,6 @@ export default {
         // oväntat fel ska inte kunna fastna i en oändlig kö-retry-loop.
         console.error(`jobId=${msg.body.jobId} type=${msg.body.type} misslyckades:`, err);
         await reportErrorToGitHub(
-          PRODUKTER_REPOSITORY_ID,
           `Processor: ${msg.body.type} misslyckades`,
           err,
           env,

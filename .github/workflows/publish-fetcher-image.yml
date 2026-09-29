@@ -1,0 +1,86 @@
+name: Publish fetcher image
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scraper/fetcher/**"
+      - ".github/workflows/publish-fetcher-image.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scraper/fetcher/**"
+      - ".github/workflows/publish-fetcher-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-fetcher-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate fetcher image
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          set -euo pipefail
+          docker build             --pull             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}"             --label "org.opencontainers.image.revision=${GITHUB_SHA}"             --tag "local/produkter-fetcher:${GITHUB_SHA}"             scraper/fetcher
+
+  publish:
+    name: Publish fetcher image
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Resolve image name
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${owner}/produkter-fetcher"
+          echo "FETCHER_IMAGE=${image}" >> "${GITHUB_ENV}"
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha_tag="${FETCHER_IMAGE}:sha-${GITHUB_SHA}"
+          latest_tag="${FETCHER_IMAGE}:latest"
+
+          docker build             --pull             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}"             --label "org.opencontainers.image.revision=${GITHUB_SHA}"             --tag "${sha_tag}"             --tag "${latest_tag}"             scraper/fetcher
+
+          docker push "${sha_tag}"
+          docker push "${latest_tag}"
+
+      - name: Verify anonymous pull
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io
+          docker image rm "${FETCHER_IMAGE}:latest" >/dev/null 2>&1 || true
+          docker pull "${FETCHER_IMAGE}:latest"

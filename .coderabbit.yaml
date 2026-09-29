@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+inheritance: true
+code_generation:
+  docstrings:
+    path_instructions:
+    - path: '*.py'
+      instructions: |-
+        Följ organisationens generella Google-style-standard för Python-docstrings och komplettera den med Produkters kontrakt för webbapp, CLI, providerlager, filbearbetning och persistent job state.
+
+        För icke-triviala funktioner och klasser ska dokumentationen när relevant beskriva:
+        - om funktionen tillhör webbappen, CLI-flödet, fil-/dataextraktion, providerlagret, promptbyggande, konfiguration eller rapportering;
+        - vilken state funktionen läser eller muterar och vilket subsystem som äger denna state;
+        - fil-I/O, uploads, outputs, config- eller jobbkataloger och andra persistenta sidoeffekter;
+        - skillnaden mellan temporär bearbetningsstate och state som måste överleva omstart eller återupptagning;
+        - externa AI-provideranrop, providerordning, failover och villkor för att gå vidare till nästa provider;
+        - quota-, retry-, resume- och partial-result-semantik när dessa påverkar anroparen;
+        - hur providerfel skiljs från scraper-, filformat-, input- eller applikationsfel;
+        - autentiserings- och sessionsgränser för webbappsfunktioner;
+        - validering och normalisering av användar- eller filinput;
+        - subprocess-, nätverks- och andra externa sidoeffekter;
+        - idempotens och vad som händer om en operation körs om efter ett partiellt fel.
+
+        För providerrelaterad kod ska docstrings tydligt skilja mellan:
+        - provideridentitet och modellval;
+        - icke-hemlig konfiguration;
+        - credentials;
+        - providerresultat och fel;
+        - fallback mellan providers.
+
+        Credentialdata lagras separat från generell application/job state och kan vara krypterad i repositoryts avsedda configmodell. Dokumentationen får beskriva denna gräns men aldrig faktiska nycklar, tokens eller andra secret-värden.
+
+        För fil- och dataextraktion ska det framgå vilka inputformat eller antaganden som gäller, hur ogiltiga eller partiella poster behandlas och om funktionen kan skriva eller förändra outputdata.
+
+        För CLI-funktioner ska dokumentationen fokusera på argument, input/output, exit-/felbeteende och externa sidoeffekter. För webbhandlers ska request-, sessions-, auth- och stategränser dokumenteras när de inte är självklara.
+
+        Beskriv kontrakt och subsystemansvar snarare än implementation rad för rad. Undvik formuleringar som sammanblandar Python-appens state, scraperstate och Cloudflare-state till ett generiskt ”databas”- eller systemstate.
+
+        Dokumentera aldrig providercredentials, scraper-API-nycklar, session secrets eller andra autentiseringsvärden.
+    - path: scraper/*.py
+      instructions: |-
+        Följ organisationens generella Google-style-standard för Python-docstrings och komplettera den med Produkters scraperkontrakt och subsystemgränser.
+
+        För icke-triviala funktioner och klasser ska dokumentationen när relevant beskriva:
+        - vilken roll funktionen har i scraperflödet och vilket subsystem den samverkar med;
+        - om operationen endast läser state eller kan förändra scraperstate, filer, ködata eller annan persistent state;
+        - externa nätverksanrop och vilka upstream- eller interna API:er som används;
+        - skillnaden mellan scraperlogik, extern browser/render-fetcher och AI-providerlogik;
+        - vilka inputs som betraktas som rå extern data och när de har validerats eller normaliserats;
+        - felklassificering och hur nätverks-, parsing-, fetcher-, provider- och persistent-state-fel hålls åtskilda;
+        - retry-, timeout-, resume- och partial-result-semantik när detta påverkar anroparen;
+        - idempotens och vad en säker återkörning innebär efter ett helt eller partiellt misslyckande;
+        - rapporterings- och observability-sidoeffekter där funktionen producerar status, loggar eller felrapportering;
+        - vilka delar av state som är canonical för scrapern och vilka som endast är temporära eller härledda.
+
+        Browser/rendering är en separat integrationsgräns. Docstrings ska inte beskriva scraperprocessen som ägare av browserimplementationen eller låta browserdetaljer läcka in i domänkontrakt där de inte hör hemma.
+
+        Ett fetcherfel är inte automatiskt ett scraperfel och ett scraperfel är inte automatiskt ett AI-providerfel. Dokumentationen ska bevara dessa failure boundaries när funktionen korsar flera subsystem.
+
+        Beskriv observerbart kontrakt, state ownership och failure behavior snarare än implementation rad för rad.
+
+        Dokumentera aldrig scraper-API-nycklar, providercredentials, sessionsmaterial eller andra secret-värden.
+    - path: scraper/alerts/**/*.py
+      instructions: |-
+        Följ organisationens generella Google-style-standard för Python-docstrings och komplettera den med Produkters kontrakt för alerts, notifieringar och felrapportering.
+
+        För icke-triviala funktioner och klasser ska dokumentationen när relevant beskriva:
+        - vilken typ av alert, notifiering eller operativ signal funktionen producerar eller hanterar;
+        - vilka events, fel, thresholds eller stateförändringar som kan utlösa signalen;
+        - skillnaden mellan användar-/operatörsrelevant alerting och vanlig diagnostisk loggning;
+        - om funktionen endast formaterar en alert eller faktiskt skickar den till en extern kanal eller tjänst;
+        - externa nätverksanrop, destinationer och andra integrationssidoeffekter;
+        - retry-, timeout-, rate-limit- och failure behavior för alertleverans;
+        - deduplicering, suppression, throttling eller idempotens när samma underliggande händelse kan observeras flera gånger;
+        - hur partiella fel hanteras när huvudoperationen lyckas men notifieringen misslyckas, eller tvärtom;
+        - vilken metadata som får lämna systemgränsen och vilken känslig information som måste filtreras eller redigeras;
+        - skillnaden mellan canonical scraperstate och härledd alertmetadata.
+
+        Alerts ska inte dokumenteras som bevis på att en underliggande operation lyckats eller misslyckats om signalen endast är en härledd rapporteringsmekanism. Skilj tydligt mellan faktisk systemstate och notifieringsstate.
+
+        För säkerhets- och credentialrelaterade fel får dokumentationen beskriva typen av fel, provider, operation eller permission, men aldrig faktiska tokens, API-nycklar, sessionsvärden, lösenord eller andra secrets.
+
+        Beskriv kontrakt, triggersemantik och leveransbeteende snarare än notifieringskod rad för rad.
+
+        Dokumentera aldrig känsliga payloadvärden eller andra secrets i exempel.
+    - path: scraper/api/**/*.py
+      instructions: |-
+        Följ organisationens generella Google-style-standard för Python-docstrings och komplettera den med Produkters API-kontrakt för scraper-subsystemet.
+
+        För icke-triviala funktioner, handlers och klasser ska dokumentationen när relevant beskriva:
+        - request- och responsekontrakt, inklusive obligatoriska och valfria fält;
+        - validering, normalisering och vilka inputs som betraktas som opålitliga;
+        - autentisering, authorization och andra trust boundaries;
+        - vilka operationer som endast läser state och vilka som kan skapa eller förändra persistent state;
+        - vilken state som är canonical och vilken som endast är temporär, cachead eller härledd;
+        - statuskoder, domänfel och andra failure modes som klienten förväntas hantera;
+        - skillnaden mellan klientfel, scraperfel, fetcherfel, providerfel och interna systemfel;
+        - pagination, limits, filtering och partial-result-semantik när detta påverkar API-kontraktet;
+        - timeout-, retry- och idempotenssemantik för operationer som kan köras om;
+        - concurrency- eller orderingkrav när flera requests kan påverka samma jobb eller resurs;
+        - externa nätverks-, filsystems- eller subprocess-sidoeffekter som initieras via API:t;
+        - vilka metadata som kan exponeras externt och vilka som måste hållas interna eller redigeras.
+
+        För endpoints som startar eller styr längre scraperjobb ska dokumentationen skilja tydligt mellan:
+        - att en request har accepterats;
+        - att ett jobb har skapats;
+        - att faktisk bearbetning har startat;
+        - att jobbet har slutförts;
+        - att resultatet är fullständigt eller endast partiellt.
+
+        Beskriv inte ett accepterat eller köat jobb som framgångsrikt slutfört om behandlingen sker asynkront.
+
+        För API:er som returnerar observerad eller härledd state ska docstrings beskriva relevanta freshness- eller completeness-begränsningar när dessa påverkar hur svaret får tolkas.
+
+        Dokumentera säkerhetsgränser och permissionkrav, men aldrig tokens, API-nycklar, sessionsvärden, lösenord eller andra credentials.
+
+        Beskriv API-kontrakt och observerbart beteende snarare än routing-, framework- eller serialiseringsimplementation rad för rad.

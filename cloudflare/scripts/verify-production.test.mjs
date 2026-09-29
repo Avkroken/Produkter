@@ -2,14 +2,40 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadDeployment,
   productionProfile,
   validateProductionResponse,
 } from "./verify-production.mjs";
 
+const DEPLOYMENT = {
+  appUrl: "https://app.example.com",
+  engineUrl: "https://engine.example.com",
+  workers: { app: "produkter", engine: "produkter-engine" },
+};
+
+
+test("deployment loader prefers inline Workers Builds configuration", () => {
+  const inline = JSON.stringify(DEPLOYMENT);
+  assert.deepEqual(
+    loadDeployment({
+      env: { CLOUDFLARE_DEPLOYMENT_CONFIG: inline },
+      readFile: () => { throw new Error("local file should not be read"); },
+    }),
+    DEPLOYMENT,
+  );
+  assert.throws(
+    () => loadDeployment({
+      env: { CLOUDFLARE_DEPLOYMENT_CONFIG: "{" },
+      readFile: () => "",
+    }),
+    /not valid JSON/,
+  );
+});
+
 test("only Workers with public HTTP checks have verification profiles", () => {
-  assert.equal(productionProfile("app").name, "produkter");
-  assert.equal(productionProfile("engine").name, "produkter-motor");
-  assert.throws(() => productionProfile("processor"), /No public production verification profile/);
+  assert.equal(productionProfile("app", DEPLOYMENT).name, "produkter");
+  assert.equal(productionProfile("engine", DEPLOYMENT).name, "produkter-engine");
+  assert.throws(() => productionProfile("processor", DEPLOYMENT), /No public production verification profile/);
 });
 
 test("status smoke check fails closed and reports redirect target", async () => {
@@ -45,10 +71,10 @@ test("JSON health check requires { ok: true }", async () => {
 });
 
 test("engine verification expects the intentionally public health endpoint", async () => {
-  const check = productionProfile("engine").checks[0];
+  const check = productionProfile("engine", DEPLOYMENT).checks[0];
   assert.deepEqual(check, {
     kind: "json-ok",
-    url: "https://motor.denied.se/health",
+    url: "https://engine.example.com/health",
     status: 200,
   });
 

@@ -53,12 +53,21 @@ function internalForAdmin(method: string, pathname: string): string | null {
   return `/api/admin/${suffix}`;
 }
 
-function isSpaShellRequest(method: string, pathname: string): boolean {
+/** Avgör om GET/HEAD avser startsidan, adminsidan eller formuläret för lösenordsåterställning. */
+function isWorkerRenderedAsset(method: string, pathname: string): boolean {
   const upperMethod = method.toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return false;
-  return pathname === "/" || pathname === "/admin" || pathname === "/admin/";
+  return pathname === "/" ||
+    pathname === "/admin" ||
+    pathname === "/admin/" ||
+    pathname === "/forgot-password";
 }
 
+/**
+ * Väljer asset, intern omskrivning, omdirigering från äldre adresser eller passage.
+ * pathname är en URL-sökväg utan query; resultatet beskriver routningen utan
+ * att hämta innehåll eller kontrollera behörighet.
+ */
 export function accessRoute(method: string, pathname: string): AccessRoute {
   if (pathname === LEGACY_CRITICAL_PAGE || pathname === `${LEGACY_CRITICAL_PAGE}/`) {
     return { type: "redirect", pathname: "/admin" };
@@ -71,7 +80,11 @@ export function accessRoute(method: string, pathname: string): AccessRoute {
     };
   }
 
-  if (isSpaShellRequest(method, pathname)) {
+  if ((method === "GET" || method === "HEAD") && pathname === "/forgot-password.html") {
+    return { type: "redirect", pathname: "/forgot-password" };
+  }
+
+  if (isWorkerRenderedAsset(method, pathname)) {
     return { type: "asset", pathname };
   }
 
