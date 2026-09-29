@@ -1,30 +1,35 @@
-import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ATTEMPTS = 5;
 const RETRY_DELAY_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 
-const PROFILES = {
-  app: {
-    name: "produkter",
-    checks: [
-      { kind: "status", url: "https://produkter.denied.se/", status: 200 },
-    ],
-  },
-  engine: {
-    name: "produkter-motor",
-    checks: [
-      // /health är ett avsiktligt publikt M2M-undantag. Övriga HTTP-endpoints
-      // skyddas av egen X-API-Key och intern trafik använder Service Bindings.
-      { kind: "json-ok", url: "https://motor.denied.se/health", status: 200 },
-    ],
-  },
-};
+function origin(value, label) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${label} in cloudflare/deployment.json`);
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error(`${label} must be an HTTPS origin without path/query`);
+  }
+  return url.origin;
+}
 
-export function productionProfile(key) {
-  const profile = PROFILES[key];
-  if (!profile) throw new Error(`No public production verification profile for ${key || "<missing>"}`);
-  return profile;
+export function productionProfile(key, deployment) {
+  if (key === "app") {
+    const appUrl = origin(deployment?.appUrl, "appUrl");
+    return {
+      name: deployment?.workers?.app || "app",
+      checks: [{ kind: "status", url: `${appUrl}/`, status: 200 }],
+    };
+  }
+  if (key === "engine") {
+    const engineUrl = origin(deployment?.engineUrl, "engineUrl");
+    return {
+      name: deployment?.workers?.engine || "engine",
+      checks: [{ kind: "json-ok", url: `${engineUrl}/health`, status: 200 }],
+    };
+  }
+  throw new Error(`No public production verification profile for ${key || "<missing>"}`);
 }
 
 export async function validateProductionResponse(check, response) {
@@ -91,9 +96,34 @@ export async function checkProduction(profile, {
   throw new Error(`${profile.name}: production checks failed after ${ATTEMPTS} attempts`);
 }
 
+export function loadDeployment({ env = process.env, readFile = readFileSync } = {}) {
+  const inline = env.CLOUDFLARE_DEPLOYMENT_CONFIG?.trim();
+  if (inline) {
+    try {
+      return JSON.parse(inline);
+    } catch (error) {
+      throw new Error(
+        `CLOUDFLARE_DEPLOYMENT_CONFIG is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  const path = fileURLToPath(new URL("../deployment.json", import.meta.url));
+  try {
+    return JSON.parse(readFile(path, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(
+        "Missing cloudflare/deployment.json. Create it locally or set CLOUDFLARE_DEPLOYMENT_CONFIG in an external CI/build environment.",
+      );
+    }
+    throw error;
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const profileKey = process.argv[2];
-  checkProduction(productionProfile(profileKey)).catch((error) => {
+  checkProduction(productionProfile(profileKey, loadDeployment())).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
     process.exit(1);

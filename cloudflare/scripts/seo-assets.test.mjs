@@ -1,21 +1,32 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  configuredPublicOrigin,
+  robotsText,
+  sitemapText,
+} from "../app/src/public-metadata.ts";
 
 const publicFile = (name) => new URL(`../app/public/${name}`, import.meta.url);
+const origin = configuredPublicOrigin("https://app.example.com");
 
-test("robots.txt allows crawling and advertises the canonical sitemap", async () => {
-  const robots = await readFile(publicFile("robots.txt"), "utf8");
+test("robots.txt allows crawling and advertises the configured sitemap", () => {
+  const robots = robotsText(origin);
   assert.match(robots, /^User-agent: \*$/m);
   assert.match(robots, /^Allow: \/$/m);
-  assert.match(robots, /^Sitemap: https:\/\/produkter\.denied\.se\/sitemap\.xml$/m);
+  assert.match(robots, /^Sitemap: https:\/\/app\.example\.com\/sitemap\.xml$/m);
   assert.doesNotMatch(robots, /Disallow:\s*\//);
 });
 
-test("sitemap only advertises the canonical public root", async () => {
-  const sitemap = await readFile(publicFile("sitemap.xml"), "utf8");
-  assert.match(sitemap, /<loc>https:\/\/produkter\.denied\.se\/<\/loc>/);
+test("sitemap only advertises the configured public root", () => {
+  const sitemap = sitemapText(origin);
+  assert.match(sitemap, /<loc>https:\/\/app\.example\.com\/<\/loc>/);
   assert.equal((sitemap.match(/<url>/g) ?? []).length, 1);
+});
+
+test("public origin rejects non-HTTPS or path-bearing deployment URLs", () => {
+  assert.throws(() => configuredPublicOrigin("http://app.example.com"), /HTTPS-origin/);
+  assert.throws(() => configuredPublicOrigin("https://app.example.com/path"), /HTTPS-origin/);
 });
 
 test("password recovery pages are excluded from search indexing", async () => {

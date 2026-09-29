@@ -41,8 +41,8 @@ export async function deliverPasswordReset(env: Env, email: string): Promise<voi
       "INSERT INTO password_resets (account_id, token_hash, auth_version, expires_at) VALUES (?, ?, ?, ?) " +
       "ON CONFLICT(account_id) DO UPDATE SET token_hash=excluded.token_hash, auth_version=excluded.auth_version, expires_at=excluded.expires_at",
     ).bind(account.id, digest, account.auth_version, now + RESET_TTL_MS).run();
-    // Fixed HTTPS origin prevents Host injection; fragment avoids HTTP logs/referrers.
-    const link = `https://produkter.denied.se/reset-password.html#token=${encodeURIComponent(token)}`;
+    // Configured HTTPS origin prevents Host injection; fragment avoids HTTP logs/referrers.
+    const link = `${new URL(env.PUBLIC_APP_URL).origin}/reset-password.html#token=${encodeURIComponent(token)}`;
     const sent = await sendEmail(env, account.email, "Återställ ditt lösenord på Produkter",
       `Välj ett nytt lösenord via länken nedan. Länken gäller i 20 minuter och kan användas en gång.\n\n${link}\n\nOm du inte begärde detta kan du ignorera mejlet. Ditt lösenord har inte ändrats.`);
     if (!sent) {
