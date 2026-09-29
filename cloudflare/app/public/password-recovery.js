@@ -1,6 +1,34 @@
 const recoveryMessage = document.getElementById("recovery-msg");
 const forgotForm = document.getElementById("forgot-password-form");
 const resetForm = document.getElementById("reset-password-form");
+let recoveryTurnstileId = null;
+
+function whenTurnstileReady(callback, attempts = 50) {
+  if (window.turnstile) {
+    window.turnstile.ready(callback);
+    return;
+  }
+  if (attempts > 0) setTimeout(() => whenTurnstileReady(callback, attempts - 1), 100);
+}
+
+function renderRecoveryTurnstile() {
+  const container = document.getElementById("recovery-turnstile");
+  if (!container || recoveryTurnstileId !== null || !window.turnstile) return;
+  const sitekey = container.dataset.sitekey;
+  if (!sitekey) return;
+  recoveryTurnstileId = window.turnstile.render(container, {
+    sitekey,
+    action: container.dataset.action || "password_recovery",
+  });
+}
+
+function resetRecoveryTurnstile() {
+  if (recoveryTurnstileId !== null && window.turnstile) {
+    window.turnstile.reset(recoveryTurnstileId);
+  }
+}
+
+if (forgotForm) whenTurnstileReady(renderRecoveryTurnstile);
 let resetToken = new URLSearchParams(location.hash.slice(1)).get("token") || "";
 if (resetForm) {
   history.replaceState(null, "", location.pathname);
@@ -30,7 +58,19 @@ async function submitRecovery(form, endpoint, body) {
 }
 forgotForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitRecovery(forgotForm, "/api/auth/forgot-password", { email: new FormData(forgotForm).get("email"), turnstileToken: new FormData(forgotForm).get("cf-turnstile-response") });
+  const values = new FormData(forgotForm);
+  const turnstileToken = recoveryTurnstileId !== null && window.turnstile
+    ? window.turnstile.getResponse(recoveryTurnstileId)
+    : "";
+  if (!turnstileToken) {
+    recoveryMessage.textContent = "Slutför säkerhetskontrollen och försök igen.";
+    return;
+  }
+  await submitRecovery(forgotForm, "/api/auth/forgot-password", {
+    email: values.get("email"),
+    turnstileToken,
+  });
+  resetRecoveryTurnstile();
 });
 resetForm?.addEventListener("submit", async (event) => {
   event.preventDefault();

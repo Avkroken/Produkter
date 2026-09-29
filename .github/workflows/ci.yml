@@ -27,8 +27,24 @@ jobs:
           retry-on-snapshot-warnings: true
           retry-on-snapshot-warnings-timeout: 300
 
-  node-cloudflare:
-    name: Node and Cloudflare
+  public-template-guard:
+    uses: Avkroken/.github/.github/workflows/public-template-guard.yml@e678adba10f38518e031ca6afa0c20ac4963fc16
+    with:
+      forbidden_fingerprints: |
+        dcb8aedbaeb3b4d508f095ea61399b9ea2dff52dd59ad3395037223cda2fdecd
+        e616bcc305314c41224898c8c4e38d84e81e733e2c1281f02c4690376be4e72f
+        40feb4f559c7aa93166361e60e04d6a44067f154448bb8fe520243e980c0fb27
+        9e60e46830887d37cf41074d0dc4798a9f8776cbecf2742ee6fdcd1be4b32cdf
+        61e34e748075a3525d1fcbc2b346044aef4b412f3893af8dc563ac97845c19c1
+        2d9837d23e4d5ffa2066fa07d6c4a3f9a913c32c09af74ecf631f99672f31e98
+        64aba032e41c85b143c2c7657832cb9d60f4cbb5150da065b2e4f7912f520c44
+        47d0a89719d861bcb2b09bd322e8380c9c7bd949c61dd4831e6e61f238c3dc46
+        503b8b33f64f19e3096ef956fcae555cba98c2b48f6ad11512e5b2445cf319e6
+        079fada9cfb64776bb7db8ce2cb76555aa29c7877e865132b72c84ad4a45d284
+        c755db8edb1b44ba57e0c128ad38adadc92b360ee810b0878d25a1bb64154d0e
+
+  node-cloudflare-validation:
+    name: Node and Cloudflare validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -37,6 +53,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
+      - name: Generate generic Cloudflare config
+        run: node cloudflare/scripts/configure.mjs --example
       - name: Validate Cloudflare app
         working-directory: cloudflare/app
         run: |
@@ -45,18 +63,37 @@ jobs:
           npm run typecheck
           node --check public/access-routing.js
           npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.production.jsonc
       - name: Validate Cloudflare engine
         working-directory: cloudflare/engine
         run: |
           npm ci
           npm run typecheck
           npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.production.jsonc
       - name: Validate Cloudflare processor
         working-directory: cloudflare/processor
         run: |
           npm ci
           npx tsc --noEmit
           npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.production.jsonc
+
+  node-cloudflare:
+    name: Node and Cloudflare
+    if: ${{ always() }}
+    needs:
+      - public-template-guard
+      - node-cloudflare-validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce required validation results
+        env:
+          TEMPLATE_GUARD_RESULT: ${{ needs.public-template-guard.result }}
+          NODE_CLOUDFLARE_RESULT: ${{ needs.node-cloudflare-validation.result }}
+        run: |
+          test "$TEMPLATE_GUARD_RESULT" = "success"
+          test "$NODE_CLOUDFLARE_RESULT" = "success"
 
   python:
     name: Python

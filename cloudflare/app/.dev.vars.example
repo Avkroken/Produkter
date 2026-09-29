@@ -1,5 +1,8 @@
-PROVIDER_CONFIG_KEY="generera-med: openssl rand -base64 32"
-
-# OAuth-värden sätts i produktion via `wrangler secret put <NAMN>`.
-OAUTH_MICROSOFT_CLIENT_ID="your-microsoft-oauth-client-id"
-
+# Secrets only. Non-secret deployment values live in ../deployment.json.
+PROVIDER_CONFIG_KEY="generate-with: openssl rand -base64 32"
+TURNSTILE_SECRET=""
+INGEST_API_KEY=""
+RESEND_API_KEY=""
+OAUTH_GOOGLE_CLIENT_SECRET=""
+OAUTH_MICROSOFT_CLIENT_SECRET=""
+GITHUB_ERROR_REPORT_TOKEN=""

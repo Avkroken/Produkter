@@ -74,6 +74,8 @@ Cloudflare-koden är uppdelad i app, engine och processor. De ska beskrivas och 
 
 Shared code minskar duplication men ändrar inte ägarskapet för runtime state.
 
+Installationsspecifika domäner, provider-resurs-ID:n och kontakt-/OAuth-värden hör inte till source code. De ligger i lokal `cloudflare/deployment.json`; Wrangler-konfiguration genereras därifrån och är inte versionsstyrd.
+
 ## Trust boundaries
 
 - browser → Flask session/auth

@@ -5,12 +5,15 @@ export type JobMessage = { type: "extract"; jobId: string } | { type: "describe"
 export interface Env {
   TURNSTILE_SECRET?: string;
   TURNSTILE_HOSTNAMES?: string;
+  TURNSTILE_SITE_KEY: string;
   DB: D1Database;
   UPLOADS: R2Bucket;
   SESSIONS: KVNamespace;
   PROVIDER_CONFIG_KEY: string;
   JOB_QUEUE: Queue<JobMessage>;
   GITHUB_ERROR_REPORT_TOKEN?: string;
+  GITHUB_ERROR_REPORT_REPOSITORY?: string;
+  PUBLIC_APP_URL: string;
   // Avd. B: on-demand-beskrivning går direkt till engine-Workern via Service Binding.
   ENGINE: Fetcher;
   INGEST_API_KEY?: string;
@@ -24,6 +27,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
   ADMIN_EMAIL?: string;
+  SUPPORT_PAYPAL_URL?: string;
+  SUPPORT_DONATION_URL?: string;
 }
 
 export interface Account {

@@ -1,0 +1,38 @@
+{
+  "appUrl": "https://app.example.com",
+  "engineUrl": "https://engine.example.com",
+  "workers": {
+    "app": "produkter",
+    "engine": "produkter-engine",
+    "processor": "produkter-processor"
+  },
+  "d1": {
+    "name": "produkter",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "r2": {
+    "uploads": "produkter-uploads"
+  },
+  "kv": {
+    "sessionsId": "00000000000000000000000000000000"
+  },
+  "queue": {
+    "jobs": "produkter-jobs"
+  },
+  "oauth": {
+    "googleClientId": "",
+    "microsoftClientId": ""
+  },
+  "mail": {
+    "from": "",
+    "adminEmail": ""
+  },
+  "githubErrorReportRepository": "",
+  "turnstile": {
+    "siteKey": "replace-with-your-turnstile-site-key"
+  },
+  "support": {
+    "paypalUrl": "",
+    "donationUrl": ""
+  }
+}

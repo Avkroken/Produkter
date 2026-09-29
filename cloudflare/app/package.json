@@ -3,22 +3,27 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --remote",
+    "config:generate": "node ../scripts/configure.mjs",
+    "dev": "npm run config:generate && wrangler dev --remote --config wrangler.production.jsonc",
+    "preview": "wrangler preview",
     "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && wrangler deploy --dry-run",
-    "deploy": "node ../scripts/deploy-app.mjs",
+    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run --config wrangler.production.jsonc",
+    "deploy": "npm run config:generate && node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
-    "secret:set-provider-key": "wrangler secret put PROVIDER_CONFIG_KEY"
+    "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY --config wrangler.production.jsonc",
+    "secret:set-ingest-key": "npm run config:generate && wrangler secret put INGEST_API_KEY --config wrangler.production.jsonc",
+    "admin:bootstrap": "npm run config:generate && node ../scripts/bootstrap-admin.mjs",
+    "secret:set-turnstile": "npm run config:generate && wrangler secret put TURNSTILE_SECRET --config wrangler.production.jsonc"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "workerd@1.20260908.1": true
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260923.1",
+    "@cloudflare/workers-types": "^5.20260925.1",
     "typescript": "^7.0.2",
-    "wrangler": "^4.136.3"
+    "wrangler": "^4.140.0"
   },
   "overrides": {
     "sharp": "^0.35.4"

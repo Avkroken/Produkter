@@ -6,9 +6,10 @@ services:
     ports:
       - "5050:5050"
     environment:
-      PROVIDER_CONFIG_MASTER_KEY: ${PROVIDER_CONFIG_MASTER_KEY:?Set PROVIDER_CONFIG_MASTER_KEY in .env — generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"}
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env — generate one with: python -c "import secrets; print(secrets.token_hex(32))"}
+      PROVIDER_CONFIG_MASTER_KEY: ${PROVIDER_CONFIG_MASTER_KEY:?Set PROVIDER_CONFIG_MASTER_KEY in .env}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env}
       GITHUB_ERROR_REPORT_TOKEN: ${GITHUB_ERROR_REPORT_TOKEN:-}
+      GITHUB_ERROR_REPORT_REPOSITORY: ${GITHUB_ERROR_REPORT_REPOSITORY:-}
     volumes:
       - uploads:/app/uploads
       - outputs:/app/outputs
@@ -21,11 +22,12 @@ services:
     profiles: [sync]
     command: ["python", "main.py", "sync", "--watch"]
     environment:
-      PROVIDER_CONFIG_MASTER_KEY: ${PROVIDER_CONFIG_MASTER_KEY:?Set PROVIDER_CONFIG_MASTER_KEY in .env — generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"}
+      PROVIDER_CONFIG_MASTER_KEY: ${PROVIDER_CONFIG_MASTER_KEY:?Set PROVIDER_CONFIG_MASTER_KEY in .env}
       SCRAPER_URL: ${SCRAPER_URL:-http://scraper:8000}
       SCRAPER_API_KEY: ${SCRAPER_API_KEY:-}
       SCRAPER_API_KEY_FILE: ${SCRAPER_API_KEY_FILE:-}
       GITHUB_ERROR_REPORT_TOKEN: ${GITHUB_ERROR_REPORT_TOKEN:-}
+      GITHUB_ERROR_REPORT_REPOSITORY: ${GITHUB_ERROR_REPORT_REPOSITORY:-}
     volumes:
       - config:/app/config
     networks:
