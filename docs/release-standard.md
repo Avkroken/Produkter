@@ -32,7 +32,9 @@ Produkter har separata runtime- och driftgränser. Cloudflare app, engine och pr
 
 Releaseautomation får därför inte skapa en ny parallell deployväg eller implicit deploya flera subsystem enbart därför att en release skapas.
 
-## PR-titlar och squash commits
+## PR-titlar och merge-metoder
+
+Repositoryt kan använda squash, merge commit eller rebase. I release-CI mappar `semantic_release.py` varje releasecommit till dess mergade GitHub-PR och använder den redan validerade PR-titeln som canonical Conventional Commit-rad. Flera rebase-commits från samma PR dedupliceras. Releasejobbet failar stängt om en target-commit saknar mergad PR-association, så interna branch-commitmeddelanden kan inte ändra SemVer-klassificeringen.
 
 Pull request-titlar ska följa Conventional Commits:
 
@@ -125,7 +127,7 @@ Workflown använder repositoryts `GITHUB_TOKEN` med least privilege. Ingen separ
 
 Release är inte deployment: GitHub Release-flödet skapar inte en parallell Cloudflare-deployväg och deployar inte flera subsystem enbart därför att en release publiceras.
 
-Manuell `workflow_dispatch` är begränsad till `main` och används endast som kontrollerad SemVer-/prerelease-override inom samma verifieringsmodell.
+Manuell `workflow_dispatch` är begränsad till `main` och används endast som kontrollerad SemVer-/prerelease-override inom samma verifieringsmodell. Promotion av en RC till stable kräver att RC-taggen pekar på aktuell `HEAD`; om någon commit har landat efter RC:n ska en ny RC skapas först, så target-SHA alltid verifieras mot samma checkkontrakt som checkouten.
 
 ## Prerelease
 

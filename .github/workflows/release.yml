@@ -74,6 +74,11 @@ jobs:
           assert breaking["breaking"]
           assert module.category_for(breaking) == "Breaking changes"
           assert module.category_for({**breaking, "scope": "security"}) == "Security"
+          selected = module.select_merged_pr([
+              {"number": 10, "title": "fix: old", "merged_at": "2026-01-01T00:00:00Z"},
+              {"number": 11, "title": "feat: canonical", "merged_at": "2026-01-02T00:00:00Z"},
+          ])
+          assert selected == {"number": 11, "title": "feat: canonical"}
           assert module.release_tag_key("v1.2.3") > module.release_tag_key("v1.2.3-rc.10")
           assert module.release_tag_key("v1.2.3-rc.10") > module.release_tag_key("v1.2.3-rc.9")
           assert module.commit_trailers(
@@ -108,6 +113,7 @@ jobs:
             grep -q "^tag=${latest_tag}$" "${RUNNER_TEMP}/recovered-release-output"
           fi
 
+
   release:
     name: Semantic release
     if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
@@ -119,6 +125,7 @@ jobs:
     permissions:
       checks: read
       contents: write
+      pull-requests: read
       statuses: read
     steps:
       - name: Checkout repository
@@ -131,6 +138,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRE_PR_ASSOCIATION: "1"
         run: |
           set -euo pipefail
           orphan_tag="$(python3 - <<'PY'
@@ -210,6 +219,8 @@ jobs:
         id: release
         shell: bash
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRE_PR_ASSOCIATION: "1"
           FORCED_BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || 'auto' }}
           CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
         run: |

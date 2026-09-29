@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import pathlib
 import re
 import subprocess
+import urllib.error
+import urllib.request
 
 STABLE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 RC = re.compile(r"^v(\d+)\.(\d+)\.(\d+)-rc\.(\d+)$")
@@ -136,6 +139,52 @@ def commit_trailers(body):
     return trailers
 
 
+def select_merged_pr(pull_requests):
+    """Return the most recently merged pull request with a usable title."""
+    merged = [
+        item for item in pull_requests
+        if item.get("merged_at") and isinstance(item.get("title"), str) and item["title"].strip()
+    ]
+    if not merged:
+        return None
+    merged.sort(key=lambda item: item.get("merged_at") or "", reverse=True)
+    selected = merged[0]
+    number = selected.get("number")
+    if not isinstance(number, int):
+        return None
+    return {"number": number, "title": selected["title"].strip()}
+
+
+def github_pr_for_commit(sha):
+    """Resolve a commit to its merged PR when release CI requires canonical PR titles."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    required = os.environ.get("REQUIRE_PR_ASSOCIATION") == "1"
+    if not token or not repository:
+        if required:
+            raise SystemExit("GITHUB_TOKEN and GITHUB_REPOSITORY are required for PR association.")
+        return None
+
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{repository}/commits/{sha}/pulls?per_page=100",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "repository-semantic-release",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            selected = select_merged_pr(json.load(response))
+    except (urllib.error.URLError, ValueError) as error:
+        raise SystemExit(f"Failed to resolve merged PR for {sha}: {error}") from error
+
+    if selected is None and required:
+        raise SystemExit(f"Commit {sha} is not associated with a merged pull request.")
+    return selected
+
+
 def commit_record(sha, subject, body):
     """Normalize commit metadata used by release classification."""
     line = release_line(subject, body)
@@ -163,7 +212,7 @@ def commit_record(sha, subject, body):
 
 
 def commits_in(revision_range):
-    """Return normalized first-parent commits in a revision range."""
+    """Return normalized first-parent changes, canonicalized to merged PR titles in CI."""
     raw = git(
         "log",
         "--first-parent",
@@ -171,13 +220,23 @@ def commits_in(revision_range):
         revision_range,
     ).stdout
     commits = []
+    seen_pull_requests = set()
     for block in raw.split("\x1e"):
         block = block.strip("\n")
         if not block:
             continue
         fields = block.split("\x1f", 2)
-        if len(fields) == 3:
-            commits.append(commit_record(*fields))
+        if len(fields) != 3:
+            continue
+        sha, subject, body = fields
+        pull_request = github_pr_for_commit(sha)
+        if pull_request is not None:
+            if pull_request["number"] in seen_pull_requests:
+                continue
+            seen_pull_requests.add(pull_request["number"])
+            subject = pull_request["title"]
+            body = ""
+        commits.append(commit_record(sha, subject, body))
     return commits
 
 
@@ -403,15 +462,12 @@ def main():
         if not active_pre:
             raise SystemExit("No active prerelease exists to promote.")
 
-        deferred_bump = None
-        for item in commits_in(f"{active_pre}..HEAD"):
-            candidate = default_bump(item)
-            if RANK[candidate] > RANK[deferred_bump]:
-                deferred_bump = candidate
-        if deferred_bump:
+        prerelease_sha = git("rev-parse", "--verify", f"{active_pre}^{{commit}}").stdout.strip()
+        head_sha = git("rev-parse", "--verify", "HEAD^{commit}").stdout.strip()
+        if prerelease_sha != head_sha:
             raise SystemExit(
-                f"Release-worthy commits exist after {active_pre}; "
-                "create a new release candidate before promotion."
+                f"Commits exist after {active_pre}; create a new release candidate "
+                "at the current HEAD before promotion."
             )
 
     if last_tag:
