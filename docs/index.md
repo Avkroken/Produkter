@@ -10,6 +10,7 @@ Navigationssida för Produkter.
 | dataflöden, AI-providerkedja och trust boundaries | [Arkitektur](architecture.md) |
 | egen installation | [Self-hosting](self-hosting.md) |
 | utveckling, test, Docker och deployment | [Drift](operations.md) |
+| release- och versionskontrakt | [Release- och versionsstandard](release-standard.md) |
 | extern render/browser-fetcher | [scraper/fetcher/README.md](../scraper/fetcher/README.md) |
 | säkerhetsrapportering | [SECURITY.md](../SECURITY.md) |
 

@@ -5,18 +5,41 @@
   "conditions": {
     "ref_name": {
       "exclude": [],
-      "include": ["~DEFAULT_BRANCH"]
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
     }
   },
   "rules": [
     {
       "type": "required_status_checks",
       "parameters": {
-        "do_not_enforce_on_create": true,
+        "do_not_enforce_on_create": false,
         "required_status_checks": [
-          {"context": "Python"},
-          {"context": "Workers"},
-          {"context": "dependency-review"}
+          {
+            "context": "Dependency review"
+          },
+          {
+            "context": "Node and Cloudflare"
+          },
+          {
+            "context": "Python"
+          },
+          {
+            "context": "Container security / app"
+          },
+          {
+            "context": "Container security / scraper"
+          },
+          {
+            "context": "Container security / fetcher"
+          },
+          {
+            "context": "Conventional PR title"
+          },
+          {
+            "context": "Validate semantic release"
+          }
         ],
         "strict_required_status_checks_policy": true
       }

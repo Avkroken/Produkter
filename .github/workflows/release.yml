@@ -1,0 +1,314 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: SemVer bump override
+        required: true
+        default: auto
+        type: choice
+        options: [auto, patch, minor, major, promote]
+      channel:
+        description: Release channel
+        required: true
+        default: stable
+        type: choice
+        options: [stable, rc]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate semantic release
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    concurrency:
+      group: ${{ format('release-validate-{0}', github.ref) }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/release-required-checks
+          python3 -m py_compile \
+            .github/scripts/semantic_release.py \
+            .github/scripts/wait_for_checks.py
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path(".github/scripts/semantic_release.py")
+          spec = importlib.util.spec_from_file_location("semantic_release", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          trailers = module.commit_trailers(
+              "Release notes example\n\nRelease-As: minor\nBREAKING CHANGE: contract changed\n"
+          )
+          assert trailers["Release-As"] == "minor"
+          assert trailers["BREAKING CHANGE"] == "contract changed"
+          multiline = module.commit_trailers(
+              "fix: compatibility\n\nBREAKING CHANGE: contract changed\n continued detail\n"
+          )
+          assert multiline["BREAKING CHANGE"] == "contract changed\ncontinued detail"
+          breaking = module.commit_record(
+              "a" * 40,
+              "fix: compatibility",
+              "BREAKING CHANGE: contract changed\n continued detail\n",
+          )
+          assert breaking["breaking"]
+          assert module.category_for(breaking) == "Breaking changes"
+          assert module.category_for({**breaking, "scope": "security"}) == "Security"
+          selected = module.select_merged_pr([
+              {"number": 10, "title": "fix: old", "merged_at": "2026-01-01T00:00:00Z"},
+              {"number": 11, "title": "feat: canonical", "merged_at": "2026-01-02T00:00:00Z"},
+          ])
+          assert selected == {"number": 11, "title": "feat: canonical"}
+          assert module.release_tag_key("v1.2.3") > module.release_tag_key("v1.2.3-rc.10")
+          assert module.release_tag_key("v1.2.3-rc.10") > module.release_tag_key("v1.2.3-rc.9")
+          assert module.commit_trailers(
+              "Release-As: major\n\nordinary paragraph after the example\n"
+          ) == {}
+          PY
+          python3 .github/scripts/semantic_release.py \
+            --forced-bump auto \
+            --channel stable \
+            --notes "${RUNNER_TEMP}/release-notes.md"
+          latest_tag="$(python3 - <<'PYTAG'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path(".github/scripts/semantic_release.py")
+          spec = importlib.util.spec_from_file_location("semantic_release", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          tags = module.git("tag", "--merged", "HEAD", "--list", "v*").stdout.splitlines()
+          tags = [tag for tag in tags if module.release_tag_key(tag) is not None]
+          tags.sort(key=module.release_tag_key, reverse=True)
+          print(tags[0] if tags else "")
+          PYTAG
+          )"
+          if [[ -n "${latest_tag}" ]]; then
+            python3 .github/scripts/semantic_release.py \
+              --recover-tag "${latest_tag}" \
+              --notes "${RUNNER_TEMP}/recovered-release-notes.md" \
+              --output "${RUNNER_TEMP}/recovered-release-output"
+            grep -q '^release=true$' "${RUNNER_TEMP}/recovered-release-output"
+            grep -q "^tag=${latest_tag}$" "${RUNNER_TEMP}/recovered-release-output"
+          fi
+
+
+  release:
+    name: Semantic release
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: ${{ format('semantic-release-{0}', github.repository) }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      checks: read
+      contents: write
+      pull-requests: read
+      statuses: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Recover orphaned release anchor
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRE_PR_ASSOCIATION: "1"
+        run: |
+          set -euo pipefail
+          orphan_tag="$(python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path(".github/scripts/semantic_release.py")
+          spec = importlib.util.spec_from_file_location("semantic_release", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          tags = module.git("tag", "--merged", "HEAD", "--list", "v*").stdout.splitlines()
+          tags = [tag for tag in tags if module.release_tag_key(tag) is not None]
+          tags.sort(key=module.release_tag_key, reverse=True)
+          print(tags[0] if tags else "")
+          PY
+          )"
+
+          [[ -z "${orphan_tag}" ]] && exit 0
+          release_json="$(gh release view "${orphan_tag}" --repo "${GITHUB_REPOSITORY}" --json isDraft,tagName 2>/dev/null || true)"
+          if [[ -n "${release_json}" ]]; then
+            if [[ "$(printf '%s' "${release_json}" | jq -r '.isDraft')" == "true" ]]; then
+              echo "::error::Latest release anchor ${orphan_tag} is a draft; publish or remove the draft before continuing."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          echo "::warning::Recovering orphaned release anchor ${orphan_tag}."
+          notes="${RUNNER_TEMP}/orphaned-release-notes.md"
+          output="${RUNNER_TEMP}/orphaned-release-output"
+          : > "${output}"
+          python3 .github/scripts/semantic_release.py \
+            --recover-tag "${orphan_tag}" \
+            --notes "${notes}" \
+            --output "${output}"
+
+          planned_tag="$(grep '^tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+          target_sha="$(grep '^target_sha=' "${output}" | tail -n1 | cut -d= -f2-)"
+          prerelease="$(grep '^prerelease=' "${output}" | tail -n1 | cut -d= -f2-)"
+          base_tag="$(grep '^base_tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+          active_prerelease_tag="$(grep '^active_prerelease_tag=' "${output}" | tail -n1 | cut -d= -f2-)"
+
+          [[ "${planned_tag}" == "${orphan_tag}" ]]
+          actual_sha="$(git rev-parse --verify "${orphan_tag}^{commit}")"
+          [[ "${target_sha}" == "${actual_sha}" ]]
+
+          python3 .github/scripts/wait_for_checks.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --sha "${target_sha}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --required-checks-file ".github/release-required-checks"
+
+          for anchor in "${base_tag}" "${active_prerelease_tag}"; do
+            [[ -z "${anchor}" ]] && continue
+            gh release view "${anchor}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          done
+
+          if gh release view "${orphan_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${orphan_tag} appeared concurrently; recovery is complete."
+            exit 0
+          fi
+
+          args=(
+            "${orphan_tag}"
+            --repo "${GITHUB_REPOSITORY}"
+            --verify-tag
+            --title "${orphan_tag}"
+            --notes-file "${notes}"
+          )
+          if [[ "${prerelease}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
+
+      - name: Calculate version and changelog
+        id: release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRE_PR_ASSOCIATION: "1"
+          FORCED_BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || 'auto' }}
+          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/semantic_release.py \
+            --forced-bump "${FORCED_BUMP}" \
+            --channel "${CHANNEL}" \
+            --notes "${RUNNER_TEMP}/release-notes.md" \
+            --output "${GITHUB_OUTPUT}"
+
+      - name: Verify existing release anchors
+        if: ${{ steps.release.outputs.release == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_TAG: ${{ steps.release.outputs.base_tag }}
+          ACTIVE_PRERELEASE_TAG: ${{ steps.release.outputs.active_prerelease_tag }}
+        run: |
+          set -euo pipefail
+          for tag in "${BASE_TAG}" "${ACTIVE_PRERELEASE_TAG}"; do
+            [[ -z "${tag}" ]] && continue
+            release_json="$(gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json isDraft,tagName 2>/dev/null || true)"
+            if [[ -z "${release_json}" ]]; then
+              echo "::error::Tag ${tag} exists without a GitHub Release; reconcile it before advancing the release line."
+              exit 1
+            fi
+            if [[ "$(printf '%s' "${release_json}" | jq -r '.isDraft')" == "true" ]]; then
+              echo "::error::Release anchor ${tag} is still a draft and cannot advance canonical release history."
+              exit 1
+            fi
+          done
+
+      - name: Wait for repository checks
+        if: ${{ steps.release.outputs.release == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.release.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/wait_for_checks.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --sha "${TARGET_SHA}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --required-checks-file ".github/release-required-checks"
+
+      - name: Create GitHub release
+        if: ${{ steps.release.outputs.release == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          TARGET_SHA: ${{ steps.release.outputs.target_sha }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          verify_tag_target() {
+            git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}" >/dev/null 2>&1 || return 1
+            local actual
+            actual="$(git rev-parse --verify "refs/tags/${TAG}^{commit}")"
+            if [[ "${actual}" != "${TARGET_SHA}" ]]; then
+              echo "::error::Tag ${TAG} points at ${actual}, expected ${TARGET_SHA}."
+              exit 1
+            fi
+          }
+
+          if ! verify_tag_target; then
+            if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="${TARGET_SHA}" >/dev/null; then
+              echo "Tag ${TAG} appeared concurrently; verifying its target."
+            fi
+            verify_tag_target
+          fi
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists at the verified target; nothing to do."
+            exit 0
+          fi
+
+          args=(
+            "${TAG}"
+            --repo "${GITHUB_REPOSITORY}"
+            --verify-tag
+            --title "${TAG}"
+            --notes-file "${RUNNER_TEMP}/release-notes.md"
+          )
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
