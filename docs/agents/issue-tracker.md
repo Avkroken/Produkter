@@ -12,12 +12,32 @@ GitHub Issues is the canonical issue and specification tracker for this reposito
 
 ## CLI fallback
 
-For a quick issue view:
+For a quick issue view, use the fields supported by the installed `gh` client:
 
 ```bash
-gh issue view <number> --json number,title,body,state,labels,assignees,comments,closedByPullRequestsReferences
+gh issue view <number> --json number,title,body,state,labels,assignees,comments,url
 ```
 
-When complete linked-PR history or dependency state matters, use the authenticated GitHub connector or API before acting.
+Dependency state is part of the minimum pre-work read and must be fetched before work starts. Prefer the authenticated GitHub connector. With `gh`, query the GraphQL Issue fields directly:
+
+```bash
+gh api graphql \
+  -f owner=Avkroken \
+  -f name=Produkter \
+  -F number=<number> \
+  -f query='
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        issue(number: $number) {
+          parent { number title state url }
+          subIssues(first: 100) { nodes { number title state url } }
+          blockedBy(first: 100) { nodes { number title state url } }
+          blocking(first: 100) { nodes { number title state url } }
+        }
+      }
+    }'
+```
+
+If the connector or API cannot expose one of those dependency relations, do not infer that the issue is unblocked; record the missing relation as unknown before acting.
 
 When a skill says to publish or fetch a ticket, use this repository's GitHub Issues tracker.
