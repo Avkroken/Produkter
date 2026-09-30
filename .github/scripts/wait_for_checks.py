@@ -21,6 +21,10 @@ def parse_args():
         "--required-checks-file",
         default=".github/release-required-checks",
     )
+    parser.add_argument(
+        "--ignored-checks-file",
+        default=".github/release-ignored-checks",
+    )
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--registration-grace", type=int, default=30)
     parser.add_argument("--settle", type=int, default=30)
@@ -59,6 +63,18 @@ def load_required(path):
     if not names:
         raise SystemExit(f"Required-check configuration is empty: {config}")
     return names
+
+
+def load_ignored(path):
+    """Load explicitly allowed failing check/status names; a missing file means none."""
+    config = pathlib.Path(path)
+    if not config.exists():
+        return set()
+    return {
+        line.strip()
+        for line in config.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
 
 
 def latest_checks(items):
@@ -130,6 +146,7 @@ def main():
     """Wait until required repository checks are observed, stable, and successful."""
     args = parse_args()
     required = load_required(args.required_checks_file)
+    ignored = load_ignored(args.ignored_checks_file)
     started = time.monotonic()
     grace_until = started + args.registration_grace
     stable_since = None
@@ -145,11 +162,15 @@ def main():
             item for item in all_check_runs(args.repository, args.sha)
             if own_run_fragment not in (item.get("details_url") or "")
             and item.get("name") not in IGNORED_CHECK_NAMES
+            and item.get("name") not in ignored
         ]
         checks_by_identity = latest_checks(raw_checks)
         checks = list(checks_by_identity.values())
 
-        raw_statuses = all_statuses(args.repository, args.sha)
+        raw_statuses = [
+            item for item in all_statuses(args.repository, args.sha)
+            if item.get("context") not in ignored
+        ]
         statuses_by_identity = latest_statuses(raw_statuses)
         statuses = list(statuses_by_identity.values())
 
