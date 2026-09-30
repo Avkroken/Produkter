@@ -1,0 +1,4 @@
+# Fail-closed provider builds intentionally fail until Cloudflare Workers Builds production config is corrected.
+Workers Builds: produkter
+Workers Builds: produkter-motor
+Workers Builds: produkter-bearbetare

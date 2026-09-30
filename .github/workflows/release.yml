@@ -45,6 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s .github/release-required-checks
+          test -s .github/release-ignored-checks
           python3 -m py_compile \
             .github/scripts/semantic_release.py \
             .github/scripts/wait_for_checks.py
