@@ -8,7 +8,7 @@
     "preview": "wrangler preview",
     "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "validate": "npm test && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run --config wrangler.production.jsonc",
+    "validate": "npm test && node --check public/theme.js && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run --config wrangler.production.jsonc",
     "deploy": "npm run config:generate && node ../scripts/deploy-app.mjs",
     "verify:production": "node ../scripts/verify-production.mjs app",
     "secret:set-provider-key": "npm run config:generate && wrangler secret put PROVIDER_CONFIG_KEY --config wrangler.production.jsonc",

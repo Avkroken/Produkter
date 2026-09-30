@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv" data-theme="dark">
+<html lang="sv" data-theme="legacy">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-    <script>
-        (function () {
-            const s = localStorage.getItem('theme');
-            const p = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', s || p);
-        })();
-    </script>
+    <meta name="theme-color" content="#04070e">
+    <script src="/static/theme.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -35,23 +30,6 @@
             --r:            12px;
             --ff-head:      'Syne', sans-serif;
             --ff-mono:      'JetBrains Mono', monospace;
-        }
-
-        [data-theme="light"] {
-            --bg:           #f0ede6;
-            --bg-2:         #faf8f4;
-            --bg-3:         #e8e4db;
-            --border:       rgba(0,0,0,0.08);
-            --text:         #1c1c2e;
-            --text-dim:     #6b6b7b;
-            --accent:       #c97d00;
-            --accent-dim:   rgba(201,125,0,0.10);
-            --accent-glow:  rgba(201,125,0,0.20);
-            --success:      #16a34a;
-            --success-dim:  rgba(22,163,74,0.12);
-            --danger:       #dc2626;
-            --danger-dim:   rgba(220,38,38,0.12);
-            --blue-dim:     rgba(37,99,235,0.10);
         }
 
         html { font-size: 15px; }
@@ -401,7 +379,6 @@
         tbody tr:last-child td { border-bottom: none; }
         tbody tr { transition: background 0.12s; }
         tbody tr:hover { background: rgba(255,255,255,0.018); }
-        [data-theme="light"] tbody tr:hover { background: rgba(0,0,0,0.02); }
 
         .td-file {
             font-family: var(--ff-head);
@@ -630,6 +607,7 @@
             th:nth-child(5), td:nth-child(5) { display: none; }
         }
     </style>
+    <link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
 
@@ -646,7 +624,7 @@
             </div>
             <span class="status-pill" title="Inloggad som">{{ email }}</span>
             <button class="icon-btn" id="settingsBtn" onclick="openSettings()" title="Inställningar">⚙</button>
-            <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" title="Byt tema"></button>
+            <label class="theme-control" for="themeSelect"><span>Tema</span><select id="themeSelect" data-theme-select aria-label="Tema"><option value="legacy">Legacy</option><option value="forest">Avkroken</option><option value="blackout">Blackout</option></select></label>
             <form method="POST" action="{{ url_for('logout') }}" style="display:inline">
                 <button class="icon-btn" type="submit" title="Logga ut">⏻</button>
             </form>
@@ -767,19 +745,6 @@
 let selectedFile = null;
 let pollTimer = null;
 let settingsCache = null;
-
-// ── Theme ──────────────────────────────────────────────────────────────────
-function toggleTheme() {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    updateThemeIcon();
-}
-function updateThemeIcon() {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    document.getElementById('themeBtn').textContent = dark ? '☀' : '☾';
-}
-updateThemeIcon();
 
 // ── Provider status ───────────────────────────────────────────────────────
 async function checkStatus() {
