@@ -90,7 +90,7 @@ Generera därefter Wrangler-konfigurationerna:
 node cloudflare/scripts/configure.mjs
 ```
 
-Det skapar lokala `cloudflare/*/wrangler.production.jsonc`. De är gitignorerade och innehåller installationens produktionsresurser. De versionsstyrda `cloudflare/*/wrangler.jsonc` är separata fail-closed Preview-konfigurationer utan production D1/R2/KV/Queue/Service-bindings eller installationsspecifika routes/vars. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
+Det skapar lokala `cloudflare/*/wrangler.production.jsonc`. De är gitignorerade och innehåller installationens produktionsresurser. De versionsstyrda `cloudflare/*/wrangler.jsonc` är separata fail-closed Preview-konfigurationer utan production D1/R2/KV/Queue/Service-bindings eller installationsspecifika routes/vars och använder egna `*-preview`-Worker-namn. Det gör att Cloudflare Builds standardkommando `npx wrangler deploy` inte kan skriva över produktions-Workers om en production-trigger råkar använda Preview-konfigurationen. Riktig produktion ska fortfarande använda den genererade `wrangler.production.jsonc`. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
 
 För en **ny D1-databas**, initiera grundschemat en gång innan första app-deployen:
 

@@ -17,7 +17,7 @@ När `cloudflare/deployment.json` innehåller din installation genererar du de g
 node cloudflare/scripts/configure.mjs
 ```
 
-Generatorn skriver `cloudflare/*/wrangler.production.jsonc`. De versionsstyrda `cloudflare/*/wrangler.jsonc` är resursfria Preview-konfigurationer för Cloudflare Builds och ska inte fyllas med installationens production-ID:n.
+Generatorn skriver `cloudflare/*/wrangler.production.jsonc`. De versionsstyrda `cloudflare/*/wrangler.jsonc` är resursfria Preview-konfigurationer för Cloudflare Builds, använder separata `*-preview`-Worker-namn och ska inte fyllas med installationens production-ID:n. En standard-`wrangler deploy` mot en sådan fil kan därför inte skriva över produktions-Workern.
 
 ## Snabb verifiering
 
