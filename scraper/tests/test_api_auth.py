@@ -47,3 +47,26 @@ def test_valid_key_reaches_protected_route(api):
         return JSONResponse({"ok": True})
     response = asyncio.run(api.check_api_key(request_with_key("synthetic-key"), protected))
     assert response.status_code == 200
+
+
+def test_lifespan_initializes_and_closes_database_pool(api, monkeypatch):
+    class Pool:
+        closed = False
+
+        def closeall(self):
+            self.closed = True
+
+    pool = Pool()
+
+    def initialize():
+        api.db_pool = pool
+
+    monkeypatch.setattr(api, "init_db_pool", initialize)
+
+    async def exercise():
+        async with api.lifespan(api.app):
+            assert api.db_pool is pool
+        assert api.db_pool is None
+
+    asyncio.run(exercise())
+    assert pool.closed is True
