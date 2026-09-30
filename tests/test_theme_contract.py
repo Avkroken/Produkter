@@ -28,7 +28,8 @@ def test_flask_surfaces_use_shared_avkroken_theme_contract():
     assert "--accent:" not in css
     assert '"avkroken.theme"' in js
     assert '"avkroken_theme"' in js
-    assert 'Domain=.denied.se' in js
+    assert "sharedCookieDomain" in js
+    assert '"; Domain=" + domain' in js
     assert 'localStorage.getItem("theme")' in js
 
 

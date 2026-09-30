@@ -26,7 +26,8 @@ def test_scraper_webui_uses_shared_avkroken_theme_contract():
     assert "background-size:42px 42px" in css
     assert '"avkroken.theme"' in js
     assert '"avkroken_theme"' in js
-    assert 'Domain=.denied.se' in js
+    assert "sharedCookieDomain" in js
+    assert '"; Domain=" + domain' in js
 
 
 def test_scraper_old_light_dark_toggle_is_not_active_anymore():

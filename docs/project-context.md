@@ -75,7 +75,7 @@ Systemet innehåller flera typer av state: jobb/resultat/config i Python-appen, 
 
 De användarvända webbgränssnitten i Flask-appen, scraper-WebUI och Cloudflare-appen följer samma presentationskontrakt: `legacy`, `forest` (visas som **Avkroken**) och `blackout`. `legacy` är fallback och återger det äldre Avkroken-uttrycket med mörk bas, cyan/blå/violett/magenta glow och diskret 42 px-rutnät, medan Produkters orange respektive scraper-specifika accenter förblir produkt-/delsystemsspecifika.
 
-Temavalet persisteras i `localStorage["avkroken.theme"]` och, på denied.se, `avkroken_theme`. Äldre lokala `theme=light|dark` känns igen som migrationssignal till Legacy men raderas inte. Temapreferensen är strikt kosmetisk och får aldrig påverka auth-, provider-, scraper-, jobb- eller canonical state.
+Temavalet persisteras i `localStorage["avkroken.theme"]` och i den icke-känsliga presentationscookien `avkroken_theme`. När hostnamnet medger det härleds en gemensam parent-domain vid runtime för kontinuitet mellan installationens subdomäner; repositoryt hårdkodar ingen installationsdomän och faller tillbaka till host-only cookie när en delad domän inte kan sättas. Äldre lokala `theme=light|dark` känns igen som migrationssignal till Legacy men raderas inte. Temapreferensen är strikt kosmetisk och får aldrig påverka auth-, provider-, scraper-, jobb- eller canonical state.
 
 ## Secrets
 

@@ -32,6 +32,7 @@ test("Cloudflare app uses the shared Avkroken theme contract", async () => {
 
   assert.match(js, /avkroken\.theme/);
   assert.match(js, /avkroken_theme/);
-  assert.match(js, /Domain=\.denied\.se/);
+  assert.match(js, /sharedCookieDomain/);
+  assert.match(js, /"; Domain=" \+ domain/);
   assert.match(js, /localStorage\.getItem\("theme"\)/);
 });

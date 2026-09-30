@@ -16,12 +16,24 @@
     } catch {}
     return "";
   }
+  function sharedCookieDomain() {
+    const host = location.hostname.toLowerCase();
+    if (!host || host === "localhost" || host.includes(":") || /^\d+(?:\.\d+){3}$/.test(host)) return "";
+    const parts = host.split(".").filter(Boolean);
+    if (parts.length < 2) return "";
+    const commonSecondLevel = new Set(["ac", "co", "com", "edu", "gov", "net", "org"]);
+    const labels = parts.at(-1).length === 2 && commonSecondLevel.has(parts.at(-2)) && parts.length >= 3 ? 3 : 2;
+    return "." + parts.slice(-labels).join(".");
+  }
   function persist(theme) {
     try { localStorage.setItem(storageKey, theme); } catch {}
-    const denied = location.hostname === "denied.se" || location.hostname.endsWith(".denied.se");
-    const domain = denied ? "; Domain=.denied.se" : "";
+    const domain = sharedCookieDomain();
     const secure = location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = cookieName + "=" + theme + "; Max-Age=31536000; Path=/; SameSite=Lax" + domain + secure;
+    const base = cookieName + "=" + theme + "; Max-Age=31536000; Path=/; SameSite=Lax";
+    if (domain) document.cookie = base + "; Domain=" + domain + secure;
+    if (!document.cookie.split("; ").some(value => value.startsWith(cookieName + "="))) {
+      document.cookie = base + secure;
+    }
   }
   function apply(value, save = false) {
     const theme = themes.has(value) ? value : fallback;
