@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="legacy" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +7,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/style.css">
-    <script nonce="{{ csp_nonce }}">
-        (function() {
-            const saved = localStorage.getItem('theme');
-            const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-bs-theme', saved || preferred);
-        })();
-    </script>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg sticky-top">
@@ -24,9 +19,7 @@
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <a class="nav-link" href="/">Dashboard</a>
                 <a class="nav-link" href="/config">Configuration</a>
-                <button class="theme-toggle ms-1" id="themeToggle" title="Toggle theme">
-                    <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-                </button>
+                <label class="theme-control ms-1" for="themeSelect"><span>Theme</span><select id="themeSelect" data-theme-select aria-label="Theme"><option value="legacy">Legacy</option><option value="forest">Avkroken</option><option value="blackout">Blackout</option></select></label>
             </div>
         </div>
     </nav>
@@ -223,19 +216,6 @@
             }
         };
 
-        function toggleTheme() {
-            const html = document.documentElement;
-            const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-bs-theme', next);
-            localStorage.setItem('theme', next);
-            updateThemeIcon();
-        }
-
-        function updateThemeIcon() {
-            const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
-            document.getElementById('themeIcon').className = dark ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
-        }
-
         document.querySelectorAll('.nav-link').forEach(l => {
             if (l.getAttribute('href') === window.location.pathname) l.classList.add('active');
         });
@@ -409,7 +389,6 @@
                 .catch(() => showToast('Could not load configurations', 'danger'));
         }
 
-        updateThemeIcon();
         loadConfigs();
 
         // === Advanced settings ===
@@ -503,7 +482,6 @@
         }
 
         // === Event listeners ===
-        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
         document.getElementById('addSiteBtn').addEventListener('click', toggleAddForm);
         document.getElementById('addFormCloseBtn').addEventListener('click', toggleAddForm);
         document.getElementById('addFormCancelBtn').addEventListener('click', toggleAddForm);

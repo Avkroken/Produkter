@@ -71,6 +71,12 @@ De Workers som använder D1 ska binda samma installationsspecifika databas. Om i
 
 Systemet innehåller flera typer av state: jobb/resultat/config i Python-appen, scraperstate och Cloudflare-resurser. Dokumentation ska ange vilket subsystem som äger respektive state i stället för att använda ett generiskt "databasen".
 
+## Tema
+
+De användarvända webbgränssnitten i Flask-appen, scraper-WebUI och Cloudflare-appen följer samma presentationskontrakt: `legacy`, `forest` (visas som **Avkroken**) och `blackout`. `legacy` är fallback och återger det äldre Avkroken-uttrycket med mörk bas, cyan/blå/violett/magenta glow och diskret 42 px-rutnät, medan Produkters orange respektive scraper-specifika accenter förblir produkt-/delsystemsspecifika.
+
+Temavalet persisteras i `localStorage["avkroken.theme"]` och, på denied.se, `avkroken_theme`. Äldre lokala `theme=light|dark` känns igen som migrationssignal till Legacy men raderas inte. Temapreferensen är strikt kosmetisk och får aldrig påverka auth-, provider-, scraper-, jobb- eller canonical state.
+
 ## Secrets
 
 Providerkeys, scraper-API-keys, session secrets och andra credentials ska ligga i avsedd runtime/configmodell och aldrig i docs eller Git.
