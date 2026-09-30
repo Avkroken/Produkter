@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "produkter",
+  "name": "produkter-preview",
   "main": "src/access-worker.ts",
   "workers_dev": false,
   "preview_urls": false,

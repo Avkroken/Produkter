@@ -12,6 +12,7 @@ for (const unit of units) {
   test(unit + " tracked Wrangler config is preview-safe", () => {
     const configPath = path.join(here, "..", unit, "wrangler.jsonc");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.match(config.name, /-preview$/, configPath + " must target a preview-only Worker name");
     assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
     for (const key of forbiddenProductionKeys) {
       assert.equal(config[key], undefined, configPath + " must not track production key " + key);
