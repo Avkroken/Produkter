@@ -8,6 +8,7 @@ import os
 import logging
 import hmac
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, Query, HTTPException, Request
@@ -72,12 +73,27 @@ def return_db(conn):
         return
     db_pool.putconn(conn)
 
+def close_db_pool():
+    global db_pool
+    if db_pool:
+        db_pool.closeall()
+        db_pool = None
+
+@asynccontextmanager
+async def lifespan(_app):
+    init_db_pool()
+    try:
+        yield
+    finally:
+        close_db_pool()
+
 app = FastAPI(
     title="Web Scraper API",
     description="Production API for price monitoring",
     version="4.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -119,15 +135,6 @@ async def check_api_key(request: Request, call_next):
     if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
-
-@app.on_event("startup")
-async def startup():
-    init_db_pool()
-
-@app.on_event("shutdown")
-async def shutdown():
-    if db_pool:
-        db_pool.closeall()
 
 @app.get("/health")
 def health():

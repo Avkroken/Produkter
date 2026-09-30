@@ -64,7 +64,7 @@ Det separerar användarkonfiguration från source code och från generell jobsta
 
 ## Scraper boundary
 
-Scrapern samlar in produktdata och exponerar API som synckomponenten använder.
+Scrapern samlar in produktdata och exponerar API som synckomponenten använder. FastAPI-processens PostgreSQL-connection pool ägs av appens lifespan: poolen öppnas när API-processen startar och stängs deterministiskt när processen avslutas.
 
 Render-/browserfetching är en separat boundary. Den ska kunna utvecklas eller flyttas utan att provider- och beskrivningslogiken behöver känna till browserimplementationen.
 
