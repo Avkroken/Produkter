@@ -123,7 +123,7 @@ Efter merge till `main`:
 5. en immutable SemVer-tagg och GitHub Release skapas på exakt verifierad target-SHA;
 6. release notes genereras som repositoryts canonical versionerade changelog.
 
-Workflown använder repositoryts `GITHUB_TOKEN` med least privilege. Ingen separat PAT eller write-utökning av read-only GitHub App-integrationer behövs.
+Canonical releasepubliceringen använder repositoryts `GITHUB_TOKEN` med least privilege och behöver ingen separat PAT eller write-utökning av read-only GitHub App-integrationer. Det valfria rådgivande Copilot-jobbet använder separat read-only `COPILOT_GITHUB_TOKEN`.
 
 Release är inte deployment: GitHub Release-flödet skapar inte en parallell Cloudflare-deployväg och deployar inte flera subsystem enbart därför att en release publiceras.
 
@@ -152,3 +152,11 @@ Publicerade taggar flyttas eller skrivs inte om. Vid felaktig release:
 5. deploya endast de subsystem där den korrigerade ändringen faktiskt ska till produktion.
 
 Ingen force-push eller tag history rewrite används.
+
+## Copilot-sammanfattning
+
+Releaseflödet kör den SHA-pinnade `github/copilot-release-notes`-actionen i ett separat read-only-jobb med `contents: read` och `pull-requests: read`. Copilot CLI förinstalleras i exakt version `1.0.90` innan `COPILOT_GITHUB_TOKEN` exponeras, så actionen använder den redan installerade binären i stället för att hämta en flytande CLI-version.
+
+`COPILOT_GITHUB_TOKEN` ska vara en least-privilege fine-grained PAT med `Copilot Requests: Read` och en tokenägare med aktiv Copilot-licens. Workflown skapar eller roterar ingen credential. Om secreten saknas eller Copilot-genereringen misslyckas påverkas inte releaseprocessen.
+
+Copilot-resultatet publiceras endast i GitHub Actions run summary som rådgivande text. Det skrivs inte in i den kanoniska GitHub Release-body:n. SemVer, release-target, required checks och release notes i GitHub Release fortsätter därför att komma enbart från `semantic_release.py`; osäkra eller ofullständiga AI-resultat kan aldrig ändra canonical changelog. Upstream v1.0.3 kan dessutom missa rebase-mergade PR:er; Copilot-resultatet får därför inte användas som bevis på full release-täckning.
