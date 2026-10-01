@@ -11,20 +11,47 @@ import {
   tokenFromWrangler,
 } from "./live-production-config.mjs";
 
-export function migrationChangesSinceParent(cwd = process.cwd()) {
+function runGit(repositoryRoot, args, runner) {
+  return runner("git", args, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+export function migrationChangesSinceParent(
+  cwd = process.cwd(),
+  branch = "main",
+  runner = spawnSync,
+) {
   const repositoryRoot = path.resolve(cwd, "..", "..");
-  const result = spawnSync(
-    "git",
+
+  let parent = runGit(repositoryRoot, ["cat-file", "-e", "HEAD^"], runner);
+  if (parent.error || parent.status !== 0) {
+    const fetch = runGit(
+      repositoryRoot,
+      ["fetch", "--no-tags", "--depth=2", "origin", branch],
+      runner,
+    );
+    if (fetch.error || fetch.status !== 0) {
+      throw new Error("Kunde inte hämta parent-commit för D1-migrationskontroll.");
+    }
+    parent = runGit(repositoryRoot, ["cat-file", "-e", "HEAD^"], runner);
+  }
+
+  if (parent.error || parent.status !== 0) {
+    throw new Error("Parent-commit saknas efter bounded fetch. Avbryter production-deploy.");
+  }
+
+  const result = runGit(
+    repositoryRoot,
     ["diff", "--name-only", "HEAD^", "HEAD", "--", "cloudflare/migrations"],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+    runner,
   );
   if (result.error || result.status !== 0) {
     throw new Error("Kunde inte verifiera D1-migrationsdiff före production-deploy.");
   }
+
   return result.stdout
     .split(/\r?\n/)
     .map(value => value.trim())
@@ -72,7 +99,7 @@ export async function preparePortableDeploy({
   }
   if (branch !== "main") return { mode: "preview", branch };
 
-  const migrationChanges = migrationChangesResolver(cwd);
+  const migrationChanges = migrationChangesResolver(cwd, branch);
   if (!Array.isArray(migrationChanges)) {
     throw new Error("D1-migrationskontrollen gav ogiltigt resultat.");
   }
