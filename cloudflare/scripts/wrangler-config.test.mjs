@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   deployGeneratedProductionConfig,
+  migrationChangesSinceParent,
   preparePortableDeploy,
   runPortableBuildHook,
 } from "./guard-portable-deploy.mjs";
@@ -197,6 +198,56 @@ test("main Workers Build generates production config from live state", async () 
   assert.equal(config.keep_vars, true);
   assert.deepEqual(config.routes, [{ pattern: "produkter.example.test", custom_domain: true }]);
   assert.equal(fs.existsSync(path.join(cwd, ".wrangler/deploy/config.json")), false);
+});
+
+test("migration guard repairs a depth-1 checkout with a bounded fetch before diffing", () => {
+  const calls = [];
+  let parentChecks = 0;
+  const runner = (command, args, options) => {
+    calls.push({ command, args, options });
+    if (args[0] === "cat-file") {
+      parentChecks += 1;
+      return { status: parentChecks === 1 ? 1 : 0, stdout: "", stderr: "" };
+    }
+    if (args[0] === "fetch") {
+      return { status: 0, stdout: "", stderr: "" };
+    }
+    if (args[0] === "diff") {
+      return {
+        status: 0,
+        stdout: "cloudflare/migrations/0008_schema.sql\n",
+        stderr: "",
+      };
+    }
+    throw new Error("unexpected git call: " + args.join(" "));
+  };
+
+  assert.deepEqual(
+    migrationChangesSinceParent("/repo/cloudflare/app", "main", runner),
+    ["cloudflare/migrations/0008_schema.sql"],
+  );
+  assert.deepEqual(
+    calls.map(call => call.args),
+    [
+      ["cat-file", "-e", "HEAD^"],
+      ["fetch", "--no-tags", "--depth=2", "origin", "main"],
+      ["cat-file", "-e", "HEAD^"],
+      ["diff", "--name-only", "HEAD^", "HEAD", "--", "cloudflare/migrations"],
+    ],
+  );
+});
+
+test("migration guard remains fail-closed when the shallow parent cannot be fetched", () => {
+  const runner = (_command, args) => {
+    if (args[0] === "cat-file") return { status: 1, stdout: "", stderr: "" };
+    if (args[0] === "fetch") return { status: 1, stdout: "", stderr: "fetch failed" };
+    throw new Error("unexpected git call");
+  };
+
+  assert.throws(
+    () => migrationChangesSinceParent("/repo/cloudflare/app", "main", runner),
+    /hämta parent-commit/,
+  );
 });
 
 test("main Workers Build rejects D1 migration changes before provider reads", async () => {

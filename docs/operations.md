@@ -65,7 +65,7 @@ Verifiera app, engine och processor mot de genererade `wrangler.production.jsonc
 
 För manuell/self-hosted drift kan `cloudflare/deployment.json` eller `CLOUDFLARE_DEPLOYMENT_CONFIG` fortfarande generera `wrangler.production.jsonc` via `configure.mjs`. Cloudflare Workers Builds på `main` behöver däremot inte längre provider-side triggerändring: build-hooken rekonstruerar endast befintliga production-bindings och custom domains från current live Worker metadata och deployar med generated config. Inga resurser auto-provisioneras. De tre Workers Builds-checkarna ska därför åter behandlas som vanliga blocking checks och är inte undantagna i `.github/release-ignored-checks`.
 
-Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift. Main-hooken blockerar automatiskt Workers Builds om committen ändrar `cloudflare/migrations/**`; sådana releaser måste gå via den explicita D1-capable releasevägen innan Worker-kod som kräver det nya schemat får deployas.
+Migrationer ska behandlas som versionsstyrd stateförändring och inte som ad hoc-drift. Main-hooken blockerar automatiskt Workers Builds om committen ändrar `cloudflare/migrations/**`; sådana releaser måste gå via den explicita D1-capable releasevägen innan Worker-kod som kräver det nya schemat får deployas. Workers Builds kan checka ut repositoryt shallow; om `HEAD^` saknas hämtar hooken därför bounded history med `git fetch --no-tags --depth=2 origin <branch>` innan migrationsdiffen körs och failar fortsatt stängt om parent-committen inte går att verifiera.
 
 ### D1 data locality och read replication
 
