@@ -1,4 +1,1 @@
-# Fail-closed provider builds intentionally fail until Cloudflare Workers Builds production config is corrected.
-Workers Builds: produkter
-Workers Builds: produkter-motor
-Workers Builds: produkter-bearbetare
+# No provider checks are currently exempted from the release gate.
