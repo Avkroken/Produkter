@@ -123,7 +123,7 @@ Efter merge till `main`:
 5. en immutable SemVer-tagg och GitHub Release skapas på exakt verifierad target-SHA;
 6. release notes genereras som repositoryts canonical versionerade changelog.
 
-Canonical releasepublication använder repositoryts `GITHUB_TOKEN` med least privilege och behöver ingen separat PAT eller write-utökning av read-only GitHub App-integrationer. Det valfria rådgivande Copilot-jobbet använder separat read-only `COPILOT_GITHUB_TOKEN`.
+Canonical releasepubliceringen använder repositoryts `GITHUB_TOKEN` med least privilege och behöver ingen separat PAT eller write-utökning av read-only GitHub App-integrationer. Det valfria rådgivande Copilot-jobbet använder separat read-only `COPILOT_GITHUB_TOKEN`.
 
 Release är inte deployment: GitHub Release-flödet skapar inte en parallell Cloudflare-deployväg och deployar inte flera subsystem enbart därför att en release publiceras.
 
