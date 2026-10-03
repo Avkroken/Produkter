@@ -5,7 +5,7 @@
   "scripts": {
     "config:generate": "node ../scripts/configure.mjs",
     "dev": "npm run config:generate && wrangler dev --remote --config wrangler.production.jsonc",
-    "preview": "wrangler preview",
+    "preview": "wrangler preview --config wrangler.preview.jsonc",
     "test": "node --experimental-strip-types --test ../scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate": "npm test && node --check public/theme.js && node --check public/access-routing.js && npm run typecheck && npm run config:generate && wrangler deploy --dry-run --config wrangler.production.jsonc",

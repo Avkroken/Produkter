@@ -182,6 +182,12 @@ export async function runPortableBuildHook({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await runPortableBuildHook();
+  if (process.argv.includes("--require-workers-ci") && result.mode === "local") {
+    throw new Error(
+      "Tracked wrangler.jsonc is production-linked and may only deploy through Workers Builds. " +
+      "Use npm run preview for a local/preview deployment or npm run deploy for an explicit production deployment.",
+    );
+  }
   if (result.mode === "production") {
     const source = result.bindingSource === "historical_deployment_backfill"
       ? `deployed historical Worker version #${result.recoveredVersionNumber} (missing bindings only)`

@@ -17,7 +17,7 @@ När `cloudflare/deployment.json` innehåller din installation genererar du de g
 node cloudflare/scripts/configure.mjs
 ```
 
-Generatorn skriver `cloudflare/*/wrangler.production.jsonc`. De versionsstyrda `cloudflare/*/wrangler.jsonc` är resursfria, använder separata `*-preview`-Worker-namn lokalt och ska inte fyllas med installationens production-ID:n eller secretvärden. Workers Builds matchar production-triggern till den anslutna Worker-identiteten; därför bevarar tracked config befintliga vars/secrets/resursbindings via upload-metadata och explicit observability, medan icke-main branches kör Worker Previews.
+Generatorn skriver `cloudflare/*/wrangler.production.jsonc`. De versionsstyrda `cloudflare/*/wrangler.jsonc` är resursfria men använder de anslutna production-Worker-namnen som Cloudflare Workers Builds kräver; installationens production-ID:n och secretvärden ligger fortfarande utanför repositoryt. Lokala/explicita previews använder `cloudflare/*/wrangler.preview.jsonc` med separata `*-preview`-Worker-namn. Tracked production config bevarar befintliga vars/secrets/resursbindings via upload-metadata och explicit observability, medan icke-main branches kör Worker Previews.
 
 ## Snabb verifiering
 

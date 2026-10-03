@@ -65,11 +65,14 @@ const forbiddenProductionKeys = [
 ];
 
 for (const unit of units) {
-  test(unit + " tracked Wrangler config is preview-safe and preserves outer production state", () => {
+  test(unit + " tracked Wrangler config matches the connected production Worker and preserves live state", () => {
     const configPath = path.join(here, "..", unit, "wrangler.jsonc");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    assert.equal(config.name, previewWorkers[unit], configPath + " must remain locally preview-safe");
-    assert.equal(config.build?.command, "node ../scripts/guard-portable-deploy.mjs");
+    assert.equal(config.name, PRODUCTION_WORKERS[unit], configPath + " must match the connected production Worker");
+    assert.equal(
+      config.build?.command,
+      "node ../scripts/guard-portable-deploy.mjs --require-workers-ci",
+    );
     assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
     assert.equal(config.keep_vars, true, configPath + " must preserve live vars on the outer main deploy");
     assert.deepEqual(
@@ -86,6 +89,13 @@ for (const unit of units) {
     for (const key of forbiddenProductionKeys) {
       assert.equal(config[key], undefined, configPath + " must not track concrete production key " + key);
     }
+
+    const previewPath = path.join(here, "..", unit, "wrangler.preview.jsonc");
+    const preview = JSON.parse(fs.readFileSync(previewPath, "utf8"));
+    assert.equal(preview.name, previewWorkers[unit], previewPath + " must use the isolated preview Worker");
+    assert.equal(preview.build, undefined, previewPath + " must not run the production build hook");
+    assert.equal(preview.main, config.main);
+    assert.deepEqual(preview.observability, expectedObservability);
   });
 }
 
