@@ -188,7 +188,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       : "current live Worker state";
     console.log(
       `Deployed ${result.workerName} from generated production config using ${source}; ` +
-      "outer deploy remains preview-only.",
+      "outer deploy will inherit the complete latest binding state.",
     );
   }
 }

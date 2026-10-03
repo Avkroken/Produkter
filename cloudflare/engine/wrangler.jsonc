@@ -1,14 +1,60 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "produkter-motor-preview",
+  "name": "produkter-motor",
   "main": "src/worker.ts",
   "workers_dev": false,
   "preview_urls": false,
   "previews": {},
-  "build": { "command": "node ../scripts/guard-portable-deploy.mjs" },
+  "build": {
+    "command": "node ../scripts/guard-portable-deploy.mjs"
+  },
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "upload_source_maps": true
+  "upload_source_maps": true,
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "AI",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "DB",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "SCHEDULE_LIMIT",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "DESCRIBE_LIMIT",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "DESCRIBE_WORKERS",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "CLOUDFLARE_ACCOUNT_ID",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "CLOUDFLARE_BROWSER_TOKEN",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "INGEST_API_KEY",
+        "type": "inherit",
+        "version_id": "latest"
+      }
+    ]
+  }
 }

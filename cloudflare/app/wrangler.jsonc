@@ -1,11 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "produkter-preview",
+  "name": "produkter",
   "main": "src/access-worker.ts",
   "workers_dev": false,
   "preview_urls": false,
   "previews": {},
-  "build": { "command": "node ../scripts/guard-portable-deploy.mjs" },
+  "build": {
+    "command": "node ../scripts/guard-portable-deploy.mjs"
+  },
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"
@@ -27,6 +29,70 @@
       "/forgot-password.html",
       "/robots.txt",
       "/sitemap.xml"
+    ]
+  },
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "DB",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "ENGINE",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "JOB_QUEUE",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "SESSIONS",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "UPLOADS",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "PUBLIC_APP_URL",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "TURNSTILE_HOSTNAMES",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "TURNSTILE_SITE_KEY",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "INGEST_API_KEY",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "PROVIDER_CONFIG_KEY",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "RESEND_API_KEY",
+        "type": "inherit",
+        "version_id": "latest"
+      },
+      {
+        "name": "TURNSTILE_SECRET",
+        "type": "inherit",
+        "version_id": "latest"
+      }
     ]
   }
 }

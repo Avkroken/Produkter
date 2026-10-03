@@ -14,7 +14,9 @@ import {
   buildLiveProductionConfig,
   deploymentUnit,
   PRODUCTION_WORKERS,
+  productionInheritedBindings,
   productionWorkers,
+  REQUIRED_PRODUCTION_SECRETS,
   resolveProductionBindings,
 } from "./live-production-config.mjs";
 
@@ -32,14 +34,28 @@ const forbiddenProductionKeys = [
 ];
 
 for (const unit of units) {
-  test(unit + " tracked Wrangler config is preview-safe", () => {
+  test(unit + " tracked Wrangler config safely inherits production binding state", () => {
     const configPath = path.join(here, "..", unit, "wrangler.jsonc");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    assert.match(config.name, /-preview$/, configPath + " must target a preview-only Worker name");
+    assert.equal(config.name, PRODUCTION_WORKERS[unit]);
     assert.equal(config.build?.command, "node ../scripts/guard-portable-deploy.mjs");
-    assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
+    assert.deepEqual(config.previews, {}, configPath + " must keep Preview overrides separate");
+    assert.deepEqual(config.unsafe?.bindings, productionInheritedBindings(unit));
+    assert.equal(config.secrets, undefined, configPath + " must not duplicate inherited secret bindings");
+    for (const secretName of REQUIRED_PRODUCTION_SECRETS[unit]) {
+      assert.equal(
+        config.unsafe.bindings.some(binding => binding.name === secretName),
+        true,
+        configPath + " must inherit secret binding " + secretName,
+      );
+    }
+    assert.equal(
+      JSON.stringify(config.unsafe?.bindings).includes("00000000-"),
+      false,
+      configPath + " must not track provider resource IDs",
+    );
     for (const key of forbiddenProductionKeys) {
-      assert.equal(config[key], undefined, configPath + " must not track production key " + key);
+      assert.equal(config[key], undefined, configPath + " must not track concrete production key " + key);
     }
   });
 }
@@ -457,7 +473,7 @@ test("main Workers Build rejects D1 migration changes before provider reads", as
   );
 });
 
-test("main build hook deploys generated production config before outer preview deploy", async () => {
+test("main build hook deploys generated production config before outer inherited deploy", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "produkter-live-deploy-"));
   const cwd = path.join(root, "app");
   fs.mkdirSync(cwd, { recursive: true });
