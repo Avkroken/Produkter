@@ -187,33 +187,51 @@ const strippedBindings = {
   ],
 };
 
-for (const unit of units) {
-  test(unit + " recovers stripped production bindings from the latest complete Worker version", async () => {
-    const workerName = PRODUCTION_WORKERS[unit];
-    const fetchImpl = async (url) => {
-      assert.match(String(url), new RegExp("/workers/workers/" + workerName + "/versions"));
+function historicalRecoveryFetch(workerName, unit, versions = [
+  { id: "broken", number: 42, bindings: strippedBindings[unit] },
+  { id: "complete", number: 41, bindings: liveBindings[unit] },
+], deploymentVersionIds = ["broken", "complete"]) {
+  return async url => {
+    const text = String(url);
+    if (text.includes("/workers/scripts/" + workerName + "/deployments")) {
       return new Response(JSON.stringify({
         success: true,
-        result: [
-          { id: "broken", number: 42, bindings: strippedBindings[unit] },
-          { id: "complete", number: 41, bindings: liveBindings[unit] },
-        ],
+        result: {
+          deployments: deploymentVersionIds.map(versionId => ({
+            versions: [{ version_id: versionId, percentage: 100 }],
+          })),
+        },
       }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    };
+    }
+    if (text.includes("/workers/workers/" + workerName + "/versions")) {
+      return new Response(JSON.stringify({
+        success: true,
+        result: versions,
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ success: false }), { status: 404 });
+  };
+}
 
+for (const unit of units) {
+  test(unit + " backfills stripped production bindings from the latest complete deployed Worker version", async () => {
+    const workerName = PRODUCTION_WORKERS[unit];
     const state = await resolveProductionBindings({
       unit,
       workerName,
       currentBindings: strippedBindings[unit],
       token: "synthetic-token",
       accountId: "account-1",
-      fetchImpl,
+      fetchImpl: historicalRecoveryFetch(workerName, unit),
     });
 
-    assert.equal(state.source, "historical_version");
+    assert.equal(state.source, "historical_deployment_backfill");
     assert.equal(state.versionNumber, 41);
     assert.ok(state.missing.length > 0);
     const serialized = JSON.stringify(state.vars || {});
@@ -238,7 +256,67 @@ for (const unit of units) {
   });
 }
 
-test("production binding recovery fails closed when no complete Worker version exists", async () => {
+test("partial recovery preserves surviving live bindings and vars", async () => {
+  const currentDatabaseId = "22222222-2222-4222-8222-222222222222";
+  const currentUrl = "https://current.example.test";
+  const currentBindings = liveBindings.app
+    .filter(binding => binding.name !== "JOB_QUEUE")
+    .map(binding => {
+      if (binding.name === "DB") return { ...binding, id: currentDatabaseId };
+      if (binding.name === "PUBLIC_APP_URL") return { ...binding, text: currentUrl };
+      return binding;
+    });
+
+  const state = await resolveProductionBindings({
+    unit: "app",
+    workerName: PRODUCTION_WORKERS.app,
+    currentBindings,
+    token: "synthetic-token",
+    accountId: "account-1",
+    fetchImpl: historicalRecoveryFetch(PRODUCTION_WORKERS.app, "app"),
+  });
+
+  assert.deepEqual(state.missing, ["JOB_QUEUE (queue)"]);
+  assert.equal(
+    state.bindings.find(binding => binding.name === "DB" && binding.type === "d1").id,
+    currentDatabaseId,
+  );
+  assert.equal(
+    state.bindings.find(binding => binding.name === "PUBLIC_APP_URL").text,
+    currentUrl,
+  );
+  assert.equal(
+    state.bindings.find(binding => binding.name === "JOB_QUEUE").queue_name,
+    "produkter-jobb",
+  );
+  assert.equal(state.vars.PUBLIC_APP_URL, currentUrl);
+});
+
+test("recovery ignores complete versions that were uploaded but never deployed", async () => {
+  const workerName = PRODUCTION_WORKERS.app;
+  const versions = [
+    { id: "uploaded-only", number: 43, bindings: liveBindings.app },
+    { id: "broken-deployed", number: 42, bindings: strippedBindings.app },
+    { id: "complete-deployed", number: 41, bindings: liveBindings.app },
+  ];
+  const state = await resolveProductionBindings({
+    unit: "app",
+    workerName,
+    currentBindings: strippedBindings.app,
+    token: "synthetic-token",
+    accountId: "account-1",
+    fetchImpl: historicalRecoveryFetch(
+      workerName,
+      "app",
+      versions,
+      ["broken-deployed", "complete-deployed"],
+    ),
+  });
+
+  assert.equal(state.versionNumber, 41);
+});
+
+test("production binding recovery fails closed when no complete deployed Worker version exists", async () => {
   await assert.rejects(
     resolveProductionBindings({
       unit: "app",
@@ -246,17 +324,14 @@ test("production binding recovery fails closed when no complete Worker version e
       currentBindings: strippedBindings.app,
       token: "synthetic-token",
       accountId: "account-1",
-      fetchImpl: async () => new Response(JSON.stringify({
-        success: true,
-        result: [
-          { id: "broken", number: 42, bindings: strippedBindings.app },
-        ],
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+      fetchImpl: historicalRecoveryFetch(
+        "produkter",
+        "app",
+        [{ id: "broken", number: 42, bindings: strippedBindings.app }],
+        ["broken"],
+      ),
     }),
-    /Ingen komplett historisk Worker-version/,
+    /Ingen komplett deployad historisk Worker-version/,
   );
 });
 

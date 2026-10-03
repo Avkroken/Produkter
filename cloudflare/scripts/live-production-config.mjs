@@ -314,6 +314,44 @@ export async function readLiveWorkerSettings({
   return matches[0];
 }
 
+function deployedVersionIds(deployments) {
+  const ids = [];
+  const seen = new Set();
+  for (const deployment of Array.isArray(deployments) ? deployments : []) {
+    const versions = [...(Array.isArray(deployment?.versions) ? deployment.versions : [])]
+      .sort((left, right) => Number(right?.percentage || 0) - Number(left?.percentage || 0));
+    for (const version of versions) {
+      const id = optionalString(version?.version_id);
+      if (id && !seen.has(id)) {
+        ids.push(id);
+        seen.add(id);
+      }
+    }
+  }
+  return ids;
+}
+
+export function backfillMissingProductionBindings(unit, currentBindings, recoveredBindings) {
+  const current = Array.isArray(currentBindings) ? [...currentBindings] : [];
+  const recovered = Array.isArray(recoveredBindings) ? recoveredBindings : [];
+  const contract = REQUIRED_PRODUCTION_BINDINGS[unit];
+  if (!contract) throw new Error("Okänd deployenhet: " + unit);
+
+  for (const [name, type] of contract) {
+    if (current.some(binding => binding?.name === name && binding?.type === type)) continue;
+    const fallback = recovered.find(
+      binding => binding?.name === name && binding?.type === type,
+    );
+    if (!fallback) {
+      throw new Error(
+        "Historisk Worker-version saknar recovery-binding " + name + " (" + type + ").",
+      );
+    }
+    current.push(fallback);
+  }
+  return current;
+}
+
 export async function readLatestCompleteWorkerVersion({
   unit,
   workerName,
@@ -322,28 +360,62 @@ export async function readLatestCompleteWorkerVersion({
   fetchImpl = fetch,
   perPage = 100,
 }) {
-  const url =
-    `${API_ROOT}/accounts/${encodeURIComponent(accountId)}` +
-    `/workers/workers/${encodeURIComponent(workerName)}/versions` +
-    `?per_page=${encodeURIComponent(String(perPage))}`;
-  const { response, payload } = await apiJson(url, token, fetchImpl);
-  const versions = Array.isArray(payload?.result)
-    ? payload.result
-    : Array.isArray(payload?.result?.items)
-      ? payload.result.items
+  const encodedAccount = encodeURIComponent(accountId);
+  const encodedWorker = encodeURIComponent(workerName);
+  const deploymentsUrl =
+    API_ROOT + "/accounts/" + encodedAccount +
+    "/workers/scripts/" + encodedWorker + "/deployments" +
+    "?per_page=" + encodeURIComponent(String(perPage));
+  const deploymentsResult = await apiJson(deploymentsUrl, token, fetchImpl);
+  const deployments = Array.isArray(deploymentsResult.payload?.result?.deployments)
+    ? deploymentsResult.payload.result.deployments
+    : Array.isArray(deploymentsResult.payload?.result)
+      ? deploymentsResult.payload.result
       : [];
-  if (!response.ok || payload?.success !== true || versions.length === 0) {
+  if (
+    !deploymentsResult.response.ok ||
+    deploymentsResult.payload?.success !== true ||
+    deployments.length === 0
+  ) {
     throw new Error(
-      `Kunde inte läsa Worker-versioner för ${workerName} (HTTP ${response.status}).`,
+      "Kunde inte läsa Worker-deployments för " + workerName +
+      " (HTTP " + deploymentsResult.response.status + ").",
     );
   }
 
-  const version = [...versions]
-    .sort((left, right) => Number(right?.number || 0) - Number(left?.number || 0))
+  const versionIds = deployedVersionIds(deployments);
+  if (versionIds.length === 0) {
+    throw new Error("Worker " + workerName + " saknar deployad versionshistorik.");
+  }
+
+  const versionsUrl =
+    API_ROOT + "/accounts/" + encodedAccount +
+    "/workers/workers/" + encodedWorker + "/versions" +
+    "?per_page=" + encodeURIComponent(String(perPage));
+  const versionsResult = await apiJson(versionsUrl, token, fetchImpl);
+  const versions = Array.isArray(versionsResult.payload?.result)
+    ? versionsResult.payload.result
+    : Array.isArray(versionsResult.payload?.result?.items)
+      ? versionsResult.payload.result.items
+      : [];
+  if (
+    !versionsResult.response.ok ||
+    versionsResult.payload?.success !== true ||
+    versions.length === 0
+  ) {
+    throw new Error(
+      "Kunde inte läsa Worker-versioner för " + workerName +
+      " (HTTP " + versionsResult.response.status + ").",
+    );
+  }
+
+  const byId = new Map(versions.map(version => [version?.id, version]));
+  const version = versionIds
+    .map(id => byId.get(id))
     .find(candidate => productionBindingsComplete(unit, candidate?.bindings));
   if (!version) {
     throw new Error(
-      `Ingen komplett historisk Worker-version hittades för ${workerName}.`,
+      "Ingen komplett deployad historisk Worker-version hittades för " + workerName + ".",
     );
   }
 
@@ -380,11 +452,16 @@ export async function resolveProductionBindings({
     accountId,
     fetchImpl,
   });
+  const bindings = backfillMissingProductionBindings(
+    unit,
+    currentBindings,
+    recovered.bindings,
+  );
 
   return {
-    source: "historical_version",
-    bindings: recovered.bindings,
-    vars: plainTextVars(recovered.bindings),
+    source: "historical_deployment_backfill",
+    bindings,
+    vars: plainTextVars(bindings),
     versionNumber: recovered.number,
     missing,
   };

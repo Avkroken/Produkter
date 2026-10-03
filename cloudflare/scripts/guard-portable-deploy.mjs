@@ -183,8 +183,8 @@ export async function runPortableBuildHook({
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await runPortableBuildHook();
   if (result.mode === "production") {
-    const source = result.bindingSource === "historical_version"
-      ? `historical Worker version #${result.recoveredVersionNumber}`
+    const source = result.bindingSource === "historical_deployment_backfill"
+      ? `deployed historical Worker version #${result.recoveredVersionNumber} (missing bindings only)`
       : "current live Worker state";
     console.log(
       `Deployed ${result.workerName} from generated production config using ${source}; ` +
