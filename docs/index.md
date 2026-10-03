@@ -41,7 +41,7 @@ Läs scraperkoden och [fetcher-dokumentationen](../scraper/fetcher/README.md). H
 
 ### Jag ändrar Cloudflare runtime
 
-Läs de versionsstyrda Preview-konfigurationerna `cloudflare/*/wrangler.jsonc`, den genererade production-modellen som beskrivs i drift/self-hosting, migrationer och operations-dokumentet. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
+Läs de versionsstyrda preview-safe Wrangler-kontrakten `cloudflare/*/wrangler.jsonc`, den genererade production-modellen som beskrivs i drift/self-hosting, migrationer och operations-dokumentet. Tracked configs bevarar production-bindings via upload-metadata när Workers Builds matchar den anslutna Worker-identiteten, medan icke-main branches använder Worker Previews. App/engine/processor är separata deployenheter och ska inte beskrivas som en enda Worker.
 
 ## Wiki
 

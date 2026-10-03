@@ -5,10 +5,45 @@
   "workers_dev": false,
   "preview_urls": false,
   "previews": {},
-  "build": { "command": "node ../scripts/guard-portable-deploy.mjs" },
+  "build": {
+    "command": "node ../scripts/guard-portable-deploy.mjs"
+  },
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "upload_source_maps": true
+  "upload_source_maps": true,
+  "unsafe": {
+    "metadata": {
+      "keep_bindings": [
+        "plain_text",
+        "json",
+        "secret_text",
+        "secret_key",
+        "d1",
+        "service",
+        "queue",
+        "kv_namespace",
+        "r2_bucket",
+        "ai"
+      ]
+    }
+  },
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": true
+    }
+  }
 }

@@ -20,6 +20,39 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const units = ["app", "engine", "processor"];
+const previewWorkers = {
+  app: "produkter-preview",
+  engine: "produkter-motor-preview",
+  processor: "produkter-bearbetare-preview",
+};
+const outerKeepBindingTypes = [
+  "plain_text",
+  "json",
+  "secret_text",
+  "secret_key",
+  "d1",
+  "service",
+  "queue",
+  "kv_namespace",
+  "r2_bucket",
+  "ai",
+];
+const expectedObservability = {
+  enabled: true,
+  head_sampling_rate: 0.1,
+  redact_query_string: true,
+  logs: {
+    enabled: true,
+    head_sampling_rate: 0.1,
+    invocation_logs: true,
+    persist: true,
+  },
+  traces: {
+    enabled: true,
+    head_sampling_rate: 0.01,
+    persist: true,
+  },
+};
 const forbiddenProductionKeys = [
   "routes",
   "services",
@@ -32,14 +65,26 @@ const forbiddenProductionKeys = [
 ];
 
 for (const unit of units) {
-  test(unit + " tracked Wrangler config is preview-safe", () => {
+  test(unit + " tracked Wrangler config is preview-safe and preserves outer production state", () => {
     const configPath = path.join(here, "..", unit, "wrangler.jsonc");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    assert.match(config.name, /-preview$/, configPath + " must target a preview-only Worker name");
+    assert.equal(config.name, previewWorkers[unit], configPath + " must remain locally preview-safe");
     assert.equal(config.build?.command, "node ../scripts/guard-portable-deploy.mjs");
     assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
+    assert.equal(config.keep_vars, true, configPath + " must preserve live vars on the outer main deploy");
+    assert.deepEqual(
+      config.unsafe?.metadata?.keep_bindings,
+      outerKeepBindingTypes,
+      configPath + " must preserve all production binding types on the outer main deploy",
+    );
+    assert.equal(config.unsafe?.bindings, undefined, configPath + " must not name individual live bindings");
+    assert.deepEqual(
+      config.observability,
+      expectedObservability,
+      configPath + " must preserve production observability on the outer main deploy",
+    );
     for (const key of forbiddenProductionKeys) {
-      assert.equal(config[key], undefined, configPath + " must not track production key " + key);
+      assert.equal(config[key], undefined, configPath + " must not track concrete production key " + key);
     }
   });
 }
