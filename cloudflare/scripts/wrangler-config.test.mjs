@@ -77,8 +77,8 @@ for (const unit of units) {
     assert.equal(config.keep_vars, true, configPath + " must preserve live vars on the outer main deploy");
     assert.equal(
       config.workers_dev,
-      unit === "engine",
-      configPath + " must expose workers.dev only for the API-key-protected engine machine ingress",
+      false,
+      configPath + " must not expose production Workers on workers.dev",
     );
     assert.deepEqual(
       config.unsafe?.metadata?.keep_bindings,
@@ -173,8 +173,8 @@ const liveBindings = {
 };
 
 const liveDomains = [
-  { service: "produkter", hostname: "produkter.example.test", environment: "production" },
-  { service: "produkter-motor", hostname: "motor.example.test", environment: "production" },
+  { service: "produkter", hostname: "produkter.example.test", zone_name: "example.test", environment: "production" },
+  { service: "produkter-motor", hostname: "motor.example.test", zone_name: "example.test", environment: "production" },
 ];
 
 for (const unit of units) {
@@ -182,7 +182,7 @@ for (const unit of units) {
     const config = buildLiveProductionConfig(unit, liveBindings[unit], liveDomains);
     assert.equal(config.name, PRODUCTION_WORKERS[unit]);
     assert.equal(config.keep_vars, true);
-    assert.equal(config.workers_dev, unit === "engine");
+    assert.equal(config.workers_dev, false);
     assert.equal(config.vars, undefined);
     assert.equal(config.build, undefined);
     assert.equal(JSON.stringify(config).includes("should-not-be-copied"), false);
@@ -191,7 +191,12 @@ for (const unit of units) {
     assert.equal(JSON.stringify(config).includes("PROVIDER_CONFIG_KEY"), false);
 
     if (unit === "app") {
-      assert.deepEqual(config.routes, [{ pattern: "produkter.example.test", custom_domain: true }]);
+      assert.equal(config.assets.run_worker_first.includes("/jobs/*"), true);
+      assert.equal(config.assets.run_worker_first.includes("/fetcher/*"), true);
+      assert.deepEqual(config.routes, [
+        { pattern: "produkter.example.test", custom_domain: true },
+        { pattern: "motor.example.test/jobs/*", zone_name: "example.test" },
+      ]);
     } else if (unit === "engine") {
       assert.deepEqual(config.routes, [{ pattern: "motor.example.test", custom_domain: true }]);
     } else {
@@ -448,7 +453,10 @@ test("main Workers Build generates production config from live state", async () 
   const config = JSON.parse(fs.readFileSync(path.join(cwd, "wrangler.production.jsonc"), "utf8"));
   assert.equal(config.name, "produkter");
   assert.equal(config.keep_vars, true);
-  assert.deepEqual(config.routes, [{ pattern: "produkter.example.test", custom_domain: true }]);
+  assert.deepEqual(config.routes, [
+    { pattern: "produkter.example.test", custom_domain: true },
+    { pattern: "motor.example.test/jobs/*", zone_name: "example.test" },
+  ]);
   assert.equal(fs.existsSync(path.join(cwd, ".wrangler/deploy/config.json")), false);
 });
 

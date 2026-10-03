@@ -110,13 +110,13 @@ function observability() {
   };
 }
 
-function common(name, workersDev = false) {
+function common(name) {
   return {
     "$schema": "node_modules/wrangler/config-schema.json",
     name,
     compatibility_date: "2026-06-01",
     compatibility_flags: ["nodejs_compat"],
-    workers_dev: workersDev,
+    workers_dev: false,
     preview_urls: false,
     previews: {},
     keep_vars: true,
@@ -145,7 +145,7 @@ function queueBinding(bindings) {
   return requiredString(binding.queue_name, "JOB_QUEUE.queue_name");
 }
 
-function productionRoute(domains, workerName, required) {
+function productionDomain(domains, workerName, required) {
   if (!Array.isArray(domains)) throw new Error("Live Worker domains saknas.");
   const matching = domains.filter(record =>
     record?.service === workerName &&
@@ -157,17 +157,29 @@ function productionRoute(domains, workerName, required) {
     if (matching.length > 0) {
       throw new Error(`Worker ${workerName} ska inte ha custom domain i generated config.`);
     }
-    return [];
+    return null;
   }
   if (matching.length !== 1) {
     throw new Error(
       `Förväntade exakt en production custom domain för ${workerName}, hittade ${matching.length}.`,
     );
   }
-  return [{
-    pattern: matching[0].hostname.trim(),
-    custom_domain: true,
-  }];
+  return matching[0];
+}
+
+function productionRoute(domains, workerName, required) {
+  const domain = productionDomain(domains, workerName, required);
+  return domain
+    ? [{ pattern: domain.hostname.trim(), custom_domain: true }]
+    : [];
+}
+
+function fetcherIngressRoute(domains, engineWorkerName) {
+  const domain = productionDomain(domains, engineWorkerName, true);
+  return {
+    pattern: `${domain.hostname.trim()}/jobs/*`,
+    zone_name: requiredString(domain.zone_name, `${engineWorkerName}.zone_name`),
+  };
 }
 
 export function buildLiveProductionConfig(unit, bindings, domains = [], options = {}) {
@@ -193,6 +205,8 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
         run_worker_first: [
           "/",
           "/api/*",
+          "/fetcher/*",
+          "/jobs/*",
           "/signup",
           "/login",
           "/logout",
@@ -209,7 +223,10 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
         binding: "ENGINE",
         service: requiredString(service.service, "ENGINE.service"),
       }],
-      routes: productionRoute(domains, workerName, true),
+      routes: [
+        ...productionRoute(domains, workerName, true),
+        fetcherIngressRoute(domains, workers.engine),
+      ],
       d1_databases: [d1Binding(bindings)],
       r2_buckets: [r2Binding(bindings)],
       kv_namespaces: [{
@@ -225,9 +242,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
   if (unit === "engine") {
     requiredBinding(bindings, "AI", "ai");
     return {
-      // Engine needs a machine ingress outside interactive Cloudflare Access.
-      // All non-health HTTP routes still require INGEST_API_KEY.
-      ...common(workerName, true),
+      ...common(workerName),
       ...recoveredVars,
       main: "src/worker.ts",
       upload_source_maps: true,
