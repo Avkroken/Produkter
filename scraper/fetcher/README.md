@@ -60,6 +60,8 @@ INGEST_API_KEY=<ditt-värde>
 
 Runtime-imagen publiceras från repositoryts `main`-gren till `ghcr.io/avkroken/produkter-fetcher:latest`. Compose drar den publicerade imagen; renderhosten behöver alltså inte bygga Playwright/Chromium lokalt. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
 
+Om engine-Workerns custom domain ligger bakom interaktiv Cloudflare Access ska fetchern använda Workerns `workers.dev`-origin som `ENGINE_URL`. Den ingressen är endast till för maskintrafik; engine-Workerns muterande HTTP-rutter fortsätter kräva `INGEST_API_KEY`.
+
 Använd explicit `-f compose.yml` så att en host-global `COMPOSE_FILE` inte kan styra kommandot till en annan stack.
 
 Dra och starta:

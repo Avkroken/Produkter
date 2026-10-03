@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "produkter-motor",
   "main": "src/worker.ts",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
   "previews": {},
   "build": {

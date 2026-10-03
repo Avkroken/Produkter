@@ -110,13 +110,13 @@ function observability() {
   };
 }
 
-function common(name) {
+function common(name, workersDev = false) {
   return {
     "$schema": "node_modules/wrangler/config-schema.json",
     name,
     compatibility_date: "2026-06-01",
     compatibility_flags: ["nodejs_compat"],
-    workers_dev: false,
+    workers_dev: workersDev,
     preview_urls: false,
     previews: {},
     keep_vars: true,
@@ -225,7 +225,9 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
   if (unit === "engine") {
     requiredBinding(bindings, "AI", "ai");
     return {
-      ...common(workerName),
+      // Engine needs a machine ingress outside interactive Cloudflare Access.
+      // All non-health HTTP routes still require INGEST_API_KEY.
+      ...common(workerName, true),
       ...recoveredVars,
       main: "src/worker.ts",
       upload_source_maps: true,
