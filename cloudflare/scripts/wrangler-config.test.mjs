@@ -14,14 +14,45 @@ import {
   buildLiveProductionConfig,
   deploymentUnit,
   PRODUCTION_WORKERS,
-  productionInheritedBindings,
   productionWorkers,
-  REQUIRED_PRODUCTION_SECRETS,
   resolveProductionBindings,
 } from "./live-production-config.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const units = ["app", "engine", "processor"];
+const previewWorkers = {
+  app: "produkter-preview",
+  engine: "produkter-motor-preview",
+  processor: "produkter-bearbetare-preview",
+};
+const outerKeepBindingTypes = [
+  "plain_text",
+  "json",
+  "secret_text",
+  "secret_key",
+  "d1",
+  "service",
+  "queue",
+  "kv_namespace",
+  "r2_bucket",
+  "ai",
+];
+const expectedObservability = {
+  enabled: true,
+  head_sampling_rate: 0.1,
+  redact_query_string: true,
+  logs: {
+    enabled: true,
+    head_sampling_rate: 0.1,
+    invocation_logs: true,
+    persist: true,
+  },
+  traces: {
+    enabled: true,
+    head_sampling_rate: 0.01,
+    persist: true,
+  },
+};
 const forbiddenProductionKeys = [
   "routes",
   "services",
@@ -34,25 +65,23 @@ const forbiddenProductionKeys = [
 ];
 
 for (const unit of units) {
-  test(unit + " tracked Wrangler config safely inherits production binding state", () => {
+  test(unit + " tracked Wrangler config is preview-safe and preserves outer production state", () => {
     const configPath = path.join(here, "..", unit, "wrangler.jsonc");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    assert.equal(config.name, PRODUCTION_WORKERS[unit]);
+    assert.equal(config.name, previewWorkers[unit], configPath + " must remain locally preview-safe");
     assert.equal(config.build?.command, "node ../scripts/guard-portable-deploy.mjs");
-    assert.deepEqual(config.previews, {}, configPath + " must keep Preview overrides separate");
-    assert.deepEqual(config.unsafe?.bindings, productionInheritedBindings(unit));
-    assert.equal(config.secrets, undefined, configPath + " must not duplicate inherited secret bindings");
-    for (const secretName of REQUIRED_PRODUCTION_SECRETS[unit]) {
-      assert.equal(
-        config.unsafe.bindings.some(binding => binding.name === secretName),
-        true,
-        configPath + " must inherit secret binding " + secretName,
-      );
-    }
-    assert.equal(
-      JSON.stringify(config.unsafe?.bindings).includes("00000000-"),
-      false,
-      configPath + " must not track provider resource IDs",
+    assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
+    assert.equal(config.keep_vars, true, configPath + " must preserve live vars on the outer main deploy");
+    assert.deepEqual(
+      config.unsafe?.metadata?.keep_bindings,
+      outerKeepBindingTypes,
+      configPath + " must preserve all production binding types on the outer main deploy",
+    );
+    assert.equal(config.unsafe?.bindings, undefined, configPath + " must not name individual live bindings");
+    assert.deepEqual(
+      config.observability,
+      expectedObservability,
+      configPath + " must preserve production observability on the outer main deploy",
     );
     for (const key of forbiddenProductionKeys) {
       assert.equal(config[key], undefined, configPath + " must not track concrete production key " + key);
@@ -473,7 +502,7 @@ test("main Workers Build rejects D1 migration changes before provider reads", as
   );
 });
 
-test("main build hook deploys generated production config before outer inherited deploy", async () => {
+test("main build hook deploys generated production config before outer preview deploy", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "produkter-live-deploy-"));
   const cwd = path.join(root, "app");
   fs.mkdirSync(cwd, { recursive: true });

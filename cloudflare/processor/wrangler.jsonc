@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "produkter-bearbetare",
+  "name": "produkter-bearbetare-preview",
   "main": "src/worker.ts",
   "workers_dev": false,
   "preview_urls": false,
@@ -13,27 +13,36 @@
     "nodejs_compat"
   ],
   "unsafe": {
-    "bindings": [
-      {
-        "name": "DB",
-        "type": "inherit",
-        "version_id": "latest"
-      },
-      {
-        "name": "JOB_QUEUE",
-        "type": "inherit",
-        "version_id": "latest"
-      },
-      {
-        "name": "UPLOADS",
-        "type": "inherit",
-        "version_id": "latest"
-      },
-      {
-        "name": "PROVIDER_CONFIG_KEY",
-        "type": "inherit",
-        "version_id": "latest"
-      }
-    ]
+    "metadata": {
+      "keep_bindings": [
+        "plain_text",
+        "json",
+        "secret_text",
+        "secret_key",
+        "d1",
+        "service",
+        "queue",
+        "kv_namespace",
+        "r2_bucket",
+        "ai"
+      ]
+    }
+  },
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": true
+    }
   }
 }

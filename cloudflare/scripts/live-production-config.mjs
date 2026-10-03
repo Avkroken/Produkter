@@ -8,7 +8,7 @@ export const PRODUCTION_WORKERS = Object.freeze({
   processor: "produkter-bearbetare",
 });
 
-export const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
+const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
   app: Object.freeze([
     ["DB", "d1"],
     ["ENGINE", "service"],
@@ -32,37 +32,6 @@ export const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
     ["UPLOADS", "r2_bucket"],
   ]),
 });
-
-export const REQUIRED_PRODUCTION_SECRETS = Object.freeze({
-  app: Object.freeze([
-    "INGEST_API_KEY",
-    "PROVIDER_CONFIG_KEY",
-    "RESEND_API_KEY",
-    "TURNSTILE_SECRET",
-  ]),
-  engine: Object.freeze([
-    "CLOUDFLARE_ACCOUNT_ID",
-    "CLOUDFLARE_BROWSER_TOKEN",
-    "INGEST_API_KEY",
-  ]),
-  processor: Object.freeze([
-    "PROVIDER_CONFIG_KEY",
-  ]),
-});
-
-export function productionInheritedBindings(unit) {
-  const contract = REQUIRED_PRODUCTION_BINDINGS[unit];
-  const secrets = REQUIRED_PRODUCTION_SECRETS[unit];
-  if (!contract || !secrets) throw new Error(`Okänd deployenhet: ${unit}`);
-  return [
-    ...contract.map(([name]) => name),
-    ...secrets,
-  ].map(name => ({
-    name,
-    type: "inherit",
-    version_id: "latest",
-  }));
-}
 
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
