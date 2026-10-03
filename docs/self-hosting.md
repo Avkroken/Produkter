@@ -90,7 +90,7 @@ Generera därefter Wrangler-konfigurationerna:
 node cloudflare/scripts/configure.mjs
 ```
 
-Det skapar lokala `cloudflare/*/wrangler.production.jsonc`. De är gitignorerade och innehåller installationens produktionsresurser. De versionsstyrda `cloudflare/*/wrangler.jsonc` behåller `*-preview`-Worker-namn och inga provider-ID:n/secrets, så lokal standarddeploy förblir preview-safe. I Workers Builds matchar Cloudflare production-triggern till den anslutna Worker-identiteten; tracked config bevarar därför befintliga vars, secrets och resursbindings genom `keep_vars` och `unsafe.metadata.keep_bindings`, samt samma observability-kontrakt som production-configen. Worker Previews används för icke-main branches. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
+Det skapar lokala `cloudflare/*/wrangler.production.jsonc`. De är gitignorerade och innehåller installationens produktionsresurser. De versionsstyrda `cloudflare/*/wrangler.jsonc` använder de anslutna production-Worker-namnen men inga provider-ID:n/secrets. Direkt lokal deploy via dessa filer blockeras av build-hooken; lokala/explicita previews använder `wrangler.preview.jsonc` med separata `*-preview`-namn. I Workers Builds bevarar tracked config befintliga vars, secrets och resursbindings genom `keep_vars` och `unsafe.metadata.keep_bindings`, samt samma observability-kontrakt som production-configen. Worker Previews används för icke-main branches. Efter `npm ci` använder `npx wrangler` respektive `npm run ...` repositoryts låsta Wrangler-version i varje komponent.
 
 För en **ny D1-databas**, initiera grundschemat en gång innan första app-deployen:
 

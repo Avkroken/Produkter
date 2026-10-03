@@ -62,21 +62,21 @@ jobs:
           npm test
           npm run typecheck
           node --check public/access-routing.js
-          npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.preview.jsonc
           npx wrangler deploy --dry-run --config wrangler.production.jsonc
       - name: Validate Cloudflare engine
         working-directory: cloudflare/engine
         run: |
           npm ci
           npm run typecheck
-          npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.preview.jsonc
           npx wrangler deploy --dry-run --config wrangler.production.jsonc
       - name: Validate Cloudflare processor
         working-directory: cloudflare/processor
         run: |
           npm ci
           npx tsc --noEmit
-          npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.preview.jsonc
           npx wrangler deploy --dry-run --config wrangler.production.jsonc
 
   node-cloudflare:

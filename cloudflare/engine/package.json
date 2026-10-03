@@ -5,7 +5,7 @@
   "scripts": {
     "config:generate": "node ../scripts/configure.mjs",
     "dev": "npm run config:generate && wrangler dev --remote --config wrangler.production.jsonc",
-    "preview": "wrangler preview",
+    "preview": "wrangler preview --config wrangler.preview.jsonc",
     "deploy": "npm run config:generate && wrangler deploy --strict --config wrangler.production.jsonc",
     "verify:production": "node ../scripts/verify-production.mjs engine",
     "typecheck": "tsc --noEmit",
