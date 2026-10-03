@@ -14,6 +14,8 @@ import {
   buildLiveProductionConfig,
   deploymentUnit,
   PRODUCTION_WORKERS,
+  productionWorkers,
+  resolveProductionBindings,
 } from "./live-production-config.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +59,30 @@ test("portable config remains preview-safe outside main Workers Builds", async (
   );
 });
 
+test("production Worker names support environment overrides without duplicating defaults", () => {
+  assert.deepEqual(productionWorkers({}), PRODUCTION_WORKERS);
+  assert.deepEqual(
+    productionWorkers({ CLOUDFLARE_WORKER_APP: "catalog" }),
+    {
+      app: "catalog",
+      engine: "catalog-motor",
+      processor: "catalog-bearbetare",
+    },
+  );
+  assert.deepEqual(
+    productionWorkers({
+      CLOUDFLARE_WORKER_APP: "catalog",
+      CLOUDFLARE_WORKER_ENGINE: "describe-worker",
+      CLOUDFLARE_WORKER_PROCESSOR: "queue-worker",
+    }),
+    {
+      app: "catalog",
+      engine: "describe-worker",
+      processor: "queue-worker",
+    },
+  );
+});
+
 const liveBindings = {
   app: [
     { name: "ASSETS", type: "assets" },
@@ -66,13 +92,17 @@ const liveBindings = {
     { name: "SESSIONS", type: "kv_namespace", namespace_id: "a".repeat(32) },
     { name: "UPLOADS", type: "r2_bucket", bucket_name: "produkter-uppladdningar" },
     { name: "PUBLIC_APP_URL", type: "plain_text", text: "https://should-not-be-copied.example" },
-    { name: "TURNSTILE_SECRET", type: "secret_text" },
+    { name: "TURNSTILE_HOSTNAMES", type: "plain_text", text: "produkter.example.test" },
+    { name: "TURNSTILE_SITE_KEY", type: "plain_text", text: "public-site-key" },
+    { name: "TURNSTILE_SECRET", type: "secret_text", text: "must-not-be-copied" },
   ],
   engine: [
     { name: "AI", type: "ai" },
     { name: "DB", type: "d1", id: "11111111-1111-4111-8111-111111111111" },
     { name: "SCHEDULE_LIMIT", type: "plain_text", text: "200" },
-    { name: "INGEST_API_KEY", type: "secret_text" },
+    { name: "DESCRIBE_LIMIT", type: "plain_text", text: "10" },
+    { name: "DESCRIBE_WORKERS", type: "plain_text", text: "2" },
+    { name: "INGEST_API_KEY", type: "secret_text", text: "must-not-be-copied" },
   ],
   processor: [
     { name: "DB", type: "d1", id: "11111111-1111-4111-8111-111111111111" },
@@ -141,6 +171,167 @@ test("production config fails closed when live resources or domains are incomple
       [...liveDomains, { service: "produkter-bearbetare", hostname: "processor.example.test" }],
     ),
     /ska inte ha custom domain/,
+  );
+});
+
+const strippedBindings = {
+  app: [
+    { name: "ASSETS", type: "assets" },
+    { name: "TURNSTILE_SECRET", type: "secret_text", text: "never-copy" },
+  ],
+  engine: [
+    { name: "INGEST_API_KEY", type: "secret_text", text: "never-copy" },
+  ],
+  processor: [
+    { name: "PROVIDER_CONFIG_KEY", type: "secret_text", text: "never-copy" },
+  ],
+};
+
+function historicalRecoveryFetch(workerName, unit, versions = [
+  { id: "broken", number: 42, bindings: strippedBindings[unit] },
+  { id: "complete", number: 41, bindings: liveBindings[unit] },
+], deploymentVersionIds = ["broken", "complete"]) {
+  return async url => {
+    const text = String(url);
+    if (text.includes("/workers/scripts/" + workerName + "/deployments")) {
+      return new Response(JSON.stringify({
+        success: true,
+        result: {
+          deployments: deploymentVersionIds.map(versionId => ({
+            versions: [{ version_id: versionId, percentage: 100 }],
+          })),
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (text.includes("/workers/workers/" + workerName + "/versions")) {
+      return new Response(JSON.stringify({
+        success: true,
+        result: versions,
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ success: false }), { status: 404 });
+  };
+}
+
+for (const unit of units) {
+  test(unit + " backfills stripped production bindings from the latest complete deployed Worker version", async () => {
+    const workerName = PRODUCTION_WORKERS[unit];
+    const state = await resolveProductionBindings({
+      unit,
+      workerName,
+      currentBindings: strippedBindings[unit],
+      token: "synthetic-token",
+      accountId: "account-1",
+      fetchImpl: historicalRecoveryFetch(workerName, unit),
+    });
+
+    assert.equal(state.source, "historical_deployment_backfill");
+    assert.equal(state.versionNumber, 41);
+    assert.ok(state.missing.length > 0);
+    const serialized = JSON.stringify(state.vars || {});
+    assert.equal(serialized.includes("never-copy"), false);
+
+    const config = buildLiveProductionConfig(
+      unit,
+      state.bindings,
+      liveDomains,
+      { vars: state.vars },
+    );
+    assert.equal(JSON.stringify(config).includes("never-copy"), false);
+    if (unit === "app") {
+      assert.equal(config.vars.PUBLIC_APP_URL, "https://should-not-be-copied.example");
+      assert.equal(config.vars.TURNSTILE_SITE_KEY, "public-site-key");
+    } else if (unit === "engine") {
+      assert.equal(config.vars.SCHEDULE_LIMIT, "200");
+      assert.equal(config.vars.DESCRIBE_LIMIT, "10");
+    } else {
+      assert.equal(config.vars, undefined);
+    }
+  });
+}
+
+test("partial recovery preserves surviving live bindings and vars", async () => {
+  const currentDatabaseId = "22222222-2222-4222-8222-222222222222";
+  const currentUrl = "https://current.example.test";
+  const currentBindings = liveBindings.app
+    .filter(binding => binding.name !== "JOB_QUEUE")
+    .map(binding => {
+      if (binding.name === "DB") return { ...binding, id: currentDatabaseId };
+      if (binding.name === "PUBLIC_APP_URL") return { ...binding, text: currentUrl };
+      return binding;
+    });
+
+  const state = await resolveProductionBindings({
+    unit: "app",
+    workerName: PRODUCTION_WORKERS.app,
+    currentBindings,
+    token: "synthetic-token",
+    accountId: "account-1",
+    fetchImpl: historicalRecoveryFetch(PRODUCTION_WORKERS.app, "app"),
+  });
+
+  assert.deepEqual(state.missing, ["JOB_QUEUE (queue)"]);
+  assert.equal(
+    state.bindings.find(binding => binding.name === "DB" && binding.type === "d1").id,
+    currentDatabaseId,
+  );
+  assert.equal(
+    state.bindings.find(binding => binding.name === "PUBLIC_APP_URL").text,
+    currentUrl,
+  );
+  assert.equal(
+    state.bindings.find(binding => binding.name === "JOB_QUEUE").queue_name,
+    "produkter-jobb",
+  );
+  assert.equal(state.vars.PUBLIC_APP_URL, currentUrl);
+});
+
+test("recovery ignores complete versions that were uploaded but never deployed", async () => {
+  const workerName = PRODUCTION_WORKERS.app;
+  const versions = [
+    { id: "uploaded-only", number: 43, bindings: liveBindings.app },
+    { id: "broken-deployed", number: 42, bindings: strippedBindings.app },
+    { id: "complete-deployed", number: 41, bindings: liveBindings.app },
+  ];
+  const state = await resolveProductionBindings({
+    unit: "app",
+    workerName,
+    currentBindings: strippedBindings.app,
+    token: "synthetic-token",
+    accountId: "account-1",
+    fetchImpl: historicalRecoveryFetch(
+      workerName,
+      "app",
+      versions,
+      ["broken-deployed", "complete-deployed"],
+    ),
+  });
+
+  assert.equal(state.versionNumber, 41);
+});
+
+test("production binding recovery fails closed when no complete deployed Worker version exists", async () => {
+  await assert.rejects(
+    resolveProductionBindings({
+      unit: "app",
+      workerName: "produkter",
+      currentBindings: strippedBindings.app,
+      token: "synthetic-token",
+      accountId: "account-1",
+      fetchImpl: historicalRecoveryFetch(
+        "produkter",
+        "app",
+        [{ id: "broken", number: 42, bindings: strippedBindings.app }],
+        ["broken"],
+      ),
+    }),
+    /Ingen komplett deployad historisk Worker-version/,
   );
 });
 
