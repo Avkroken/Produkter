@@ -70,7 +70,7 @@ Generatorn väljer i ordning:
 2. `CLOUDFLARE_DEPLOYMENT_CONFIG` om en extern CI/buildmiljö uttryckligen tillhandahåller samma JSON;
 3. lokal `cloudflare/deployment.json`.
 
-För normal Wrangler-deploy används den gitignorerade `cloudflare/deployment.json`. `CLOUDFLARE_DEPLOYMENT_CONFIG` är endast ett portabelt alternativ för framtida/external CI och ska inte läggas som Worker runtime-secret.
+För normal Wrangler-deploy används den gitignorerade `cloudflare/deployment.json`. `CLOUDFLARE_DEPLOYMENT_CONFIG` är ett portabelt alternativ för extern CI och ska inte läggas som Worker runtime-secret. I Workers Builds kan production-Worker-namnen vid behov sättas med build-time-variablerna `CLOUDFLARE_WORKER_APP`, `CLOUDFLARE_WORKER_ENGINE` och `CLOUDFLARE_WORKER_PROCESSOR`; utan overrides används repositoryts etablerade standardnamn.
 
 Installera först de låsta Node-beroendena för samtliga tre deployenheter:
 

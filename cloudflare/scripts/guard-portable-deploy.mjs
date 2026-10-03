@@ -5,9 +5,10 @@ import { pathToFileURL } from "node:url";
 import {
   buildLiveProductionConfig,
   deploymentUnit,
-  PRODUCTION_WORKERS,
+  productionWorkers,
   readLiveCustomDomains,
   readLiveWorkerSettings,
+  resolveProductionBindings,
   tokenFromWrangler,
 } from "./live-production-config.mjs";
 
@@ -111,8 +112,9 @@ export async function preparePortableDeploy({
     );
   }
 
-  const unit = deploymentUnit(cwd);
-  const workerName = PRODUCTION_WORKERS[unit];
+  const workers = productionWorkers(env);
+  const unit = deploymentUnit(cwd, workers);
+  const workerName = workers[unit];
   const token = typeof env.CLOUDFLARE_API_TOKEN === "string" && env.CLOUDFLARE_API_TOKEN.trim()
     ? env.CLOUDFLARE_API_TOKEN.trim()
     : tokenResolver(cwd);
@@ -128,7 +130,20 @@ export async function preparePortableDeploy({
     token,
     fetchImpl,
   });
-  const config = buildLiveProductionConfig(unit, live.settings.bindings, domains);
+  const bindingState = await resolveProductionBindings({
+    unit,
+    workerName,
+    currentBindings: live.settings.bindings,
+    token,
+    accountId: live.accountId,
+    fetchImpl,
+  });
+  const config = buildLiveProductionConfig(
+    unit,
+    bindingState.bindings,
+    domains,
+    { workers, vars: bindingState.vars },
+  );
 
   const productionConfigPath = path.join(cwd, "wrangler.production.jsonc");
   if (writeConfig) {
@@ -143,6 +158,9 @@ export async function preparePortableDeploy({
     accountId: live.accountId,
     productionConfigPath,
     config,
+    bindingSource: bindingState.source,
+    recoveredVersionNumber: bindingState.versionNumber,
+    recoveredMissingBindings: bindingState.missing,
   };
 }
 
@@ -165,8 +183,12 @@ export async function runPortableBuildHook({
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await runPortableBuildHook();
   if (result.mode === "production") {
+    const source = result.bindingSource === "historical_version"
+      ? `historical Worker version #${result.recoveredVersionNumber}`
+      : "current live Worker state";
     console.log(
-      `Deployed ${result.workerName} from generated live production config; outer deploy remains preview-only.`,
+      `Deployed ${result.workerName} from generated production config using ${source}; ` +
+      "outer deploy remains preview-only.",
     );
   }
 }

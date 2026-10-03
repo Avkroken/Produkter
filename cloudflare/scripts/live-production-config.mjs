@@ -2,11 +2,81 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const API_ROOT = "https://api.cloudflare.com/client/v4";
-export const PRODUCTION_WORKERS = {
+export const PRODUCTION_WORKERS = Object.freeze({
   app: "produkter",
   engine: "produkter-motor",
   processor: "produkter-bearbetare",
-};
+});
+
+const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
+  app: Object.freeze([
+    ["DB", "d1"],
+    ["ENGINE", "service"],
+    ["JOB_QUEUE", "queue"],
+    ["SESSIONS", "kv_namespace"],
+    ["UPLOADS", "r2_bucket"],
+    ["PUBLIC_APP_URL", "plain_text"],
+    ["TURNSTILE_HOSTNAMES", "plain_text"],
+    ["TURNSTILE_SITE_KEY", "plain_text"],
+  ]),
+  engine: Object.freeze([
+    ["AI", "ai"],
+    ["DB", "d1"],
+    ["SCHEDULE_LIMIT", "plain_text"],
+    ["DESCRIBE_LIMIT", "plain_text"],
+    ["DESCRIBE_WORKERS", "plain_text"],
+  ]),
+  processor: Object.freeze([
+    ["DB", "d1"],
+    ["JOB_QUEUE", "queue"],
+    ["UPLOADS", "r2_bucket"],
+  ]),
+});
+
+function optionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export function productionWorkers(env = process.env) {
+  const app = optionalString(env.CLOUDFLARE_WORKER_APP) || PRODUCTION_WORKERS.app;
+  return {
+    app,
+    engine: optionalString(env.CLOUDFLARE_WORKER_ENGINE) || (
+      app === PRODUCTION_WORKERS.app ? PRODUCTION_WORKERS.engine : `${app}-motor`
+    ),
+    processor: optionalString(env.CLOUDFLARE_WORKER_PROCESSOR) || (
+      app === PRODUCTION_WORKERS.app ? PRODUCTION_WORKERS.processor : `${app}-bearbetare`
+    ),
+  };
+}
+
+export function missingProductionBindings(unit, bindings) {
+  const contract = REQUIRED_PRODUCTION_BINDINGS[unit];
+  if (!contract) throw new Error(`Okänd deployenhet: ${unit}`);
+  const current = Array.isArray(bindings) ? bindings : [];
+  return contract
+    .filter(([name, type]) => !current.some(binding => binding?.name === name && binding?.type === type))
+    .map(([name, type]) => `${name} (${type})`);
+}
+
+export function productionBindingsComplete(unit, bindings) {
+  return missingProductionBindings(unit, bindings).length === 0;
+}
+
+export function plainTextVars(bindings) {
+  const vars = {};
+  for (const binding of Array.isArray(bindings) ? bindings : []) {
+    if (
+      binding?.type === "plain_text" &&
+      typeof binding?.name === "string" &&
+      binding.name &&
+      typeof binding?.text === "string"
+    ) {
+      vars[binding.name] = binding.text;
+    }
+  }
+  return vars;
+}
 
 function requiredBinding(bindings, name, type) {
   const value = bindings.find(binding => binding?.name === name && binding?.type === type);
@@ -100,16 +170,21 @@ function productionRoute(domains, workerName, required) {
   }];
 }
 
-export function buildLiveProductionConfig(unit, bindings, domains = []) {
+export function buildLiveProductionConfig(unit, bindings, domains = [], options = {}) {
   if (!Array.isArray(bindings)) throw new Error("Live Worker settings saknar bindings.");
-  const workerName = PRODUCTION_WORKERS[unit];
+  const workers = options.workers || PRODUCTION_WORKERS;
+  const workerName = workers[unit];
   if (!workerName) throw new Error(`Okänd deployenhet: ${unit}`);
+  const recoveredVars = options.vars && Object.keys(options.vars).length > 0
+    ? { vars: options.vars }
+    : {};
 
   if (unit === "app") {
     const service = requiredBinding(bindings, "ENGINE", "service");
     const sessions = requiredBinding(bindings, "SESSIONS", "kv_namespace");
     return {
       ...common(workerName),
+      ...recoveredVars,
       main: "src/access-worker.ts",
       assets: {
         directory: "./public",
@@ -151,6 +226,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = []) {
     requiredBinding(bindings, "AI", "ai");
     return {
       ...common(workerName),
+      ...recoveredVars,
       main: "src/worker.ts",
       upload_source_maps: true,
       ai: { binding: "AI" },
@@ -164,6 +240,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = []) {
   productionRoute(domains, workerName, false);
   return {
     ...common(workerName),
+    ...recoveredVars,
     main: "src/worker.ts",
     d1_databases: [d1Binding(bindings)],
     r2_buckets: [r2Binding(bindings)],
@@ -237,6 +314,82 @@ export async function readLiveWorkerSettings({
   return matches[0];
 }
 
+export async function readLatestCompleteWorkerVersion({
+  unit,
+  workerName,
+  token,
+  accountId,
+  fetchImpl = fetch,
+  perPage = 100,
+}) {
+  const url =
+    `${API_ROOT}/accounts/${encodeURIComponent(accountId)}` +
+    `/workers/workers/${encodeURIComponent(workerName)}/versions` +
+    `?per_page=${encodeURIComponent(String(perPage))}`;
+  const { response, payload } = await apiJson(url, token, fetchImpl);
+  const versions = Array.isArray(payload?.result)
+    ? payload.result
+    : Array.isArray(payload?.result?.items)
+      ? payload.result.items
+      : [];
+  if (!response.ok || payload?.success !== true || versions.length === 0) {
+    throw new Error(
+      `Kunde inte läsa Worker-versioner för ${workerName} (HTTP ${response.status}).`,
+    );
+  }
+
+  const version = [...versions]
+    .sort((left, right) => Number(right?.number || 0) - Number(left?.number || 0))
+    .find(candidate => productionBindingsComplete(unit, candidate?.bindings));
+  if (!version) {
+    throw new Error(
+      `Ingen komplett historisk Worker-version hittades för ${workerName}.`,
+    );
+  }
+
+  return {
+    id: version.id,
+    number: version.number,
+    bindings: version.bindings,
+  };
+}
+
+export async function resolveProductionBindings({
+  unit,
+  workerName,
+  currentBindings,
+  token,
+  accountId,
+  fetchImpl = fetch,
+}) {
+  if (productionBindingsComplete(unit, currentBindings)) {
+    return {
+      source: "live",
+      bindings: currentBindings,
+      vars: undefined,
+      versionNumber: undefined,
+      missing: [],
+    };
+  }
+
+  const missing = missingProductionBindings(unit, currentBindings);
+  const recovered = await readLatestCompleteWorkerVersion({
+    unit,
+    workerName,
+    token,
+    accountId,
+    fetchImpl,
+  });
+
+  return {
+    source: "historical_version",
+    bindings: recovered.bindings,
+    vars: plainTextVars(recovered.bindings),
+    versionNumber: recovered.number,
+    missing,
+  };
+}
+
 export function tokenFromWrangler(cwd = process.cwd()) {
   const result = spawnSync("npx", ["wrangler", "auth", "token", "--json"], {
     cwd,
@@ -260,9 +413,9 @@ export function tokenFromWrangler(cwd = process.cwd()) {
   return token;
 }
 
-export function deploymentUnit(cwd = process.cwd()) {
+export function deploymentUnit(cwd = process.cwd(), workers = PRODUCTION_WORKERS) {
   const unit = path.basename(path.resolve(cwd));
-  if (!PRODUCTION_WORKERS[unit]) {
+  if (!workers[unit]) {
     throw new Error(`Workers Builds kör från oväntad root directory: ${unit}`);
   }
   return unit;
