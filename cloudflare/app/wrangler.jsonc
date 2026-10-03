@@ -19,6 +19,8 @@
     "run_worker_first": [
       "/",
       "/api/*",
+      "/fetcher/*",
+      "/jobs/*",
       "/signup",
       "/login",
       "/logout",

@@ -26,6 +26,8 @@ ENGINE_URL=https://engine.example.com
 INGEST_API_KEY=<samma värde som engine-Workerns INGEST_API_KEY>
 ```
 
+`ENGINE_URL` kan fortsätta peka på engine-hostnamnet även när det skyddas av interaktiv Cloudflare Access. Produktionsdeployen lägger en specifik Worker Route för `<engine-host>/jobs/*` framför engine-Custom-Domain; endast fetcherns lease/result-anrop går då via appens API-key-skyddade ingress och vidare internt till engine via Service Binding.
+
 Fetcherns runtime-image publiceras till GHCR från repositoryts `main`-gren. Starta med dess explicita Compose-fil så att en host-global `COMPOSE_FILE` inte kan välja en annan stack:
 
 ```bash
