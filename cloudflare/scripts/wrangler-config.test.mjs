@@ -75,6 +75,11 @@ for (const unit of units) {
     );
     assert.deepEqual(config.previews, {}, configPath + " must declare explicit previews");
     assert.equal(config.keep_vars, true, configPath + " must preserve live vars on the outer main deploy");
+    assert.equal(
+      config.workers_dev,
+      unit === "engine",
+      configPath + " must expose workers.dev only for the API-key-protected engine machine ingress",
+    );
     assert.deepEqual(
       config.unsafe?.metadata?.keep_bindings,
       outerKeepBindingTypes,
@@ -177,6 +182,7 @@ for (const unit of units) {
     const config = buildLiveProductionConfig(unit, liveBindings[unit], liveDomains);
     assert.equal(config.name, PRODUCTION_WORKERS[unit]);
     assert.equal(config.keep_vars, true);
+    assert.equal(config.workers_dev, unit === "engine");
     assert.equal(config.vars, undefined);
     assert.equal(config.build, undefined);
     assert.equal(JSON.stringify(config).includes("should-not-be-copied"), false);
