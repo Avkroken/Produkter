@@ -12,6 +12,7 @@ const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
   app: Object.freeze([
     ["DB", "d1"],
     ["ENGINE", "service"],
+    ["INGEST_API_KEY_STORE", "secrets_store_secret"],
     ["JOB_QUEUE", "queue"],
     ["SESSIONS", "kv_namespace"],
     ["UPLOADS", "r2_bucket"],
@@ -22,6 +23,7 @@ const REQUIRED_PRODUCTION_BINDINGS = Object.freeze({
   engine: Object.freeze([
     ["AI", "ai"],
     ["DB", "d1"],
+    ["INGEST_API_KEY_STORE", "secrets_store_secret"],
     ["SCHEDULE_LIMIT", "plain_text"],
     ["DESCRIBE_LIMIT", "plain_text"],
     ["DESCRIBE_WORKERS", "plain_text"],
@@ -120,6 +122,23 @@ function common(name) {
     preview_urls: false,
     previews: {},
     keep_vars: true,
+    unsafe: {
+      metadata: {
+        keep_bindings: [
+          "plain_text",
+          "json",
+          "secret_text",
+          "secret_key",
+          "secrets_store_secret",
+          "d1",
+          "service",
+          "queue",
+          "kv_namespace",
+          "r2_bucket",
+          "ai",
+        ],
+      },
+    },
     observability: observability(),
   };
 }
@@ -143,6 +162,23 @@ function r2Binding(bindings) {
 function queueBinding(bindings) {
   const binding = requiredBinding(bindings, "JOB_QUEUE", "queue");
   return requiredString(binding.queue_name, "JOB_QUEUE.queue_name");
+}
+
+function secretsStoreBinding(bindings, name) {
+  const binding = requiredBinding(bindings, name, "secrets_store_secret");
+  return {
+    binding: name,
+    store_id: requiredString(binding.store_id, `${name}.store_id`),
+    secret_name: requiredString(binding.secret_name, `${name}.secret_name`),
+  };
+}
+
+function recoveredSecretsStoreConfig(bindings, missing) {
+  const expected = "INGEST_API_KEY_STORE (secrets_store_secret)";
+  if (!Array.isArray(missing) || !missing.includes(expected)) return {};
+  return {
+    secrets_store_secrets: [secretsStoreBinding(bindings, "INGEST_API_KEY_STORE")],
+  };
 }
 
 function productionDomain(domains, workerName, required) {
@@ -174,14 +210,6 @@ function productionRoute(domains, workerName, required) {
     : [];
 }
 
-function fetcherIngressRoute(domains, engineWorkerName) {
-  const domain = productionDomain(domains, engineWorkerName, true);
-  return {
-    pattern: `${domain.hostname.trim()}/jobs/*`,
-    zone_name: requiredString(domain.zone_name, `${engineWorkerName}.zone_name`),
-  };
-}
-
 export function buildLiveProductionConfig(unit, bindings, domains = [], options = {}) {
   if (!Array.isArray(bindings)) throw new Error("Live Worker settings saknar bindings.");
   const workers = options.workers || PRODUCTION_WORKERS;
@@ -190,6 +218,10 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
   const recoveredVars = options.vars && Object.keys(options.vars).length > 0
     ? { vars: options.vars }
     : {};
+  const recoveredSecrets = recoveredSecretsStoreConfig(
+    bindings,
+    options.recoveredMissingBindings,
+  );
 
   if (unit === "app") {
     const service = requiredBinding(bindings, "ENGINE", "service");
@@ -197,6 +229,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
     return {
       ...common(workerName),
       ...recoveredVars,
+      ...recoveredSecrets,
       main: "src/access-worker.ts",
       assets: {
         directory: "./public",
@@ -205,8 +238,6 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
         run_worker_first: [
           "/",
           "/api/*",
-          "/fetcher/*",
-          "/jobs/*",
           "/signup",
           "/login",
           "/logout",
@@ -223,10 +254,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
         binding: "ENGINE",
         service: requiredString(service.service, "ENGINE.service"),
       }],
-      routes: [
-        ...productionRoute(domains, workerName, true),
-        fetcherIngressRoute(domains, workers.engine),
-      ],
+      routes: productionRoute(domains, workerName, true),
       d1_databases: [d1Binding(bindings)],
       r2_buckets: [r2Binding(bindings)],
       kv_namespaces: [{
@@ -244,6 +272,7 @@ export function buildLiveProductionConfig(unit, bindings, domains = [], options 
     return {
       ...common(workerName),
       ...recoveredVars,
+      ...recoveredSecrets,
       main: "src/worker.ts",
       upload_source_maps: true,
       ai: { binding: "AI" },

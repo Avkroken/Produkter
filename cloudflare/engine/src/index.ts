@@ -14,8 +14,9 @@
 //   POST /ingest            — bulk-upsert produkter (migrering + list-resultat)
 //   GET  /health            — opfri hälsokoll
 //
-// Auth: X-API-Key mot secret INGEST_API_KEY (operatörsnyckel), samma mönster
-// som dagens scraper-API. Inget per konto — katalogen är operatörs-ägd.
+// Auth: X-API-Key mot den centrala Secrets Store-bindingen INGEST_API_KEY_STORE.
+// Direkt Worker-secret stöds endast som migrations-/self-hosted-fallback.
+// Inget per konto — katalogen är operatörs-ägd.
 
 import {
   ProviderChain,
@@ -26,11 +27,13 @@ import {
 } from "../../shared/providers";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
 import { reportErrorToGitHub, type GitHubReportEnv } from "../../shared/github-report";
+import { ingestApiKey } from "../../shared/ingest-secret";
 
 interface Env extends GitHubReportEnv {
   DB: D1Database;
   AI: Ai;
-  INGEST_API_KEY: string;
+  INGEST_API_KEY_STORE?: SecretsStoreSecret;
+  INGEST_API_KEY?: string;
   // AI-leverantörer (Wrangler secrets) — samma som sync-Workern. Operatörens
   // egna nycklar, inte kontobaserat.
   ANTHROPIC_API_KEY?: string;
@@ -81,9 +84,10 @@ export interface LeasedJob {
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
-function authorized(req: Request, env: Env): boolean {
+async function authorized(req: Request, env: Env): Promise<boolean> {
   const key = req.headers.get("X-API-Key");
-  return !!env.INGEST_API_KEY && key === env.INGEST_API_KEY;
+  const expected = await ingestApiKey(env);
+  return !!expected && key === expected;
 }
 
 // POST /jobs/lease  { n?: number }
@@ -829,7 +833,7 @@ export default {
 
     if (req.method === "GET" && path === "/health") return json({ ok: true });
 
-    if (!authorized(req, env)) return json({ error: "obehörig" }, 401);
+    if (!(await authorized(req, env))) return json({ error: "obehörig" }, 401);
 
     try {
       if (req.method === "POST" && path === "/jobs/lease") return await leaseJobs(req, env);

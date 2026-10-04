@@ -16,6 +16,7 @@ export interface Env {
   PUBLIC_APP_URL: string;
   // Avd. B: on-demand-beskrivning går direkt till engine-Workern via Service Binding.
   ENGINE: Fetcher;
+  INGEST_API_KEY_STORE?: SecretsStoreSecret;
   INGEST_API_KEY?: string;
   // OAuth-inloggning (återanvänder politiker-webapps appar). client_id = vars,
   // client_secret = wrangler secret.

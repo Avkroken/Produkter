@@ -5,7 +5,8 @@ import { withD1Session } from "../../shared/d1-session";
 interface Env {
   DB: D1Database;
   AI: Ai;
-  INGEST_API_KEY: string;
+  INGEST_API_KEY_STORE?: SecretsStoreSecret;
+  INGEST_API_KEY?: string;
   [key: string]: unknown;
 }
 

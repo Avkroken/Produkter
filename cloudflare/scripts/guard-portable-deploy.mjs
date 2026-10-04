@@ -142,7 +142,11 @@ export async function preparePortableDeploy({
     unit,
     bindingState.bindings,
     domains,
-    { workers, vars: bindingState.vars },
+    {
+      workers,
+      vars: bindingState.vars,
+      recoveredMissingBindings: bindingState.missing,
+    },
   );
 
   const productionConfigPath = path.join(cwd, "wrangler.production.jsonc");

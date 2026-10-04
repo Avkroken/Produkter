@@ -30,6 +30,7 @@ const outerKeepBindingTypes = [
   "json",
   "secret_text",
   "secret_key",
+  "secrets_store_secret",
   "d1",
   "service",
   "queue",
@@ -148,6 +149,7 @@ const liveBindings = {
     { name: "ASSETS", type: "assets" },
     { name: "DB", type: "d1", id: "11111111-1111-4111-8111-111111111111" },
     { name: "ENGINE", type: "service", service: "produkter-motor" },
+    { name: "INGEST_API_KEY_STORE", type: "secrets_store_secret", store_id: "store-123", secret_name: "INGEST_API_KEY" },
     { name: "JOB_QUEUE", type: "queue", queue_name: "produkter-jobb" },
     { name: "SESSIONS", type: "kv_namespace", namespace_id: "a".repeat(32) },
     { name: "UPLOADS", type: "r2_bucket", bucket_name: "produkter-uppladdningar" },
@@ -159,6 +161,7 @@ const liveBindings = {
   engine: [
     { name: "AI", type: "ai" },
     { name: "DB", type: "d1", id: "11111111-1111-4111-8111-111111111111" },
+    { name: "INGEST_API_KEY_STORE", type: "secrets_store_secret", store_id: "store-123", secret_name: "INGEST_API_KEY" },
     { name: "SCHEDULE_LIMIT", type: "plain_text", text: "200" },
     { name: "DESCRIBE_LIMIT", type: "plain_text", text: "10" },
     { name: "DESCRIBE_WORKERS", type: "plain_text", text: "2" },
@@ -187,19 +190,24 @@ for (const unit of units) {
     assert.equal(config.build, undefined);
     assert.equal(JSON.stringify(config).includes("should-not-be-copied"), false);
     assert.equal(JSON.stringify(config).includes("TURNSTILE_SECRET"), false);
-    assert.equal(JSON.stringify(config).includes("INGEST_API_KEY"), false);
+    assert.equal(JSON.stringify(config).includes("must-not-be-copied"), false);
     assert.equal(JSON.stringify(config).includes("PROVIDER_CONFIG_KEY"), false);
 
     if (unit === "app") {
-      assert.equal(config.assets.run_worker_first.includes("/jobs/*"), true);
-      assert.equal(config.assets.run_worker_first.includes("/fetcher/*"), true);
+      assert.equal(config.unsafe.metadata.keep_bindings.includes("secrets_store_secret"), true);
+      assert.equal(config.secrets_store_secrets, undefined);
+      assert.equal(config.assets.run_worker_first.includes("/jobs/*"), false);
+      assert.equal(config.assets.run_worker_first.includes("/fetcher/*"), false);
       assert.deepEqual(config.routes, [
         { pattern: "produkter.example.test", custom_domain: true },
-        { pattern: "motor.example.test/jobs/*", zone_name: "example.test" },
       ]);
     } else if (unit === "engine") {
+      assert.equal(config.unsafe.metadata.keep_bindings.includes("secrets_store_secret"), true);
+      assert.equal(config.secrets_store_secrets, undefined);
       assert.deepEqual(config.routes, [{ pattern: "motor.example.test", custom_domain: true }]);
     } else {
+      assert.equal(config.unsafe.metadata.keep_bindings.includes("secrets_store_secret"), true);
+      assert.equal(config.secrets_store_secrets, undefined);
       assert.equal(config.routes, undefined);
     }
   });
@@ -307,17 +315,28 @@ for (const unit of units) {
       unit,
       state.bindings,
       liveDomains,
-      { vars: state.vars },
+      { vars: state.vars, recoveredMissingBindings: state.missing },
     );
     assert.equal(JSON.stringify(config).includes("never-copy"), false);
     if (unit === "app") {
       assert.equal(config.vars.PUBLIC_APP_URL, "https://should-not-be-copied.example");
       assert.equal(config.vars.TURNSTILE_SITE_KEY, "public-site-key");
+      assert.deepEqual(config.secrets_store_secrets, [{
+        binding: "INGEST_API_KEY_STORE",
+        store_id: "store-123",
+        secret_name: "INGEST_API_KEY",
+      }]);
     } else if (unit === "engine") {
       assert.equal(config.vars.SCHEDULE_LIMIT, "200");
       assert.equal(config.vars.DESCRIBE_LIMIT, "10");
+      assert.deepEqual(config.secrets_store_secrets, [{
+        binding: "INGEST_API_KEY_STORE",
+        store_id: "store-123",
+        secret_name: "INGEST_API_KEY",
+      }]);
     } else {
       assert.equal(config.vars, undefined);
+      assert.equal(config.secrets_store_secrets, undefined);
     }
   });
 }
@@ -356,6 +375,14 @@ test("partial recovery preserves surviving live bindings and vars", async () => 
     "produkter-jobb",
   );
   assert.equal(state.vars.PUBLIC_APP_URL, currentUrl);
+
+  const config = buildLiveProductionConfig(
+    "app",
+    state.bindings,
+    liveDomains,
+    { vars: state.vars, recoveredMissingBindings: state.missing },
+  );
+  assert.equal(config.secrets_store_secrets, undefined);
 });
 
 test("recovery ignores complete versions that were uploaded but never deployed", async () => {
@@ -455,7 +482,6 @@ test("main Workers Build generates production config from live state", async () 
   assert.equal(config.keep_vars, true);
   assert.deepEqual(config.routes, [
     { pattern: "produkter.example.test", custom_domain: true },
-    { pattern: "motor.example.test/jobs/*", zone_name: "example.test" },
   ]);
   assert.equal(fs.existsSync(path.join(cwd, ".wrangler/deploy/config.json")), false);
 });

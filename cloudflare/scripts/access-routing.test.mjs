@@ -84,8 +84,6 @@ test("public and normal signed-in APIs stay outside the admin namespace", () => 
     ["POST", "/api/produkt/42/describe"],
     ["GET", "/api/status"],
     ["GET", "/api/oauth/google"],
-    ["POST", "/fetcher/jobs/lease"],
-    ["POST", "/jobs/lease"],
     ["GET", "/underlag"],
   ]) {
     assert.deepEqual(accessRoute(method, pathname), { type: "pass", pathname });
