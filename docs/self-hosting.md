@@ -23,10 +23,10 @@ Minimikrav:
 
 ```dotenv
 ENGINE_URL=https://engine.example.com
-INGEST_API_KEY=<samma värde som engine-Workerns INGEST_API_KEY>
+INGEST_API_KEY=<samma värde som secretet INGEST_API_KEY i Secrets Store>
 ```
 
-`ENGINE_URL` kan fortsätta peka på engine-hostnamnet även när det skyddas av interaktiv Cloudflare Access. Produktionsdeployen lägger en specifik Worker Route för `<engine-host>/jobs/*` framför engine-Custom-Domain; endast fetcherns lease/result-anrop går då via appens API-key-skyddade ingress och vidare internt till engine via Service Binding.
+`ENGINE_URL` pekar direkt på engine-hostnamnet. Om hostnamnet skyddas av Cloudflare Access ska `/jobs/lease` och `/jobs/*/result` ha en explicit Access Bypass; engine verifierar därefter `X-API-Key` mot Secrets Store-bindingen `INGEST_API_KEY_STORE`. `/health` ska också vara publikt nåbar eftersom production-verifieringen kräver HTTP 200 med `{ "ok": true }`. Övriga engine-rutter förblir Access-skyddade.
 
 Fetcherns runtime-image publiceras till GHCR från repositoryts `main`-gren. Starta med dess explicita Compose-fil så att en host-global `COMPOSE_FILE` inte kan välja en annan stack:
 
@@ -120,9 +120,19 @@ Engine måste finnas innan appen deployas eftersom appen binder `ENGINE` som Ser
 
 ## 3. Secrets
 
-Secret-värden hör inte hemma i `deployment.json`. Sätt dem i respektive Worker med Wrangler eller motsvarande providerflöde.
+Secret-värden hör inte hemma i `deployment.json`.
 
-För ingest-nyckeln ska samma värde installeras på båda Workers. Kör respektive kommando och mata in samma nyckel när Wrangler frågar; skriv inte nyckeln i kommandoraden:
+### Ingest-nyckel
+
+Avkrokens managed production använder Cloudflare Secrets Store som gemensam källa:
+
+1. Skapa ett account-level secret med namnet `INGEST_API_KEY` och scope `workers`.
+2. Lägg en Secrets Store-binding med variabelnamnet `INGEST_API_KEY_STORE` på **både app- och engine-Workern**, riktad mot samma store/secret.
+3. Lägg samma secret-värde i den externa fetcherns lokala `scraper/fetcher/.env` som `INGEST_API_KEY`.
+
+`configure.mjs` skapar inte account-level Secrets Store-resurser eller bindings. De är provider-state och ska etableras separat innan en managed production-build körs. Main-buildens live-kontrakt kräver att `INGEST_API_KEY_STORE` redan finns; om en historisk deploy recovery måste återställa just den bindingen emitteras den explicit och deployen failar stängt om deploy-identiteten saknar Secrets Store-rättighet.
+
+För en fristående/self-hosted installation utan Secrets Store stöds fortfarande det direkta Worker-secretet `INGEST_API_KEY` som avsiktlig fallback. Kör då respektive kommando och mata in samma värde när Wrangler frågar; skriv inte nyckeln i kommandoraden:
 
 ```bash
 cd cloudflare/engine
@@ -131,6 +141,8 @@ cd ../app
 npm run secret:set-ingest-key
 cd ../..
 ```
+
+Den direkta fallbacken används bara när `INGEST_API_KEY_STORE` inte är bunden. Om Store-bindingen finns prioriteras den alltid.
 
 För kryptering av per-konto-providerinställningar ska **samma** `PROVIDER_CONFIG_KEY` sättas på app och processor:
 
@@ -168,7 +180,7 @@ OAuth-knappar visas bara när både client ID och motsvarande client secret finn
 
 Exempel på secrets som kan behövas beroende på aktiverade funktioner:
 
-- `INGEST_API_KEY` — samma värde ska sättas på **både app- och engine-Workern**;
+- `INGEST_API_KEY_STORE` — Secrets Store-binding på **både app- och engine-Workern**, riktad mot det centrala secretet `INGEST_API_KEY`; den externa fetchern får samma secret-värde via sin lokala `.env`;
 - `PROVIDER_CONFIG_KEY` — samma värde ska sättas på **både app- och processor-Workern**;
 - OAuth client secrets;
 - `TURNSTILE_SECRET`;

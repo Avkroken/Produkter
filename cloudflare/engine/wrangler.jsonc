@@ -20,6 +20,7 @@
         "json",
         "secret_text",
         "secret_key",
+        "secrets_store_secret",
         "d1",
         "service",
         "queue",

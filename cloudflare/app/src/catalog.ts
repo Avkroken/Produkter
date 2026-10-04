@@ -3,6 +3,7 @@
 // proxas till engine-Workern (POST /describe) så AI-nyckeln bara finns på ett
 // ställe. Beskrivningen cachas i D1 av engine -> nästa visning är gratis.
 import type { Env } from "./db";
+import { ingestApiKey } from "../../shared/ingest-secret";
 import { buildChain } from "../../shared/provider-config";
 import { buildSystemPrompt, userMessage } from "../../shared/prompts";
 import { AllProvidersExhausted } from "../../shared/providers";
@@ -97,13 +98,14 @@ export async function describeViaEngine(
   env: Env,
   id: number,
 ): Promise<{ beskrivning?: string; varför?: string; error?: string; status: number }> {
-  if (!env.INGEST_API_KEY) {
+  const ingestKey = await ingestApiKey(env);
+  if (!ingestKey) {
     return { error: "beskrivningstjänst ej konfigurerad", status: 503 };
   }
   try {
     const req = new Request("https://produkter-motor.internal/describe", {
       method: "POST",
-      headers: { "content-type": "application/json", "X-API-Key": env.INGEST_API_KEY },
+      headers: { "content-type": "application/json", "X-API-Key": ingestKey },
       body: JSON.stringify({ id }),
     });
     const resp = await env.ENGINE.fetch(req);

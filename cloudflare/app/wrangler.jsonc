@@ -19,8 +19,6 @@
     "run_worker_first": [
       "/",
       "/api/*",
-      "/fetcher/*",
-      "/jobs/*",
       "/signup",
       "/login",
       "/logout",
@@ -40,6 +38,7 @@
         "json",
         "secret_text",
         "secret_key",
+        "secrets_store_secret",
         "d1",
         "service",
         "queue",

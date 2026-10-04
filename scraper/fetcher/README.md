@@ -60,7 +60,7 @@ INGEST_API_KEY=<ditt-värde>
 
 Runtime-imagen publiceras från repositoryts `main`-gren till `ghcr.io/avkroken/produkter-fetcher:latest`. Compose drar den publicerade imagen; renderhosten behöver alltså inte bygga Playwright/Chromium lokalt. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
 
-`ENGINE_URL` fortsätter peka på engine-hostnamnet även när engine-Workern ligger bakom interaktiv Cloudflare Access. Produktionskonfigurationen lägger en mer specifik Worker Route för `<engine-host>/jobs/*` framför engine-Custom-Domain och skickar just lease/result-trafiken till appens API-key-skyddade ingress. Appen vidarebefordrar därefter internt via `ENGINE` Service Binding. Övriga engine-vägar behåller sitt Access-skydd och engine exponeras inte på `workers.dev`.
+`ENGINE_URL` pekar direkt på engine-hostnamnet. Om engine-Workern skyddas av Cloudflare Access ska fetcherns maskinrutter (`/jobs/lease` och `/jobs/*/result`) ha en explicit Access Bypass. De rutterna är fortfarande skyddade av `X-API-Key`, som engine verifierar mot den centrala Secrets Store-bindingen `INGEST_API_KEY_STORE`. `/health` är också avsiktligt publik för production-verifiering och returnerar endast hälsostatus; övriga engine-vägar behåller sitt Access-skydd. Engine exponeras inte på `workers.dev`.
 
 Använd explicit `-f compose.yml` så att en host-global `COMPOSE_FILE` inte kan styra kommandot till en annan stack.
 

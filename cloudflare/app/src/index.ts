@@ -10,7 +10,6 @@ import { getAuthorizeUrl, handleOAuthCallback, isKnownProvider } from "./oauth";
 import { createJob, getJobsForAccount, getJob, type Env, type JobMessage } from "./db";
 import { searchCatalog, listCategories, listBistandPage, upsertBistand, removeBistand, bulkAddBistand, renderUnderlag } from "./bistand";
 import { getProduct, describeProduct } from "./catalog";
-import { handleFetcherIngress } from "./fetcher-ingress";
 import { submitSuggestion, listSuggestions, setSuggestionStatus } from "./suggestions";
 import { adminStats, adminAccounts, setAccountRole, exportProducts, exportAccounts, adminSites, updateSite } from "./admin";
 import { listWatches, addWatch, removeWatch, bulkAddWatch, listChannels, addChannel, removeChannel } from "./watch";
@@ -51,9 +50,6 @@ export default {
 
 async function route(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = url;
-
-  const fetcherResponse = await handleFetcherIngress(request, env, pathname);
-  if (fetcherResponse) return fetcherResponse;
 
   if (pathname === "/signup" && request.method === "POST") return handleSignup(request, env);
   if (pathname === "/login" && request.method === "POST") return handleLogin(request, env);
