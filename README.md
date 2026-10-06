@@ -51,8 +51,8 @@ README är medvetet kort; systemet är för stort för att fungera som en enda l
 
 Host/Docker- och Cloudflare-providerförutsättningar verifieras utan att exportera eller skriva secretvärden:
 
-\`\`\`bash
+```bash
 bash scripts/setup-provider-credentials.sh
-\`\`\`
+```
 
 Wizarden är human-only och skapar eller roterar inga credentials.
