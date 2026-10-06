@@ -53,6 +53,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
+      - name: Verify Matt Skills contract
+        run: node scripts/check-matt-skills-contract.mjs --routing 'docs/agents/matt-skills.md' --catalog 'docs/agents/matt-skills-catalog.txt' --triage 'docs/agents/triage-labels.md'
       - name: Generate generic Cloudflare config
         run: node cloudflare/scripts/configure.mjs --example
       - name: Validate Cloudflare app
