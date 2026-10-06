@@ -46,3 +46,13 @@ Börja i **[dokumentationsöversikten](docs/index.md)**.
 - [SECURITY.md](SECURITY.md) — säkerhetsrapportering
 
 README är medvetet kort; systemet är för stort för att fungera som en enda lång manual.
+
+## Operator-wizard
+
+Host/Docker- och Cloudflare-providerförutsättningar verifieras utan att exportera eller skriva secretvärden:
+
+```bash
+bash scripts/setup-provider-credentials.sh
+```
+
+Wizarden är human-only och skapar eller roterar inga credentials.
