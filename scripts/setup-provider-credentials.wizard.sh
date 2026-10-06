@@ -233,8 +233,8 @@ open_url "https://dash.cloudflare.com/"
 step "Verifiera production Workers produkter, produkter-motor och produkter-bearbetare samt deras avsedda D1/KV/R2/Queue/Service/AI/Secrets Store-bindings."
 step "CLOUDFLARE_DEPLOYMENT_CONFIG är endast portabel build/self-hosted config och får inte ligga som Worker runtime-secret."
 step "Managed main-build ska rekonstruera production-config från provider-state och bevara bindings via keep_vars/keep_bindings; discovery får inte auto-provisionera resurser."
-open_url "https://produkter.denied.se/"
-step "Verifiera appens publika productioningress samt engine /health enligt repositoryts production verifierifier. Dessa kontroller bevisar liveness, inte ingest-auth."
+step "Läs appUrl och engineUrl från den installationsspecifika deployment-state som production verifier använder (lokal cloudflare/deployment.json eller motsvarande live/build-state) och öppna dessa exakta HTTPS-origins."
+step "Verifiera appens publika productioningress samt engine /health enligt repositoryts production verifier. Dessa kontroller bevisar liveness, inte ingest-auth."
 if ! confirm "Är live Worker-state och publika productionkontroller korrekta?"; then
   warn "Cloudflare runtime-state är overifierad."
   exit 2
