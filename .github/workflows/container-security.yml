@@ -1,6 +1,8 @@
 name: Container security
 
 on:
+  repository_dispatch:
+    types: [agent-pr-merged]
   push:
     branches: [main]
   pull_request:
