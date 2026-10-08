@@ -28,7 +28,7 @@ jobs:
           retry-on-snapshot-warnings-timeout: 300
 
   public-template-guard:
-    uses: Avkroken/.github/.github/workflows/public-template-guard.yml@e678adba10f38518e031ca6afa0c20ac4963fc16
+    uses: ./.github/workflows/public-template-guard.yml
     with:
       forbidden_fingerprints: |
         dcb8aedbaeb3b4d508f095ea61399b9ea2dff52dd59ad3395037223cda2fdecd
