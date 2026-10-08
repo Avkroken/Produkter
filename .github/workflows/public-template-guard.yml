@@ -1,0 +1,144 @@
+name: Reusable public template guard
+
+on:
+  workflow_call:
+    inputs:
+      forbidden_fingerprints:
+        description: Newline-separated SHA-256 fingerprints of lowercase canonical installation-specific values.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Public template guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Reject installation-specific values
+        env:
+          FORBIDDEN_FINGERPRINTS: ${{ inputs.forbidden_fingerprints }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          import os
+          import re
+          import subprocess
+
+          fingerprint_re = re.compile(r"^[0-9a-fA-F]{64}$")
+          configured = [
+              line.strip()
+              for line in os.environ["FORBIDDEN_FINGERPRINTS"].splitlines()
+              if line.strip()
+          ]
+          if not configured:
+              raise SystemExit("No forbidden fingerprints were configured.")
+
+          invalid = [value for value in configured if not fingerprint_re.fullmatch(value)]
+          if invalid:
+              raise SystemExit(
+                  "Every forbidden fingerprint must be exactly 64 hexadecimal SHA-256 characters."
+              )
+          forbidden = {value.lower() for value in configured}
+
+          token_re = re.compile(rb"[A-Za-z0-9][A-Za-z0-9._@:+-]{2,}")
+
+          def digest(value: bytes) -> str:
+              # Fingerprints are defined over lowercase canonical values.
+              return sha256(value.lower()).hexdigest()
+
+          def candidates(token: bytes) -> set[bytes]:
+              token = token.lower().strip(b"._:@-")
+              values = {token} if token else set()
+
+              if b"@" in token:
+                  local, _, domain = token.partition(b"@")
+                  if local:
+                      values.add(local)
+                  if domain:
+                      values.add(domain)
+
+              domainish = token.rsplit(b"@", 1)[-1]
+              parts = [part for part in domainish.split(b".") if part]
+              # Generate bounded contiguous dot-separated spans. This catches
+              # a forbidden domain/name inside subdomains and filenames such
+              # as "private.example.backup" without quadratic blow-ups.
+              for start in range(len(parts)):
+                  for end in range(start + 1, min(len(parts), start + 8) + 1):
+                      values.add(b".".join(parts[start:end]))
+
+              return values
+
+          def contains_ascii_forbidden(data: bytes) -> bool:
+              for token in token_re.findall(data):
+                  if any(digest(candidate) in forbidden for candidate in candidates(token)):
+                      return True
+              return False
+
+          def contains_forbidden(data: bytes) -> bool:
+              if contains_ascii_forbidden(data):
+                  return True
+
+              # ASCII identifiers stored as UTF-16 have NUL bytes between
+              # characters and are invisible to the raw byte token regex.
+              # Only attempt the extra decodes for NUL-containing blobs.
+              if b"\x00" in data:
+                  for encoding in ("utf-16-le", "utf-16-be"):
+                      decoded = data.decode(encoding, errors="ignore").encode("utf-8")
+                      if contains_ascii_forbidden(decoded):
+                          return True
+              return False
+
+          entries = subprocess.run(
+              ["git", "ls-files", "-s", "-z"],
+              check=True,
+              capture_output=True,
+          ).stdout.split(b"\0")
+
+          violations = []
+          blob_matches = {}
+          for entry in entries:
+              if not entry:
+                  continue
+              metadata, path = entry.split(b"\t", 1)
+              mode, blob_sha, stage = metadata.split()
+
+              # A public path name is repository content too.
+              if contains_forbidden(path):
+                  violations.append(f"path: {os.fsdecode(path)}")
+
+              # Submodule entries point at commits rather than blobs. Their path
+              # is checked above; the nested repository has its own guard.
+              if mode == b"160000" or stage != b"0":
+                  continue
+
+              if blob_sha not in blob_matches:
+                  blob = subprocess.run(
+                      ["git", "cat-file", "blob", blob_sha.decode("ascii")],
+                      check=True,
+                      capture_output=True,
+                  ).stdout
+                  # Cache only the boolean result, not potentially large blob
+                  # contents, so memory does not grow with repository size.
+                  blob_matches[blob_sha] = contains_forbidden(blob)
+
+              # Reading Git blobs directly covers binary/non-UTF-8 files,
+              # tracked .wrangler state, and symlink target strings.
+              if blob_matches[blob_sha]:
+                  violations.append(f"content: {os.fsdecode(path)}")
+
+          if violations:
+              raise SystemExit(
+                  "Installation-specific value fingerprint found in:\n"
+                  + "\n".join(sorted(set(violations)))
+              )
+
+          print("Public-template contamination check passed.")
+          PY
