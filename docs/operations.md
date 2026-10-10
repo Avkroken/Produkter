@@ -102,3 +102,11 @@ Dokumentation och logs får aldrig innehålla providerkeys, scraper-API-keys, se
 ## Observability
 
 Logga subsystem, operation och feltyp men inte känsliga payloads. Det ska gå att avgöra om felet uppstod i input, provider, scraper/fetcher eller Cloudflare utan att dumpa användardata.
+
+## GitHub fork and transfer portability
+
+GitHub Actions API operations read `github.repository` dynamically, but individual issue assignments and trusted automation actors are intentionally **explicit**, not inferred from an organization name. For this repository, configure Actions variables `AUTO_ASSIGN_USER` and `TRUSTED_AGENT_BOT_LOGIN` to the actual permitted user and bot login identities. A missing principal variable disables its privileged automation path rather than broadening permissions to arbitrary bots or silently using a former owner's account. Normal non-privileged tests can still run in a fork.
+
+Docker Compose also requires explicit `PRODUKTER_IMAGE` (root) and `FETCHER_IMAGE` (render fetcher) to prevent silently pulling images from the old owner's GHCR namespace.
+
+Validate the GitHub App installation, GHCR/Cloudflare resources, Secrets Store, rulesets, review approvals and deploy identity separately for the new owner. GitHub repository transfer does not confer source-owner credentials or external deployment access.

@@ -1,6 +1,6 @@
 services:
   produkter-fetcher:
-    image: ${FETCHER_IMAGE:-ghcr.io/avkroken/produkter-fetcher:latest}
+    image: ${FETCHER_IMAGE:?Set FETCHER_IMAGE to your published GHCR fetcher image}
     pull_policy: always
     container_name: produkter-fetcher
     restart: unless-stopped

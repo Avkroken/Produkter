@@ -36,7 +36,7 @@ docker compose -f compose.yml up -d
 cd ../..
 ```
 
-Normal drift använder `ghcr.io/avkroken/produkter-fetcher:latest`. En annan image kan väljas lokalt med den valfria variabeln `FETCHER_IMAGE`; den behöver inte sättas för standardinstallationen.
+Sätt den obligatoriska `FETCHER_IMAGE` i `scraper/fetcher/.env` till en faktisk publicerad GHCR-image, t.ex. `ghcr.io/<github-ägare>/produkter-fetcher:latest`. Standardinstallationen antar aldrig en tidigare ägare. Rootens Docker Compose kräver dessutom `PRODUKTER_IMAGE` till den valda image som ska köras, t.ex. `ghcr.io/<github-ägare>/produkter:latest`. Ingen av dessa installationer får implicit hämta images från ett annat konto.
 
 ## 2. Cloudflare deployment
 

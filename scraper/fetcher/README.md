@@ -58,7 +58,7 @@ INGEST_API_KEY=<ditt-värde>
 
 `.env` får inte committas.
 
-Runtime-imagen publiceras från repositoryts `main`-gren till `ghcr.io/avkroken/produkter-fetcher:latest`. Compose drar den publicerade imagen; renderhosten behöver alltså inte bygga Playwright/Chromium lokalt. Endast `ENGINE_URL` och `INGEST_API_KEY` är obligatoriska runtimevärden.
+Runtime-imagen publiceras från repositoryts `main`-gren till `ghcr.io/<aktuell-github-ägare>/produkter-fetcher:latest`. Ange den faktiska, publicerade image-referensen som `FETCHER_IMAGE` i lokal `.env`; Compose drar den valda imagen. Renderhosten behöver alltså inte bygga Playwright/Chromium lokalt. `ENGINE_URL`, `INGEST_API_KEY` och `FETCHER_IMAGE` måste anges.
 
 `ENGINE_URL` pekar direkt på engine-hostnamnet. Om engine-Workern skyddas av Cloudflare Access ska fetcherns maskinrutter (`/jobs/lease` och `/jobs/*/result`) ha en explicit Access Bypass. De rutterna är fortfarande skyddade av `X-API-Key`, som engine verifierar mot den centrala Secrets Store-bindingen `INGEST_API_KEY_STORE`. `/health` är också avsiktligt publik för production-verifiering och returnerar endast hälsostatus; övriga engine-vägar behåller sitt Access-skydd. Engine exponeras inte på `workers.dev`.
 
@@ -93,7 +93,7 @@ docker compose -f compose.yml ps
 docker compose -f compose.yml logs --tail=100 produkter-fetcher
 ```
 
-`latest` följer aktuell publicerad `main`. Varje publicering får även en immutable tagg `sha-<commit>`. En fork eller installation som vill använda en annan image kan sätta valfria `FETCHER_IMAGE` i lokal `.env`; den variabeln behövs inte för normal Avkroken-drift.
+`latest` följer aktuell publicerad `main` för den valda image-ägaren. Varje publicering får även en immutable tagg `sha-<commit>`. En fork måste uttryckligen sätta `FETCHER_IMAGE` i lokal `.env` till sin egen publicerade image; ingen fallback till det ursprungliga kontots containerregistry finns.
 
 Containern använder `restart: unless-stopped`, vilket gör att den startar igen
 efter Docker-/host-restart så länge den inte har stoppats manuellt.
