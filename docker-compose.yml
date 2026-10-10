@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/avkroken/produkter:latest
+    image: ${PRODUKTER_IMAGE:?Set PRODUKTER_IMAGE to your published GHCR image}
     container_name: produkter
     restart: unless-stopped
     ports:
@@ -16,7 +16,7 @@ services:
       - config:/app/config
 
   sync:
-    image: ghcr.io/avkroken/produkter:latest
+    image: ${PRODUKTER_IMAGE:?Set PRODUKTER_IMAGE to your published GHCR image}
     container_name: produkter-synk
     restart: unless-stopped
     profiles: [sync]

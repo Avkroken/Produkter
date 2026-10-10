@@ -9,6 +9,8 @@ cp .env.example .env
 cp cloudflare/deployment.example.json cloudflare/deployment.json
 ```
 
+Sätt också `PRODUKTER_IMAGE` i rootens `.env` till din publicerade Dockerimage och `FETCHER_IMAGE` i `scraper/fetcher/.env` till din publicerade fetcherimage innan `docker compose config` eller start körs. Inga gamla GHCR-ägare används som fallback.
+
 Fyll därefter i endast dina egna värden i de två lokala konfigurationsfilerna. Se [Self-hosting](docs/self-hosting.md) för Cloudflare-resurser och secrets.
 
 När `cloudflare/deployment.json` innehåller din installation genererar du de gitignorerade produktionskonfigurationerna för Wrangler:
